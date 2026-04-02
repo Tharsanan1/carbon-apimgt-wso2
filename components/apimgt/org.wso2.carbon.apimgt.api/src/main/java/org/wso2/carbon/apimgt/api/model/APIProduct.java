@@ -17,6 +17,7 @@
  */
 package org.wso2.carbon.apimgt.api.model;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -28,11 +29,13 @@ import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
 import org.json.simple.JSONObject;
+import org.wso2.carbon.apimgt.api.UsedByMigrationClient;
 
-public class APIProduct {
+public class APIProduct implements Serializable {
     // TODO add rest of the properties
     private APIProductIdentifier id;
     private String uuid;
+    private String displayName;
     private String type;
     private int productId;
     private String context;
@@ -89,6 +92,7 @@ public class APIProduct {
      * Custom authorization header specific to the API
      */
     private String authorizationHeader;
+    private String apiKeyHeader;
 
     private CORSConfiguration corsConfiguration;
 
@@ -131,6 +135,12 @@ public class APIProduct {
      */
     private String workflowStatus = null;
 
+    /**
+     * Used to set the audiences values in jwt audience validation
+     */
+    private Set<String> audiences;
+    private Boolean isDefaultVersion = true;
+    private boolean isPublishedDefaultVersion = false;
     public APIProduct(){}
 
     public APIProduct(APIProductIdentifier id) {
@@ -141,6 +151,7 @@ public class APIProduct {
     public void setID(APIProductIdentifier id) {
         this.id = id;
     }
+    @UsedByMigrationClient
     public APIProductIdentifier getId() {
         return id;
     }
@@ -174,6 +185,12 @@ public class APIProduct {
     public void setSubscriptionAvailability(String subscriptionAvailability) {
         this.subscriptionAvailability = subscriptionAvailability;
     }
+    public String getDisplayName() {
+        return displayName;
+    }
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
     public String getState() {
         return state;
     }
@@ -193,6 +210,20 @@ public class APIProduct {
     public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
         this.technicalOwnerEmail = technicalOwnerEmail;
     }
+    public void setDefaultVersion(Boolean isDefaultVersion) {
+        this.isDefaultVersion = isDefaultVersion;
+    }
+    public void setAsPublishedDefaultVersion(boolean value) {
+        isPublishedDefaultVersion = value;
+    }
+
+    public Boolean isDefaultVersion() {
+        return isDefaultVersion;
+    }
+
+    public Boolean isPublishedDefaultVersion() {
+        return isPublishedDefaultVersion;
+    }
 
     public String getType() {
         return type;
@@ -205,6 +236,24 @@ public class APIProduct {
             this.type = type;
         }
     }
+
+    /**
+     * To get the audiences for jwt validation
+     *
+     * @return audiences of the API
+     */
+    public Set<String> getAudiences() {
+        return audiences;
+    }
+
+    /**
+     * To set the audiences for jwt validation
+     *
+     */
+    public void setAudiences(Set<String> audiences) {
+        this.audiences = audiences;
+    }
+
     public String getBusinessOwner() {
         return businessOwner;
     }
@@ -439,6 +488,14 @@ public class APIProduct {
         this.authorizationHeader = authorizationHeader;
     }
 
+    public String getApiKeyHeader() {
+        return apiKeyHeader;
+    }
+
+    public void setApiKeyHeader(String apiKeyHeader) {
+        this.apiKeyHeader = apiKeyHeader;
+    }
+
     public CORSConfiguration getCorsConfiguration() {
         return corsConfiguration;
     }
@@ -654,5 +711,18 @@ public class APIProduct {
     public void setWorkflowStatus(String workflowStatus) {
 
         this.workflowStatus = workflowStatus;
+    }
+
+    /**
+     * Whether the API Product is Egress (1) or not (0)
+     */
+    private int isEgress;
+
+    public int isEgress() {
+        return isEgress;
+    }
+
+    public void setEgress(int egress) {
+        isEgress = egress;
     }
 }

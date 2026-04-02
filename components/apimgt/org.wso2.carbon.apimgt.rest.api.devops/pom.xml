@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -88,8 +88,8 @@
             <artifactId>hibernate-validator</artifactId>
             <exclusions>
                 <exclusion>
-                    <groupId>javax.validation</groupId>
-                    <artifactId>validation-api</artifactId>
+                    <groupId>jakarta.validation</groupId>
+                    <artifactId>jakarta.validation-api</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>org.jboss.logging</groupId>
@@ -126,6 +126,10 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.inject</groupId>
+            <artifactId>javax.inject</artifactId>
         </dependency>
     </dependencies>
 
@@ -188,6 +192,13 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-opens java.base/java.lang=ALL-UNNAMED 
+                        --add-opens java.base/java.util=ALL-UNNAMED 
+
+                    </argLine>
+                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>org.apache.maven.surefire</groupId>
@@ -206,7 +217,7 @@
                             <directory>src/main/webapp</directory>
                         </resource>
                     </webResources>
-                    <warName>api#am#devops#v1</warName>
+                    <warName>api#am#devops#v0</warName>
                 </configuration>
             </plugin>
             <plugin>

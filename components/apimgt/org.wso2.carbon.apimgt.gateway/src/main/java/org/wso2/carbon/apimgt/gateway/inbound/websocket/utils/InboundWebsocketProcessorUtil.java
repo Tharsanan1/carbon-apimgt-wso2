@@ -17,8 +17,6 @@
  */
 package org.wso2.carbon.apimgt.gateway.inbound.websocket.utils;
 
-import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.SignedJWT;
 import org.apache.axiom.util.UIDGenerator;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -29,12 +27,11 @@ import org.apache.synapse.api.API;
 import org.json.JSONObject;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.common.gateway.constants.GraphQLConstants;
+import org.wso2.carbon.apimgt.gateway.dto.WebSocketThrottleResponseDTO;
 import org.wso2.carbon.apimgt.gateway.handlers.DataPublisherUtil;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.WebsocketUtil;
-import org.wso2.carbon.apimgt.gateway.handlers.WebsocketWSClient;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APIKeyValidator;
-import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityException;
 import org.wso2.carbon.apimgt.gateway.handlers.security.AuthenticationContext;
 import org.wso2.carbon.apimgt.gateway.handlers.security.jwt.JWTValidator;
@@ -44,16 +41,13 @@ import org.wso2.carbon.apimgt.gateway.handlers.throttling.APIThrottleConstants;
 import org.wso2.carbon.apimgt.gateway.inbound.InboundMessageContext;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.GraphQLProcessorResponseDTO;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.InboundProcessorResponseDTO;
-import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.utils.APIMgtGoogleAnalyticsUtils;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
-import org.wso2.carbon.apimgt.impl.caching.CacheProvider;
 import org.wso2.carbon.apimgt.impl.dto.APIKeyValidationInfoDTO;
 import org.wso2.carbon.apimgt.impl.dto.ResourceInfoDTO;
 import org.wso2.carbon.apimgt.impl.dto.VerbInfoDTO;
-import org.wso2.carbon.apimgt.impl.jwt.SignedJWTInfo;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.ganalytics.publisher.GoogleAnalyticsData;
@@ -62,12 +56,10 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
 import java.io.UnsupportedEncodingException;
 import java.security.NoSuchAlgorithmException;
-import java.text.ParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import javax.cache.Cache;
 
 /**
  * The util class to handle inbound websocket processor execution.
@@ -108,54 +100,14 @@ public class InboundWebsocketProcessorUtil {
         info.setApiTier(authenticationContext.getApiTier());
         info.setGraphQLMaxDepth(authenticationContext.getGraphQLMaxDepth());
         info.setGraphQLMaxComplexity(authenticationContext.getGraphQLMaxComplexity());
+        info.setEndUserToken(authenticationContext.getCallerToken());
 
         inboundMessageContext.setKeyType(info.getType());
         inboundMessageContext.setInfoDTO(info);
         inboundMessageContext.setAuthContext(authenticationContext);
         inboundMessageContext.setInfoDTO(info);
+        inboundMessageContext.setToken(info.getEndUserToken());
         return authenticationContext.isAuthenticated();
-    }
-
-    /**
-     * Authenticates JWT token in incoming GraphQL subscription requests.
-     *
-     * @param inboundMessageContext InboundMessageContext
-     * @return true if authenticated
-     * @throws APIManagementException if an internal error occurs
-     * @throws APISecurityException   if authentication fails
-     */
-    public static boolean authenticateGraphQLJWTToken(InboundMessageContext inboundMessageContext)
-            throws APIManagementException, APISecurityException {
-
-        AuthenticationContext authenticationContext;
-        PrivilegedCarbonContext.startTenantFlow();
-        PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(inboundMessageContext.getTenantDomain(),
-                true);
-        JWTValidator jwtValidator = new JWTValidator(new APIKeyValidator(), inboundMessageContext.getTenantDomain());
-        authenticationContext = jwtValidator.
-                authenticateForGraphQLSubscription(inboundMessageContext.getSignedJWTInfo(),
-                        inboundMessageContext.getApiContext(), inboundMessageContext.getVersion());
-        return validateAuthenticationContext(authenticationContext, inboundMessageContext);
-    }
-
-    /**
-     * Authenticates JWT token in incoming Websocket handshake requests.
-     *
-     * @param inboundMessageContext InboundMessageContext
-     * @return true if authenticated
-     * @throws APIManagementException if an internal error occurs
-     * @throws APISecurityException   if authentication fails
-     */
-    public static boolean authenticateWSJWTToken(InboundMessageContext inboundMessageContext)
-            throws APIManagementException, APISecurityException {
-
-        AuthenticationContext authenticationContext;
-        JWTValidator jwtValidator = new JWTValidator(new APIKeyValidator(), inboundMessageContext.getTenantDomain());
-        authenticationContext = jwtValidator.
-                authenticateForWebSocket(inboundMessageContext.getSignedJWTInfo(),
-                        inboundMessageContext.getApiContext(), inboundMessageContext.getVersion(),
-                        inboundMessageContext.getMatchingResource());
-        return validateAuthenticationContext(authenticationContext, inboundMessageContext);
     }
 
     /**
@@ -294,12 +246,17 @@ public class InboundWebsocketProcessorUtil {
             PrivilegedCarbonContext.startTenantFlow();
             PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(
                     inboundMessageContext.getTenantDomain(), true);
-            boolean isThrottled = WebsocketUtil.isThrottled(resourceLevelThrottleKey, subscriptionLevelThrottleKey,
-                    applicationLevelThrottleKey);
-            if (isThrottled) {
+            WebSocketThrottleResponseDTO throttleResponseDTO = WebsocketUtil.getThrottleStatus(resourceLevelThrottleKey,
+                                                                                               subscriptionLevelThrottleKey,
+                                                                                               applicationLevelThrottleKey);
+            if (throttleResponseDTO != null) {
                 responseDTO.setError(true);
                 responseDTO.setErrorCode(WebSocketApiConstants.FrameErrorConstants.THROTTLED_OUT_ERROR);
                 responseDTO.setErrorMessage(WebSocketApiConstants.FrameErrorConstants.THROTTLED_OUT_ERROR_MESSAGE);
+
+                throttleResponseDTO.setUser(authorizedUser);
+                throttleResponseDTO.setApiContext(inboundMessageContext.getApiContext());
+                responseDTO.setInboundProcessorResponseError(throttleResponseDTO);
             }
         } finally {
             PrivilegedCarbonContext.endTenantFlow();
@@ -369,13 +326,13 @@ public class InboundWebsocketProcessorUtil {
      * @param inboundMessageContext InboundMessageContext
      */
     public static void removeTokenFromQuery(Map<String, List<String>> parameters,
-                                            InboundMessageContext inboundMessageContext) {
+                                            InboundMessageContext inboundMessageContext, String tokenType) {
 
         String fullRequestPath = inboundMessageContext.getFullRequestPath();
         StringBuilder queryBuilder = new StringBuilder(fullRequestPath.substring(0, fullRequestPath.indexOf('?') + 1));
 
         for (Map.Entry<String, List<String>> entry : parameters.entrySet()) {
-            if (!APIConstants.AUTHORIZATION_QUERY_PARAM_DEFAULT.equals(entry.getKey())) {
+            if (!tokenType.equals(entry.getKey())) {
                 queryBuilder.append(entry.getKey()).append('=').append(entry.getValue().get(0)).append('&');
             }
         }
@@ -390,162 +347,43 @@ public class InboundWebsocketProcessorUtil {
      *
      * @param inboundMessageContext InboundMessageContext
      * @return whether authenticated or not
-     * @throws APIManagementException if an internal error occurs
      * @throws APISecurityException   if authentication fails
      */
-    public static boolean isAuthenticated(InboundMessageContext inboundMessageContext)
-            throws APISecurityException, APIManagementException {
+    public static boolean isAuthenticated(InboundMessageContext inboundMessageContext) throws APISecurityException {
 
         try {
             PrivilegedCarbonContext.startTenantFlow();
             PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(
                     inboundMessageContext.getTenantDomain(), true);
-            APIKeyValidationInfoDTO info;
-            String authorizationHeader = inboundMessageContext.getRequestHeaders().get(WebsocketUtil.authorizationHeader);
-            String[] auth = authorizationHeader.split(StringUtils.SPACE);
-            List<String> keyManagerList =
-                    DataHolder.getInstance().getKeyManagersFromUUID(inboundMessageContext.getElectedAPI().getUuid());
-            if (APIConstants.CONSUMER_KEY_SEGMENT.equals(auth[0])) {
-                String cacheKey;
-                boolean isJwtToken = false;
-                String apiKey = auth[1];
-                if (WebsocketUtil.isRemoveOAuthHeadersFromOutMessage()) {
-                    inboundMessageContext.getHeadersToRemove().add(WebsocketUtil.authorizationHeader);
-                }
-
-                //Initial guess of a JWT token using the presence of a DOT.
-                if (StringUtils.isNotEmpty(apiKey) && apiKey.contains(APIConstants.DOT)) {
-                    try {
-                        // Check if the header part is decoded
-                        if (StringUtils.countMatches(apiKey, APIConstants.DOT) != 2) {
-                            log.debug("Invalid JWT token. The expected token format is <header.payload.signature>");
-                            throw new APISecurityException(APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
-                                    "Invalid JWT token");
-                        }
-                        inboundMessageContext.setSignedJWTInfo(getSignedJwtInfo(apiKey));
-                        String keyManager = ServiceReferenceHolder.getInstance().getJwtValidationService()
-                                .getKeyManagerNameIfJwtValidatorExist(inboundMessageContext.getSignedJWTInfo());
-                        if (StringUtils.isNotEmpty(keyManager)) {
-                            if (log.isDebugEnabled()){
-                                log.debug("KeyManager " + keyManager + "found for authenticate token " + GatewayUtils.getMaskedToken(apiKey));
-                            }
-                            if (keyManagerList.contains(APIConstants.KeyManager.API_LEVEL_ALL_KEY_MANAGERS) ||
-                                    keyManagerList.contains(keyManager)) {
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Elected KeyManager " + keyManager + "found in API level list " + String.join(",", keyManagerList));
-                                }
-                                isJwtToken = true;
-                            } else {
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Elected KeyManager " + keyManager + " not found in API level list " + String.join(",", keyManagerList));
-                                }
-                                throw new APISecurityException(APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
-                                        "Invalid JWT token");
-                            }
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug("KeyManager not found for accessToken " + GatewayUtils.getMaskedToken(apiKey));
-                            }
-                        }
-                    } catch (ParseException e) {
-                        log.debug("Not a JWT token. Failed to decode the token header.", e);
-                    } catch (APIManagementException e) {
-                        log.error("Error while checking validation of JWT", e);
-                        throw new APISecurityException(APISecurityConstants.API_AUTH_GENERAL_ERROR,
-                                APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE);
-                    }
-                }
-                // Find the authentication scheme based on the token type
-                if (isJwtToken) {
-                    log.debug("The token was identified as a JWT token");
-                    inboundMessageContext.setJWTToken(true);
-                    if (APIConstants.GRAPHQL_API.equals(inboundMessageContext.getElectedAPI().getApiType())) {
-                        return InboundWebsocketProcessorUtil.authenticateGraphQLJWTToken(inboundMessageContext);
-                    } else {
-                        return InboundWebsocketProcessorUtil.authenticateWSJWTToken(inboundMessageContext);
-                    }
-                } else {
-                    log.debug("The token was identified as an OAuth token");
-                    //If the key have already been validated
-                    if (WebsocketUtil.isGatewayTokenCacheEnabled()) {
-                        cacheKey = WebsocketUtil.getAccessTokenCacheKey(apiKey, inboundMessageContext.getApiContext(),
-                                inboundMessageContext.getMatchingResource());
-                        info = WebsocketUtil.validateCache(apiKey, cacheKey);
-                        if (info != null) {
-                            inboundMessageContext.setKeyType(info.getType());
-                            inboundMessageContext.setInfoDTO(info);
-                            return info.isAuthorized();
-                        }
-                    }
-                    info = getApiKeyDataForWSClient(apiKey, inboundMessageContext.getTenantDomain(),
-                            inboundMessageContext.getApiContext(), inboundMessageContext.getVersion(), keyManagerList);
-                    if (info == null || !info.isAuthorized()) {
-                        return false;
-                    }
-                    if (WebsocketUtil.isGatewayTokenCacheEnabled()) {
-                        cacheKey = WebsocketUtil.getAccessTokenCacheKey(apiKey,
-                                inboundMessageContext.getApiContext(), inboundMessageContext.getMatchingResource());
-                        WebsocketUtil.putCache(info, apiKey, cacheKey);
-                    }
-                    inboundMessageContext.setKeyType(info.getType());
-                    inboundMessageContext.setToken(info.getEndUserToken());
-                    inboundMessageContext.setInfoDTO(info);
-                    return true;
-                }
-            } else {
-                return false;
+            if (inboundMessageContext.getAuthenticator().validateToken(inboundMessageContext)) {
+                return !authenticate(inboundMessageContext).isError();
             }
         } finally {
             PrivilegedCarbonContext.endTenantFlow();
         }
+        return false;
     }
 
     /**
-     * Get signed JWT info for access token
+     * Authenticate token during inbound websocket request (frame) execution, without validating the scopes.
      *
-     * @param accessToken Access token
-     * @return SignedJWTInfo
-     * @throws ParseException if an error occurs
+     * @param inboundMessageContext InboundMessageContext
+     * @return InboundProcessorResponseDTO
      */
-    private static SignedJWTInfo getSignedJwtInfo(String accessToken) throws ParseException {
-
-        String signature = accessToken.split("\\.")[2];
-        SignedJWTInfo signedJWTInfo = null;
-        Cache gatewaySignedJWTParseCache = CacheProvider.getGatewaySignedJWTParseCache();
-        if (gatewaySignedJWTParseCache != null) {
-            Object cachedEntry = gatewaySignedJWTParseCache.get(signature);
-            if (cachedEntry != null) {
-                signedJWTInfo = (SignedJWTInfo) cachedEntry;
-            }
-            if (signedJWTInfo == null || !signedJWTInfo.getToken().equals(accessToken)) {
-                SignedJWT signedJWT = SignedJWT.parse(accessToken);
-                JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
-                signedJWTInfo = new SignedJWTInfo(accessToken, signedJWT, jwtClaimsSet);
-                gatewaySignedJWTParseCache.put(signature, signedJWTInfo);
-            }
-        } else {
-            SignedJWT signedJWT = SignedJWT.parse(accessToken);
-            JWTClaimsSet jwtClaimsSet = signedJWT.getJWTClaimsSet();
-            signedJWTInfo = new SignedJWTInfo(accessToken, signedJWT, jwtClaimsSet);
-        }
-        return signedJWTInfo;
-    }
-
-    /**
-     * Get Websocket API Key data from websocket client.
-     *
-     * @param key           API key
-     * @param domain        tenant domain
-     * @param apiContextUri API context
-     * @param apiVersion    API version
-     * @return APIKeyValidationInfoDTO
-     * @throws APISecurityException if validation fails
-     */
-    private static APIKeyValidationInfoDTO getApiKeyDataForWSClient(String key, String domain, String apiContextUri,
-                                                                    String apiVersion, List<String> keyManagers)
+    public static InboundProcessorResponseDTO authenticateToken(InboundMessageContext inboundMessageContext)
             throws APISecurityException {
+        return authenticate(inboundMessageContext);
+    }
 
-        return new WebsocketWSClient().getAPIKeyData(apiContextUri, apiVersion, key, domain, keyManagers);
+    /**
+     * Authenticate token during handshake and inbound websocket request (frame) execution.
+     *
+     * @param inboundMessageContext InboundMessageContext
+     * @return InboundProcessorResponseDTO
+     */
+    public static InboundProcessorResponseDTO authenticate(InboundMessageContext inboundMessageContext)
+            throws APISecurityException {
+        return inboundMessageContext.getAuthenticator().authenticate(inboundMessageContext);
     }
 
     /**
@@ -666,39 +504,6 @@ public class InboundWebsocketProcessorUtil {
     }
 
     /**
-     * Authenticate token during inbound websocket request (frame) execution.
-     *
-     * @param inboundMessageContext InboundMessageContext
-     * @return InboundProcessorResponseDTO
-     */
-    public static InboundProcessorResponseDTO authenticateToken(InboundMessageContext inboundMessageContext) {
-
-        InboundProcessorResponseDTO inboundProcessorResponseDTO = new InboundProcessorResponseDTO();
-        try {
-            //validate token and subscriptions
-            if (inboundMessageContext.isJWTToken() && !InboundWebsocketProcessorUtil.authenticateGraphQLJWTToken(
-                    inboundMessageContext)) {
-                inboundProcessorResponseDTO = InboundWebsocketProcessorUtil.getFrameErrorDTO(
-                        WebSocketApiConstants.FrameErrorConstants.API_AUTH_INVALID_CREDENTIALS,
-                        APISecurityConstants.API_AUTH_INVALID_CREDENTIALS_MESSAGE, true);
-            } else {
-                log.debug("Authentication not supported for Opaque tokens");
-            }
-        } catch (APIManagementException e) {
-            log.error(WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_MESSAGE, e);
-            inboundProcessorResponseDTO = InboundWebsocketProcessorUtil.getFrameErrorDTO(
-                    WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_ERROR,
-                    WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_MESSAGE, true);
-        } catch (APISecurityException e) {
-            log.error(WebSocketApiConstants.FrameErrorConstants.API_AUTH_INVALID_CREDENTIALS, e);
-            inboundProcessorResponseDTO = InboundWebsocketProcessorUtil.getFrameErrorDTO(
-                    WebSocketApiConstants.FrameErrorConstants.API_AUTH_INVALID_CREDENTIALS,
-                    e.getMessage(), true);
-        }
-        return inboundProcessorResponseDTO;
-    }
-
-    /**
      * Validates scopes for subscription operations.
      *
      * @param inboundMessageContext InboundMessageContext
@@ -710,28 +515,48 @@ public class InboundWebsocketProcessorUtil {
                                                              String subscriptionOperation, String operationId) {
 
         InboundProcessorResponseDTO responseDTO = new GraphQLProcessorResponseDTO();
-        // validate scopes based on subscription payload
-        try {
-            if (!InboundWebsocketProcessorUtil.authorizeGraphQLSubscriptionEvents(subscriptionOperation,
-                    inboundMessageContext)) {
-                String errorMessage = WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR_MESSAGE
-                        + StringUtils.SPACE + subscriptionOperation;
-                log.error(errorMessage);
+        if (inboundMessageContext.isJWTToken()) { // scope validation not supported for Opaque tokens with gql subs
+            // validate scopes based on subscription payload
+            try {
+                if (!InboundWebsocketProcessorUtil.authorizeGraphQLSubscriptionEvents(subscriptionOperation,
+                        inboundMessageContext)) {
+                    String errorMessage = WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR_MESSAGE
+                            + StringUtils.SPACE + subscriptionOperation;
+                    log.error(errorMessage);
+                    responseDTO = InboundWebsocketProcessorUtil.getGraphQLFrameErrorDTO(
+                            WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR, errorMessage, false,
+                            operationId);
+                }
+            } catch (APIManagementException e) {
+                log.error(WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_MESSAGE, e);
+                responseDTO = InboundWebsocketProcessorUtil.getFrameErrorDTO(
+                        WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_ERROR,
+                        WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_MESSAGE, true);
+            } catch (APISecurityException e) {
+                log.error(WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR_MESSAGE, e);
                 responseDTO = InboundWebsocketProcessorUtil.getGraphQLFrameErrorDTO(
-                        WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR, errorMessage, false,
+                        WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR, e.getMessage(), false,
                         operationId);
             }
-        } catch (APIManagementException e) {
-            log.error(WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_MESSAGE, e);
-            responseDTO = InboundWebsocketProcessorUtil.getFrameErrorDTO(
-                    WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_ERROR,
-                    WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_MESSAGE, true);
-        } catch (APISecurityException e) {
-            log.error(WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR_MESSAGE, e);
-            responseDTO = InboundWebsocketProcessorUtil.getGraphQLFrameErrorDTO(
-                    WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR, e.getMessage(), false,
-                    operationId);
         }
         return responseDTO;
+    }
+
+    /**
+     * Checks if the authenticator is enabled for the given authentication type.
+     *
+     * @param authenticationType The String containing the Authentication type (eg: api_key, oauth2)
+     * @param inboundMessageContext  The InboundMessageContext object containing the request details
+     * @return true if the authenticator is enabled for the given authentication type
+     */
+    public static boolean isAuthenticatorEnabled(String authenticationType, InboundMessageContext inboundMessageContext) {
+        if (!Utils.getSecuritySchemeOfWebSocketAPI(inboundMessageContext.getApiContext(), inboundMessageContext.
+                getVersion(), inboundMessageContext.getTenantDomain()).contains(authenticationType)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Authentication has not been enabled for the Authenticator type: " + authenticationType);
+            }
+            return false;
+        }
+        return true;
     }
 }

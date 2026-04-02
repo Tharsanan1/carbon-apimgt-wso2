@@ -35,6 +35,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
+import org.wso2.carbon.apimgt.api.UsedByMigrationClient;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.impl.wsdl.WSDL11SOAPOperationExtractor;
 import org.wso2.carbon.apimgt.impl.wsdl.model.WSDLArchiveInfo;
@@ -118,6 +119,7 @@ public class APIMWSDLReader {
      * @return Validation information
      * @throws APIManagementException Error occurred during validation
      */
+    @UsedByMigrationClient
     public static WSDLValidationResponse extractAndValidateWSDLArchive(InputStream inputStream)
             throws APIManagementException {
         String path = System.getProperty(APIConstants.JAVA_IO_TMPDIR) + File.separator
@@ -229,6 +231,7 @@ public class APIMWSDLReader {
      * @return Validation information
      * @throws APIManagementException Error occurred during validation
      */
+    @UsedByMigrationClient
     public static WSDLValidationResponse validateWSDLFile(byte[] wsdlContent) throws  APIManagementException {
         WSDLProcessor processor = getWSDLProcessor(wsdlContent);
         return getWsdlValidationResponse(processor);
@@ -310,6 +313,21 @@ public class APIMWSDLReader {
         try {
             inputStream = new FileInputStream(new File(file));
             DocumentBuilderFactory factory = getSecuredDocumentBuilder();
+            // Enable secure processing
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+
+            // Enable namespace awareness
+            factory.setNamespaceAware(true);
+
+            factory.setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.DISALLOW_DOCTYPE_DECL_FEATURE,
+                    true);
+
+            // Disable external entities to prevent XXE attacks
+            factory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE,
+                    false);
+            factory.setFeature(Constants.SAX_FEATURE_PREFIX +
+                    Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE, false);
+
             DocumentBuilder builder = factory.newDocumentBuilder();
             return builder.parse(inputStream);
         } catch (ParserConfigurationException | IOException | SAXException e) {
@@ -870,7 +888,7 @@ public class APIMWSDLReader {
      * @throws APIManagementException When error occurred while parsing/validating base URI
      */
     private void readAndValidateWSDL11() throws WSDLException, APIManagementException {
-        javax.wsdl.xml.WSDLReader wsdlReader11 = javax.wsdl.factory.WSDLFactory.newInstance().newWSDLReader();
+        WSDLReader wsdlReader11 = WSDLFactory.newInstance().newWSDLReader();
         wsdlReader11.readWSDL(null, getSecuredParsedDocumentFromURL(baseURI));
     }
 

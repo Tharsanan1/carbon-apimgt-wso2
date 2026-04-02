@@ -116,8 +116,12 @@ public class SubscriptionValidationSQLConstants {
                     "   APP.APPLICATION_ID AS APP_ID," +
                     "   APP.UUID AS APPLICATION_UUID," +
                     "   API.API_UUID AS API_UUID," +
+                    "   API.API_NAME AS API_NAME," +
+                    "   API.API_VERSION AS API_VERSION," +
                     "   SUBS.SUB_STATUS AS STATUS," +
-                    "   SUB.TENANT_ID AS TENANT_ID" +
+                    "   SUB.TENANT_ID AS TENANT_ID," +
+                    "   APP.ORGANIZATION AS APP_ORGANIZATION,"+
+                    "   API.ORGANIZATION AS API_ORGANIZATION"+
                     " FROM " +
                     "   AM_SUBSCRIPTION SUBS," +
                     "   AM_APPLICATION APP," +
@@ -130,14 +134,28 @@ public class SubscriptionValidationSQLConstants {
                     "   APP.ORGANIZATION = ? ";
     public static final String GET_ALL_SUBSCRIPTIONS_SQL =
             "SELECT " +
-                    "   SUBSCRIPTION_ID AS SUB_ID," +
-                    "   TIER_ID AS TIER," +
-                    "   API_ID AS API_ID," +
-                    "   APPLICATION_ID AS APP_ID," +
-                    "   SUB_STATUS AS STATUS" +
+                    "   SUBS.UUID AS SUBSCRIPTION_UUID," +
+                    "   SUBS.SUBSCRIPTION_ID AS SUB_ID," +
+                    "   SUBS.TIER_ID AS TIER," +
+                    "   SUBS.API_ID AS API_ID," +
+                    "   APP.APPLICATION_ID AS APP_ID," +
+                    "   APP.UUID AS APPLICATION_UUID," +
+                    "   API.API_UUID AS API_UUID," +
+                    "   API.API_NAME AS API_NAME," +
+                    "   API.API_VERSION AS API_VERSION," +
+                    "   SUBS.SUB_STATUS AS STATUS," +
+                    "   SUB.TENANT_ID AS TENANT_ID," +
+                    "   APP.ORGANIZATION AS APP_ORGANIZATION,"+
+                    "   API.ORGANIZATION AS API_ORGANIZATION"+
                     " FROM " +
-                    "   AM_SUBSCRIPTION";
-
+                    "   AM_SUBSCRIPTION SUBS," +
+                    "   AM_APPLICATION APP," +
+                    "   AM_API API," +
+                    "   AM_SUBSCRIBER SUB" +
+                    " WHERE " +
+                    "   SUBS.API_ID = API.API_ID AND " +
+                    "   SUBS.APPLICATION_ID = APP.APPLICATION_ID AND " +
+                    "   APP.SUBSCRIBER_ID = SUB.SUBSCRIBER_ID AND ";
     public static final String GET_SUBSCRIPTION_SQL =
             "SELECT " +
                     "   AM_SUBSCRIPTION.UUID AS SUBSCRIPTION_UUID," +
@@ -147,7 +165,11 @@ public class SubscriptionValidationSQLConstants {
                     "   AM_SUBSCRIPTION.APPLICATION_ID AS APP_ID," +
                     "   AM_APPLICATION.UUID AS APPLICATION_UUID," +
                     "   AM_API.API_UUID AS API_UUID," +
-                    "   AM_SUBSCRIPTION.SUB_STATUS AS STATUS" +
+                    "   AM_API.API_NAME AS API_NAME," +
+                    "   AM_API.API_VERSION AS API_VERSION," +
+                    "   AM_SUBSCRIPTION.SUB_STATUS AS STATUS," +
+                    "   AM_APPLICATION.ORGANIZATION AS APP_ORGANIZATION,"+
+                    "   AM_API.ORGANIZATION AS API_ORGANIZATION"+
                     " FROM " +
                     "   AM_SUBSCRIPTION," +
                     "   AM_APPLICATION," +
@@ -166,7 +188,11 @@ public class SubscriptionValidationSQLConstants {
                     "   AM_SUBSCRIPTION.APPLICATION_ID AS APP_ID," +
                     "   AM_APPLICATION.UUID AS APPLICATION_UUID," +
                     "   AM_API.API_UUID AS API_UUID," +
-                    "   AM_SUBSCRIPTION.SUB_STATUS AS STATUS" +
+                    "   AM_API.API_NAME AS API_NAME," +
+                    "   AM_API.API_VERSION AS API_VERSION," +
+                    "   AM_SUBSCRIPTION.SUB_STATUS AS STATUS," +
+                    "   AM_APPLICATION.ORGANIZATION AS APP_ORGANIZATION,"+
+                    "   AM_API.ORGANIZATION AS API_ORGANIZATION"+
                     " FROM " +
                     "   AM_SUBSCRIPTION," +
                     "   AM_APPLICATION," +
@@ -190,7 +216,10 @@ public class SubscriptionValidationSQLConstants {
                     "   APS.QUOTA AS QUOTA, " +
                     "   APS.QUOTA_UNIT AS QUOTA_UNIT, " +
                     "   APS.UNIT_TIME AS UNIT_TIME, " +
-                    "   APS.TIME_UNIT AS TIME_UNIT " +
+                    "   APS.TIME_UNIT AS TIME_UNIT, " +
+                    "   APS.TOTAL_TOKEN_COUNT AS TOTAL_TOKEN_COUNT, " +
+                    "   APS.PROMPT_TOKEN_COUNT AS PROMPT_TOKEN_COUNT, " +
+                    "   APS.COMPLETION_TOKEN_COUNT AS COMPLETION_TOKEN_COUNT " +
                     " FROM " +
                     "   AM_POLICY_SUBSCRIPTION APS";
 
@@ -203,7 +232,9 @@ public class SubscriptionValidationSQLConstants {
                     "   QUOTA, " +
                     "   QUOTA_UNIT, " +
                     "   UNIT_TIME, " +
-                    "   TIME_UNIT " +
+                    "   TIME_UNIT, " +
+                    "   RATE_LIMIT_COUNT, " +
+                    "   RATE_LIMIT_TIME_UNIT " +
                     "FROM " +
                     "   AM_POLICY_APPLICATION";
 
@@ -247,7 +278,7 @@ public class SubscriptionValidationSQLConstants {
             "AM_APPLICATION_KEY_MAPPING,AM_KEY_MANAGER,AM_APPLICATION WHERE AM_KEY_MANAGER" +
             ".UUID = AM_APPLICATION_KEY_MAPPING.KEY_MANAGER AND AM_APPLICATION_KEY_MAPPING" +
             ".APPLICATION_ID = AM_APPLICATION.APPLICATION_ID AND AM_APPLICATION_KEY_MAPPING.CONSUMER_KEY = ? AND " +
-            "AM_KEY_MANAGER.NAME = ?  AND AM_KEY_MANAGER.ORGANIZATION  = ? ";
+            "AM_KEY_MANAGER.NAME = ?  AND AM_KEY_MANAGER.ORGANIZATION IN (? , ?)";
 
     public static final String GET_TENANT_SUBSCRIPTIONS_SQL =
             "SELECT " +
@@ -258,8 +289,12 @@ public class SubscriptionValidationSQLConstants {
                     "   APP.APPLICATION_ID AS APP_ID," +
                     "   APP.UUID AS APPLICATION_UUID," +
                     "   API.API_UUID AS API_UUID," +
+                    "   API.API_NAME AS API_NAME," +
+                    "   API.API_VERSION AS API_VERSION," +
                     "   SUBS.SUB_STATUS AS STATUS," +
-                    "   SUB.TENANT_ID AS TENANT_ID" +
+                    "   SUB.TENANT_ID AS TENANT_ID," +
+                    "   APP.ORGANIZATION AS APP_ORGANIZATION,"+
+                    "   API.ORGANIZATION AS API_ORGANIZATION"+
                     " FROM " +
                     "   AM_SUBSCRIPTION SUBS," +
                     "   AM_APPLICATION APP," +
@@ -286,7 +321,10 @@ public class SubscriptionValidationSQLConstants {
                     "   APS.QUOTA AS QUOTA, " +
                     "   APS.QUOTA_UNIT AS QUOTA_UNIT, " +
                     "   APS.UNIT_TIME AS UNIT_TIME, " +
-                    "   APS.TIME_UNIT AS TIME_UNIT " +
+                    "   APS.TIME_UNIT AS TIME_UNIT, " +
+                    "   APS.TOTAL_TOKEN_COUNT AS TOTAL_TOKEN_COUNT, " +
+                    "   APS.PROMPT_TOKEN_COUNT AS PROMPT_TOKEN_COUNT, " +
+                    "   APS.COMPLETION_TOKEN_COUNT AS COMPLETION_TOKEN_COUNT " +
                     " FROM " +
                     "   AM_POLICY_SUBSCRIPTION APS" +
                     " WHERE " +
@@ -307,7 +345,10 @@ public class SubscriptionValidationSQLConstants {
                     "   APS.QUOTA AS QUOTA, " +
                     "   APS.QUOTA_UNIT AS QUOTA_UNIT, " +
                     "   APS.UNIT_TIME AS UNIT_TIME, " +
-                    "   APS.TIME_UNIT AS TIME_UNIT " +
+                    "   APS.TIME_UNIT AS TIME_UNIT, " +
+                    "   APS.TOTAL_TOKEN_COUNT AS TOTAL_TOKEN_COUNT, " +
+                    "   APS.PROMPT_TOKEN_COUNT AS PROMPT_TOKEN_COUNT, " +
+                    "   APS.COMPLETION_TOKEN_COUNT AS COMPLETION_TOKEN_COUNT " +
                     " FROM " +
                     "   AM_POLICY_SUBSCRIPTION APS" +
                     " WHERE " +
@@ -323,7 +364,9 @@ public class SubscriptionValidationSQLConstants {
                     "   QUOTA, " +
                     "   QUOTA_UNIT, " +
                     "   UNIT_TIME, " +
-                    "   TIME_UNIT " +
+                    "   TIME_UNIT, " +
+                    "   RATE_LIMIT_COUNT, " +
+                    "   RATE_LIMIT_TIME_UNIT " +
                     "FROM " +
                     "   AM_POLICY_APPLICATION" +
                     " WHERE " +
@@ -389,7 +432,9 @@ public class SubscriptionValidationSQLConstants {
                     "   QUOTA, " +
                     "   QUOTA_UNIT, " +
                     "   UNIT_TIME, " +
-                    "   TIME_UNIT " +
+                    "   TIME_UNIT, " +
+                    "   RATE_LIMIT_COUNT, " +
+                    "   RATE_LIMIT_TIME_UNIT " +
                     "FROM " +
                     "   AM_POLICY_APPLICATION" +
                     " WHERE " +
@@ -553,9 +598,12 @@ public class SubscriptionValidationSQLConstants {
 
     public static final String GET_API_BY_UUID_SQL =
             "SELECT " +
-                    "AM_API.API_PROVIDER,AM_API.API_NAME,AM_API.CONTEXT,AM_API.API_UUID,AM_API.API_ID,AM_API" +
-                    ".API_TIER,AM_API.API_VERSION,AM_API.API_TYPE,AM_API.STATUS,AM_REVISION.REVISION_UUID AS " +
-                    "REVISION_UUID,AM_DEPLOYMENT_REVISION_MAPPING.NAME AS DEPLOYMENT_NAME " +
+                    "AM_API.API_PROVIDER,AM_API.API_NAME,AM_API.CONTEXT, AM_API.CONTEXT_TEMPLATE, AM_API.API_UUID, " +
+                    "AM_API.API_ID, AM_API.API_TIER, AM_API.API_VERSION, AM_API.API_TYPE, AM_API.STATUS, " +
+                    "AM_REVISION.REVISION_UUID AS REVISION_UUID,AM_DEPLOYMENT_REVISION_MAPPING.NAME AS " +
+                    "DEPLOYMENT_NAME,AM_API.ORGANIZATION, " +
+                    "AM_API.API_SUBTYPE AS API_SUBTYPE, " +
+                    "AM_API.IS_EGRESS AS IS_EGRESS " +
                     "FROM " +
                     "AM_API LEFT JOIN AM_REVISION ON AM_API.API_UUID = AM_REVISION.API_UUID " +
                     "LEFT JOIN AM_DEPLOYMENT_REVISION_MAPPING " +
@@ -565,22 +613,38 @@ public class SubscriptionValidationSQLConstants {
     public static final String GET_DEFAULT_VERSION_API_SQL = "SELECT PUBLISHED_DEFAULT_API_VERSION FROM " +
             "AM_API_DEFAULT_VERSION WHERE API_NAME = ? AND API_PROVIDER = ? AND PUBLISHED_DEFAULT_API_VERSION = ?";
 
-    public static final String GET_URI_TEMPLATES_BY_API_SQL = "SELECT AM_API_URL_MAPPING.HTTP_METHOD," +
+    public static final String GET_API_DEFAULT_VERSION_STRING_SQL = "SELECT PUBLISHED_DEFAULT_API_VERSION FROM " +
+            "AM_API_DEFAULT_VERSION WHERE API_NAME = ? AND API_PROVIDER = ?";
+
+    public static final String GET_URI_TEMPLATES_BY_API_SQL = "SELECT AM_API_URL_MAPPING.URL_MAPPING_ID, AM_API_URL_MAPPING.HTTP_METHOD," +
             "AM_API_URL_MAPPING.AUTH_SCHEME,AM_API_URL_MAPPING.URL_PATTERN,AM_API_URL_MAPPING.THROTTLING_TIER," +
-            "AM_API_RESOURCE_SCOPE_MAPPING.SCOPE_NAME FROM AM_API_URL_MAPPING LEFT JOIN AM_API_RESOURCE_SCOPE_MAPPING" +
-            " ON AM_API_URL_MAPPING.URL_MAPPING_ID=AM_API_RESOURCE_SCOPE_MAPPING.URL_MAPPING_ID WHERE " +
+            "AM_API_URL_MAPPING.DESCRIPTION, AM_API_URL_MAPPING.SCHEMA_DEFINITION," +
+            "AM_API_RESOURCE_SCOPE_MAPPING.SCOPE_NAME FROM AM_API_URL_MAPPING LEFT JOIN AM_API_RESOURCE_SCOPE_MAPPING " +
+            "ON AM_API_URL_MAPPING.URL_MAPPING_ID=AM_API_RESOURCE_SCOPE_MAPPING.URL_MAPPING_ID WHERE " +
             "AM_API_URL_MAPPING.API_ID = ? AND AM_API_URL_MAPPING.REVISION_UUID = ?";
 
+    public static final String GET_OPERATION_POLICIES_PER_URI_BY_API_SQL =
+            "SELECT OP.POLICY_NAME, OP.POLICY_VERSION,APM.DIRECTION AS API_POLICY_DIRECTION, APM.POLICY_UUID AS API_POLICY_UUID, "
+                    + "OPM.POLICY_UUID AS OPERATION_POLICY_UUID, OPM.DIRECTION AS OPERATION_POLICY_DIRECTION, "
+                    + "AUM.HTTP_METHOD, AUM.URL_PATTERN, OPM.PARAMETERS AS OPERATION_PARAMS, "
+                    + "APM.PARAMETERS AS API_PARAMS "
+                    + "FROM AM_API_OPERATION_POLICY AS AOP "
+                    + "LEFT JOIN AM_API_OPERATION_POLICY_MAPPING OPM ON AOP.POLICY_UUID = OPM.POLICY_UUID "
+                    + "LEFT JOIN AM_API_URL_MAPPING AUM ON AUM.URL_MAPPING_ID = OPM.URL_MAPPING_ID  "
+                    + "INNER JOIN AM_OPERATION_POLICY OP ON OP.POLICY_UUID = AOP.POLICY_UUID "
+                    + "LEFT JOIN AM_API_POLICY_MAPPING as APM ON APM.POLICY_UUID = AOP.POLICY_UUID "
+                    + "WHERE AOP.API_UUID = ? AND AOP.REVISION_UUID = ?";
     public static final String GET_ALL_APIS_BY_ORGANIZATION_AND_DEPLOYMENT_SQL = "SELECT AM_API.API_PROVIDER,AM_API" +
-            ".API_NAME,AM_API.CONTEXT,AM_API.API_UUID,AM_API.API_ID,AM_API.API_TIER,AM_API.API_VERSION,AM_API" +
+            ".API_NAME,AM_API.CONTEXT, AM_API.CONTEXT_TEMPLATE, AM_API.API_UUID,AM_API.API_ID,AM_API.API_TIER,AM_API.API_VERSION,AM_API" +
             ".API_TYPE,AM_API.STATUS,AM_REVISION.REVISION_UUID AS REVISION_UUID,AM_DEPLOYMENT_REVISION_MAPPING.NAME " +
             "AS DEPLOYMENT_NAME, " +
-            "AM_API_DEFAULT_VERSION.PUBLISHED_DEFAULT_API_VERSION AS PUBLISHED_DEFAULT_API_VERSION " +
+            "AM_API_DEFAULT_VERSION.PUBLISHED_DEFAULT_API_VERSION AS PUBLISHED_DEFAULT_API_VERSION,AM_API.ORGANIZATION, " +
+            "AM_API.API_SUBTYPE AS API_SUBTYPE, " +
+            "AM_API.IS_EGRESS AS IS_EGRESS " +
             "FROM AM_API LEFT JOIN AM_REVISION ON AM_API.API_UUID=AM_REVISION.API_UUID LEFT JOIN " +
             "AM_DEPLOYMENT_REVISION_MAPPING ON AM_REVISION.REVISION_UUID=AM_DEPLOYMENT_REVISION_MAPPING.REVISION_UUID" +
             " LEFT JOIN AM_API_DEFAULT_VERSION ON AM_API_DEFAULT_VERSION.API_NAME = AM_API.API_NAME AND " +
             "AM_API_DEFAULT_VERSION.API_PROVIDER=AM_API.API_PROVIDER AND " +
-            "AM_API_DEFAULT_VERSION.PUBLISHED_DEFAULT_API_VERSION = AM_API.API_VERSION AND " +
             "AM_API_DEFAULT_VERSION.ORGANIZATION = AM_API.ORGANIZATION ";
 
     public static final String  GET_ALL_API_PRODUCT_URI_TEMPLATES_SQL = "SELECT AM_API_URL_MAPPING.URL_MAPPING_ID," +
@@ -589,10 +653,46 @@ public class SubscriptionValidationSQLConstants {
             " JOIN AM_API_RESOURCE_SCOPE_MAPPING ON AM_API_URL_MAPPING.URL_MAPPING_ID=AM_API_RESOURCE_SCOPE_MAPPING" +
             ".URL_MAPPING_ID WHERE AM_API_URL_MAPPING.URL_MAPPING_ID IN (SELECT URL_MAPPING_ID FROM " +
             "AM_API_PRODUCT_MAPPING WHERE API_ID = ? )";
-    public static final String  GET_API_BY_CONTEXT_AND_VERSION_SQL = "SELECT AM_API.API_PROVIDER,AM_API.API_NAME," +
-            "AM_API.CONTEXT,AM_API.API_UUID,AM_API.API_ID,AM_API.API_TIER,AM_API.API_VERSION,AM_API.API_TYPE,AM_API" +
-            ".STATUS,AM_REVISION.REVISION_UUID AS REVISION_UUID,AM_DEPLOYMENT_REVISION_MAPPING.NAME AS " +
-            "DEPLOYMENT_NAME FROM AM_API LEFT JOIN AM_REVISION ON AM_API.API_UUID=AM_REVISION.API_UUID LEFT JOIN " +
-            "AM_DEPLOYMENT_REVISION_MAPPING ON AM_REVISION.REVISION_UUID=AM_DEPLOYMENT_REVISION_MAPPING.REVISION_UUID" +
-            " WHERE AM_API.CONTEXT = ? AND AM_API.API_VERSION= ?";
+    public static final String  GET_API_BY_CONTEXT_AND_VERSION_SQL = "SELECT AM_API.API_PROVIDER, AM_API.API_NAME, " +
+            "AM_API.CONTEXT, AM_API.CONTEXT_TEMPLATE, AM_API.API_UUID, AM_API.API_ID,AM_API.API_TIER, " +
+            "AM_API.API_VERSION, AM_API.API_TYPE, AM_API.STATUS, AM_REVISION.REVISION_UUID AS REVISION_UUID, " +
+            "AM_DEPLOYMENT_REVISION_MAPPING.NAME AS DEPLOYMENT_NAME, AM_API.ORGANIZATION, " +
+            "AM_API.API_SUBTYPE AS API_SUBTYPE, " +
+            "AM_API.IS_EGRESS AS IS_EGRESS " +
+            "FROM AM_API LEFT JOIN AM_REVISION ON AM_API.API_UUID=AM_REVISION.API_UUID " +
+            "LEFT JOIN AM_DEPLOYMENT_REVISION_MAPPING ON " +
+            "AM_REVISION.REVISION_UUID=AM_DEPLOYMENT_REVISION_MAPPING.REVISION_UUID " +
+            "WHERE ((AM_API.CONTEXT_TEMPLATE IS NULL AND AM_API.CONTEXT = ?) " +
+            "OR (AM_API.CONTEXT_TEMPLATE IS NOT NULL AND AM_API.CONTEXT = ?)) AND AM_API.API_VERSION = ?";
+
+    public static final String  GET_MCP_BACKEND_OPERATION_MAPPING_BY_REF_URL_MAPPING_ID =
+            "SELECT " +
+                "AM_BACKEND_OPERATION_MAPPING.TARGET, " +
+                "AM_BACKEND_OPERATION_MAPPING.VERB " +
+            "FROM " +
+                "AM_BACKEND_OPERATION_MAPPING " +
+            "LEFT JOIN " +
+                "AM_API_URL_MAPPING " +
+                "ON AM_BACKEND_OPERATION_MAPPING.URL_MAPPING_ID=AM_API_URL_MAPPING.URL_MAPPING_ID " +
+            "WHERE AM_API_URL_MAPPING.URL_MAPPING_ID=?";
+
+    public static final String  GET_MCP_API_OPERATION_MAPPING_BY_REF_URL_MAPPING_ID =
+            "SELECT " +
+                "AM_API_OPERATION_MAPPING.URL_MAPPING_ID, " +
+                "AM_API_OPERATION_MAPPING.REF_URL_MAPPING_ID, " +
+                "AM_API_URL_MAPPING.HTTP_METHOD, " +
+                "AM_API_URL_MAPPING.URL_PATTERN, " +
+                "AM_API.API_UUID, " +
+                "AM_API.API_NAME, " +
+                "AM_API.API_VERSION, " +
+                "AM_API.CONTEXT " +
+            "FROM " +
+                "AM_API_OPERATION_MAPPING " +
+            "LEFT JOIN " +
+                "AM_API_URL_MAPPING " +
+                "ON AM_API_URL_MAPPING.URL_MAPPING_ID=AM_API_OPERATION_MAPPING.REF_URL_MAPPING_ID " +
+            "LEFT JOIN AM_API " +
+                "ON AM_API_URL_MAPPING.API_ID=AM_API.API_ID " +
+            "WHERE AM_API_OPERATION_MAPPING.URL_MAPPING_ID=?";
+
 }

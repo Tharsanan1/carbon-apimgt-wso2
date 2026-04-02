@@ -41,18 +41,20 @@ public class SQLConstantsH2MySQL extends SQLConstants{
             "   USER_ID, " +
             "   GROUP_ID, " +
             "   UUID, " +
-            "   APP.CREATED_BY AS CREATED_BY " +
+            "   APP.CREATED_BY AS CREATED_BY, " +
+            "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+            "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
             " FROM" +
             "   AM_APPLICATION APP, " +
             "   AM_SUBSCRIBER SUB  " +
             " WHERE " +
             "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
             " AND " +
-            "   (GROUP_ID= ?  OR  (GROUP_ID='' AND LOWER (SUB.USER_ID) = LOWER(?)))" +
+            "   (GROUP_ID= ?  OR  (GROUP_ID='' AND SUB.USER_ID = ?))" +
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
             " And " +
-            "    NAME like ?" +
+            "    LOWER (NAME) like LOWER (?)" +
             " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
             " ORDER BY $1 $2 limit ? , ?";
 
@@ -72,7 +74,9 @@ public class SQLConstantsH2MySQL extends SQLConstants{
             "   USER_ID, " +
             "   GROUP_ID, " +
             "   UUID, " +
-            "   APP.CREATED_BY AS CREATED_BY " +
+            "   APP.CREATED_BY AS CREATED_BY, " +
+            "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+            "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
             " FROM" +
             "   AM_APPLICATION APP, " +
             "   AM_SUBSCRIBER SUB  " +
@@ -83,7 +87,7 @@ public class SQLConstantsH2MySQL extends SQLConstants{
             " AND " +
             "   APP.ORGANIZATION = ? " +
             " And "+
-            "    NAME like ?"+
+            "    LOWER (NAME) like LOWER (?)"+
             " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
             " ORDER BY $1 $2 limit ? , ?";
 
@@ -102,7 +106,9 @@ public class SQLConstantsH2MySQL extends SQLConstants{
                     "   USER_ID, " +
                     "   GROUP_ID, " +
                     "   UUID, " +
-                    "   APP.CREATED_BY AS CREATED_BY " +
+                    "   APP.CREATED_BY AS CREATED_BY, " +
+                    "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+                    "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
                     " FROM" +
                     "   AM_APPLICATION APP, " +
                     "   AM_SUBSCRIBER SUB  " +
@@ -119,7 +125,7 @@ public class SQLConstantsH2MySQL extends SQLConstants{
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And " +
-                    "    NAME like ?"+
+                    "    LOWER (NAME) like LOWER (?)"+
                     " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ?";
 
@@ -139,7 +145,9 @@ public class SQLConstantsH2MySQL extends SQLConstants{
                     "   USER_ID, " +
                     "   GROUP_ID, " +
                     "   UUID, " +
-                    "   APP.CREATED_BY AS CREATED_BY " +
+                    "   APP.CREATED_BY AS CREATED_BY, " +
+                    "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+                    "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
                     " FROM" +
                     "   AM_APPLICATION APP, " +
                     "   AM_SUBSCRIBER SUB  " +
@@ -155,7 +163,7 @@ public class SQLConstantsH2MySQL extends SQLConstants{
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
                     " And "+
-                    "    NAME like ?"+
+                    "    LOWER (NAME) like LOWER (?)"+
                     " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
                     " ORDER BY $1 $2 limit ? , ?";
 
@@ -176,18 +184,20 @@ public class SQLConstantsH2MySQL extends SQLConstants{
             "   USER_ID, " +
             "   GROUP_ID, " +
             "   UUID, " +
-            "   APP.CREATED_BY AS CREATED_BY " +
+            "   APP.CREATED_BY AS CREATED_BY, " +
+            "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+            "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
             " FROM" +
             "   AM_APPLICATION APP, " +
             "   AM_SUBSCRIBER SUB  " +
             " WHERE " +
             "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
             " AND " +
-            "    LOWER(SUB.USER_ID) = LOWER(?)"+
+            "    SUB.USER_ID = ?"+
                     " AND " +
                     "   APP.ORGANIZATION = ? " +
             " And "+
-            "    NAME like ?"+
+            "    LOWER (NAME) like LOWER (?)"+
             " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
             " ORDER BY $1 $2 limit ? , ?";
 
@@ -206,7 +216,9 @@ public class SQLConstantsH2MySQL extends SQLConstants{
             "   USER_ID, " +
             "   GROUP_ID, " +
             "   UUID, " +
-            "   APP.CREATED_BY AS CREATED_BY " +
+            "   APP.CREATED_BY AS CREATED_BY, " +
+            "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+            "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
             " FROM" +
             "   AM_APPLICATION APP, " +
             "   AM_SUBSCRIBER SUB  " +
@@ -217,7 +229,69 @@ public class SQLConstantsH2MySQL extends SQLConstants{
             " AND " +
             "   APP.ORGANIZATION = ? " +
             " And "+
-            "    NAME like ?"+
+            "    LOWER (NAME) like LOWER (?)"+
+            " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
+            " ORDER BY $1 $2 limit ? , ?";
+
+    public static final String GET_APPLICATIONS_PREFIX_CASESENSITVE_WITH_ORGSHARING =
+            "select distinct x.*,bl.ENABLED from (" +
+            "SELECT " +
+            "   APPLICATION_ID, " +
+            "   NAME," +
+            "   APPLICATION_TIER," +
+            "   APP.SUBSCRIBER_ID,  " +
+            "   APP.CREATED_TIME AS APP_CREATED_TIME, " +
+            "   APP.UPDATED_TIME AS APP_UPDATED_TIME, " +
+            "   CALLBACK_URL,  " +
+            "   DESCRIPTION, " +
+            "   APPLICATION_STATUS, " +
+            "   USER_ID, " +
+            "   GROUP_ID, " +
+            "   UUID, " +
+            "   APP.CREATED_BY AS CREATED_BY, " +
+            "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+            "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
+            " FROM" +
+            "   AM_APPLICATION APP, " +
+            "   AM_SUBSCRIBER SUB  " +
+            " WHERE " +
+            "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
+            " AND (SUB.USER_ID = ? OR APP.SHARED_ORGANIZATION = ?)" +
+            " AND " +
+             "   APP.ORGANIZATION = ? " +
+            " And "+
+            "    LOWER (NAME) like LOWER (?)"+
+            " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
+            " ORDER BY $1 $2 limit ? , ?";
+    
+    public static final String GET_APPLICATIONS_PREFIX_NONE_CASESENSITVE_WITH_ORGSHARING =
+            "select distinct x.*,bl.ENABLED from (" +
+            "SELECT " +
+            "   APPLICATION_ID, " +
+            "   NAME," +
+            "   APPLICATION_TIER," +
+            "   APP.SUBSCRIBER_ID,  " +
+            "   APP.CREATED_TIME AS APP_CREATED_TIME, " +
+            "   APP.UPDATED_TIME AS APP_UPDATED_TIME, " +
+            "   CALLBACK_URL,  " +
+            "   DESCRIPTION, " +
+            "   APPLICATION_STATUS, " +
+            "   USER_ID, " +
+            "   GROUP_ID, " +
+            "   UUID, " +
+            "   APP.CREATED_BY AS CREATED_BY, " +
+            "   APP.TOKEN_TYPE AS TOKEN_TYPE, " +
+            "   APP.SHARED_ORGANIZATION AS SHARED_ORGANIZATION " +
+            " FROM" +
+            "   AM_APPLICATION APP, " +
+            "   AM_SUBSCRIBER SUB  " +
+            " WHERE " +
+            "   SUB.SUBSCRIBER_ID = APP.SUBSCRIBER_ID " +
+            " AND (LOWER(SUB.USER_ID) = LOWER(?) OR APP.SHARED_ORGANIZATION = ? )" +
+            " AND " +
+            "   APP.ORGANIZATION = ? " +
+            " And "+
+            "    LOWER (NAME) like LOWER (?)"+
             " )x left join AM_BLOCK_CONDITIONS bl on  ( bl.TYPE = 'APPLICATION' AND bl.BLOCK_CONDITION = concat(concat(x.USER_ID,':'),x.name)) " +
             " ORDER BY $1 $2 limit ? , ?";
 
@@ -233,7 +307,8 @@ public class SQLConstantsH2MySQL extends SQLConstants{
                     "   SUB.SUBSCRIBER_ID AS SUBSCRIBER_ID, " +
                     "   APP.UUID AS UUID," +
                     "   APP.NAME AS NAME," +
-                    "   APP.APPLICATION_STATUS as APPLICATION_STATUS  " +
+                    "   APP.APPLICATION_STATUS as APPLICATION_STATUS, " +
+                    "   APP.TOKEN_TYPE as TOKEN_TYPE " +
                     " FROM" +
                     "   AM_APPLICATION APP, " +
                     "   AM_SUBSCRIBER SUB  " +
@@ -243,7 +318,7 @@ public class SQLConstantsH2MySQL extends SQLConstants{
                     "    SUB.TENANT_ID = ? "+
                     " And "+
                     "   ( SUB.CREATED_BY like ?"+
-                    " AND APP.NAME like ?"+
+                    " OR APP.NAME like ?"+
                     " ) ORDER BY $1 $2 " +
                     " limit ? , ? ";
 

@@ -1,13 +1,28 @@
 package org.wso2.carbon.apimgt.internal.service.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+import org.wso2.carbon.apimgt.internal.service.dto.AIAPIQuotaLimitDTO;
+import org.wso2.carbon.apimgt.internal.service.dto.BandwidthLimitDTO;
+import org.wso2.carbon.apimgt.internal.service.dto.EventCountLimitDTO;
+import org.wso2.carbon.apimgt.internal.service.dto.RequestCountLimitDTO;
+import javax.validation.constraints.*;
 
 
 import io.swagger.annotations.*;
 import java.util.Objects;
 
+import javax.xml.bind.annotation.*;
+import org.wso2.carbon.apimgt.rest.api.common.annotations.Scope;
+import com.fasterxml.jackson.annotation.JsonCreator;
+
+import javax.validation.Valid;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 
 public class ThrottleLimitDTO   {
   
@@ -15,6 +30,7 @@ public class ThrottleLimitDTO   {
     private RequestCountLimitDTO requestCount = null;
     private BandwidthLimitDTO bandwidth = null;
     private EventCountLimitDTO eventCount = null;
+    private AIAPIQuotaLimitDTO aiApiQuota = null;
 
   /**
    **/
@@ -42,6 +58,7 @@ public class ThrottleLimitDTO   {
 
   
   @ApiModelProperty(value = "")
+      @Valid
   @JsonProperty("requestCount")
   public RequestCountLimitDTO getRequestCount() {
     return requestCount;
@@ -59,6 +76,7 @@ public class ThrottleLimitDTO   {
 
   
   @ApiModelProperty(value = "")
+      @Valid
   @JsonProperty("bandwidth")
   public BandwidthLimitDTO getBandwidth() {
     return bandwidth;
@@ -76,12 +94,31 @@ public class ThrottleLimitDTO   {
 
   
   @ApiModelProperty(value = "")
+      @Valid
   @JsonProperty("eventCount")
   public EventCountLimitDTO getEventCount() {
     return eventCount;
   }
   public void setEventCount(EventCountLimitDTO eventCount) {
     this.eventCount = eventCount;
+  }
+
+  /**
+   **/
+  public ThrottleLimitDTO aiApiQuota(AIAPIQuotaLimitDTO aiApiQuota) {
+    this.aiApiQuota = aiApiQuota;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("aiApiQuota")
+  public AIAPIQuotaLimitDTO getAiApiQuota() {
+    return aiApiQuota;
+  }
+  public void setAiApiQuota(AIAPIQuotaLimitDTO aiApiQuota) {
+    this.aiApiQuota = aiApiQuota;
   }
 
 
@@ -97,12 +134,13 @@ public class ThrottleLimitDTO   {
     return Objects.equals(quotaType, throttleLimit.quotaType) &&
         Objects.equals(requestCount, throttleLimit.requestCount) &&
         Objects.equals(bandwidth, throttleLimit.bandwidth) &&
-        Objects.equals(eventCount, throttleLimit.eventCount);
+        Objects.equals(eventCount, throttleLimit.eventCount) &&
+        Objects.equals(aiApiQuota, throttleLimit.aiApiQuota);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(quotaType, requestCount, bandwidth, eventCount);
+    return Objects.hash(quotaType, requestCount, bandwidth, eventCount, aiApiQuota);
   }
 
   @Override
@@ -114,6 +152,7 @@ public class ThrottleLimitDTO   {
     sb.append("    requestCount: ").append(toIndentedString(requestCount)).append("\n");
     sb.append("    bandwidth: ").append(toIndentedString(bandwidth)).append("\n");
     sb.append("    eventCount: ").append(toIndentedString(eventCount)).append("\n");
+    sb.append("    aiApiQuota: ").append(toIndentedString(aiApiQuota)).append("\n");
     sb.append("}");
     return sb.toString();
   }

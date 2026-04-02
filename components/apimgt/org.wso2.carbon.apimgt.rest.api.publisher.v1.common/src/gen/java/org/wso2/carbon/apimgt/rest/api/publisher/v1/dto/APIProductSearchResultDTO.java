@@ -22,12 +22,40 @@ import javax.validation.Valid;
 
 public class APIProductSearchResultDTO extends SearchResultDTO  {
   
+    private String displayName = null;
     private String description = null;
     private String context = null;
     private String version = null;
     private String provider = null;
     private String status = null;
     private String thumbnailUri = null;
+    private Boolean hasThumbnail = null;
+    private Boolean monetizedInfo = null;
+    private String businessOwner = null;
+    private String businessOwnerEmail = null;
+    private String technicalOwner = null;
+    private String technicalOwnerEmail = null;
+    private Boolean egress = null;
+    private String createdTime = null;
+    private String updatedTime = null;
+
+  /**
+   * Human-friendly name shown in UI. Length limited to DB column size.
+   **/
+  public APIProductSearchResultDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Pizza Shack API", value = "Human-friendly name shown in UI. Length limited to DB column size.")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
+  }
 
   /**
    * A brief description about the API
@@ -136,6 +164,162 @@ public class APIProductSearchResultDTO extends SearchResultDTO  {
     this.thumbnailUri = thumbnailUri;
   }
 
+  /**
+   **/
+  public APIProductSearchResultDTO hasThumbnail(Boolean hasThumbnail) {
+    this.hasThumbnail = hasThumbnail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "")
+  @JsonProperty("hasThumbnail")
+  public Boolean isHasThumbnail() {
+    return hasThumbnail;
+  }
+  public void setHasThumbnail(Boolean hasThumbnail) {
+    this.hasThumbnail = hasThumbnail;
+  }
+
+  /**
+   **/
+  public APIProductSearchResultDTO monetizedInfo(Boolean monetizedInfo) {
+    this.monetizedInfo = monetizedInfo;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "")
+  @JsonProperty("monetizedInfo")
+  public Boolean isMonetizedInfo() {
+    return monetizedInfo;
+  }
+  public void setMonetizedInfo(Boolean monetizedInfo) {
+    this.monetizedInfo = monetizedInfo;
+  }
+
+  /**
+   **/
+  public APIProductSearchResultDTO businessOwner(String businessOwner) {
+    this.businessOwner = businessOwner;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Business Owner", value = "")
+  @JsonProperty("businessOwner")
+  public String getBusinessOwner() {
+    return businessOwner;
+  }
+  public void setBusinessOwner(String businessOwner) {
+    this.businessOwner = businessOwner;
+  }
+
+  /**
+   **/
+  public APIProductSearchResultDTO businessOwnerEmail(String businessOwnerEmail) {
+    this.businessOwnerEmail = businessOwnerEmail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "businessowner@abc.com", value = "")
+  @JsonProperty("businessOwnerEmail")
+  public String getBusinessOwnerEmail() {
+    return businessOwnerEmail;
+  }
+  public void setBusinessOwnerEmail(String businessOwnerEmail) {
+    this.businessOwnerEmail = businessOwnerEmail;
+  }
+
+  /**
+   **/
+  public APIProductSearchResultDTO technicalOwner(String technicalOwner) {
+    this.technicalOwner = technicalOwner;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Technical Owner", value = "")
+  @JsonProperty("TechnicalOwner")
+  public String getTechnicalOwner() {
+    return technicalOwner;
+  }
+  public void setTechnicalOwner(String technicalOwner) {
+    this.technicalOwner = technicalOwner;
+  }
+
+  /**
+   **/
+  public APIProductSearchResultDTO technicalOwnerEmail(String technicalOwnerEmail) {
+    this.technicalOwnerEmail = technicalOwnerEmail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "technicalowner@abc.com", value = "")
+  @JsonProperty("TechnicalOwnerEmail")
+  public String getTechnicalOwnerEmail() {
+    return technicalOwnerEmail;
+  }
+  public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+    this.technicalOwnerEmail = technicalOwnerEmail;
+  }
+
+  /**
+   * Whether the API is Egress or not
+   **/
+  public APIProductSearchResultDTO egress(Boolean egress) {
+    this.egress = egress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "Whether the API is Egress or not")
+  @JsonProperty("egress")
+  public Boolean isEgress() {
+    return egress;
+  }
+  public void setEgress(Boolean egress) {
+    this.egress = egress;
+  }
+
+  /**
+   * Created time as unix timestamp in milliseconds.
+   **/
+  public APIProductSearchResultDTO createdTime(String createdTime) {
+    this.createdTime = createdTime;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1756199448644", value = "Created time as unix timestamp in milliseconds.")
+  @JsonProperty("createdTime")
+  public String getCreatedTime() {
+    return createdTime;
+  }
+  public void setCreatedTime(String createdTime) {
+    this.createdTime = createdTime;
+  }
+
+  /**
+   * Update time as unix timestamp in milliseconds.
+   **/
+  public APIProductSearchResultDTO updatedTime(String updatedTime) {
+    this.updatedTime = updatedTime;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1756199448644", value = "Update time as unix timestamp in milliseconds.")
+  @JsonProperty("updatedTime")
+  public String getUpdatedTime() {
+    return updatedTime;
+  }
+  public void setUpdatedTime(String updatedTime) {
+    this.updatedTime = updatedTime;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -146,17 +330,27 @@ public class APIProductSearchResultDTO extends SearchResultDTO  {
       return false;
     }
     APIProductSearchResultDTO apIProductSearchResult = (APIProductSearchResultDTO) o;
-    return Objects.equals(description, apIProductSearchResult.description) &&
+    return Objects.equals(displayName, apIProductSearchResult.displayName) &&
+        Objects.equals(description, apIProductSearchResult.description) &&
         Objects.equals(context, apIProductSearchResult.context) &&
         Objects.equals(version, apIProductSearchResult.version) &&
         Objects.equals(provider, apIProductSearchResult.provider) &&
         Objects.equals(status, apIProductSearchResult.status) &&
-        Objects.equals(thumbnailUri, apIProductSearchResult.thumbnailUri);
+        Objects.equals(thumbnailUri, apIProductSearchResult.thumbnailUri) &&
+        Objects.equals(hasThumbnail, apIProductSearchResult.hasThumbnail) &&
+        Objects.equals(monetizedInfo, apIProductSearchResult.monetizedInfo) &&
+        Objects.equals(businessOwner, apIProductSearchResult.businessOwner) &&
+        Objects.equals(businessOwnerEmail, apIProductSearchResult.businessOwnerEmail) &&
+        Objects.equals(technicalOwner, apIProductSearchResult.technicalOwner) &&
+        Objects.equals(technicalOwnerEmail, apIProductSearchResult.technicalOwnerEmail) &&
+        Objects.equals(egress, apIProductSearchResult.egress) &&
+        Objects.equals(createdTime, apIProductSearchResult.createdTime) &&
+        Objects.equals(updatedTime, apIProductSearchResult.updatedTime);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(description, context, version, provider, status, thumbnailUri);
+    return Objects.hash(displayName, description, context, version, provider, status, thumbnailUri, hasThumbnail, monetizedInfo, businessOwner, businessOwnerEmail, technicalOwner, technicalOwnerEmail, egress, createdTime, updatedTime);
   }
 
   @Override
@@ -164,12 +358,22 @@ public class APIProductSearchResultDTO extends SearchResultDTO  {
     StringBuilder sb = new StringBuilder();
     sb.append("class APIProductSearchResultDTO {\n");
     sb.append("    ").append(toIndentedString(super.toString())).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    thumbnailUri: ").append(toIndentedString(thumbnailUri)).append("\n");
+    sb.append("    hasThumbnail: ").append(toIndentedString(hasThumbnail)).append("\n");
+    sb.append("    monetizedInfo: ").append(toIndentedString(monetizedInfo)).append("\n");
+    sb.append("    businessOwner: ").append(toIndentedString(businessOwner)).append("\n");
+    sb.append("    businessOwnerEmail: ").append(toIndentedString(businessOwnerEmail)).append("\n");
+    sb.append("    technicalOwner: ").append(toIndentedString(technicalOwner)).append("\n");
+    sb.append("    technicalOwnerEmail: ").append(toIndentedString(technicalOwnerEmail)).append("\n");
+    sb.append("    egress: ").append(toIndentedString(egress)).append("\n");
+    sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
+    sb.append("    updatedTime: ").append(toIndentedString(updatedTime)).append("\n");
     sb.append("}");
     return sb.toString();
   }

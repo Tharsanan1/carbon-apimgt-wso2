@@ -26,12 +26,15 @@ import org.apache.http.HttpHeaders;
 import org.apache.logging.log4j.ThreadContext;
 import org.apache.synapse.AbstractSynapseHandler;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.api.ApiUtils;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
 import org.wso2.carbon.apimgt.gateway.APILoggerManager;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.logging.APILogHandler;
+import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.correlation.MethodCallsCorrelationConfigDataHolder;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -44,8 +47,6 @@ import javax.xml.stream.XMLStreamException;
  */
 public class LogsHandler extends AbstractSynapseHandler {
     private static final Log log = LogFactory.getLog(APIConstants.CORRELATION_LOGGER);
-    private static boolean isEnabled = false;
-    private static boolean isSet = false;
     private String apiTo = null;
 
     private static final String AUTH_HEADER = "AUTH_HEADER";
@@ -55,7 +56,8 @@ public class LogsHandler extends AbstractSynapseHandler {
     private static final String UUID_HEADER = "UUID_HEADER";
     private static final String CORRELATION_ID_HEADER = "CORRELATION_ID_HEADER";
     protected static final String LOG_LEVEL = "LOG_LEVEL";
-
+    protected static final String RESOURCE_PATH = "RESOURCE_PATH";
+    protected static final String RESOURCE_METHOD = "RESOURCE_METHOD";
     private static final String REQUEST_BODY_SIZE_ERROR = "Error occurred while building the message to calculate" +
             " the response body size";
     private static final String REQUEST_EVENT_PUBLICATION_ERROR = "Cannot publish request event. ";
@@ -71,14 +73,7 @@ public class LogsHandler extends AbstractSynapseHandler {
     }
 
     private boolean isEnabled() {
-        if(!isSet) {
-            String config = System.getProperty(APIConstants.ENABLE_CORRELATION_LOGS);
-            if (config != null && !config.equals("")) {
-                isEnabled = Boolean.parseBoolean(config);
-                isSet = true;
-            }
-        }
-        return isEnabled;
+        return MethodCallsCorrelationConfigDataHolder.isEnable();
     }
 
     public boolean handleRequestInFlow(MessageContext messageContext) {
@@ -101,6 +96,11 @@ public class LogsHandler extends AbstractSynapseHandler {
 
     public boolean handleRequestOutFlow(MessageContext messageContext) {
         if (isEnabled()) {
+            if (GatewayUtils.checkForFileBasedApiContexts(ApiUtils.getFullRequestPath(messageContext)
+                    , GatewayUtils.getTenantDomain())) {
+                return true;
+            }
+
             try {
                 Map headers = LogUtils.getTransportHeaders(messageContext);
                 String correlationIdHeader = null;
@@ -286,7 +286,7 @@ public class LogsHandler extends AbstractSynapseHandler {
      *
      * @param map Map containing API context and logLevel
      */
-    public static Map<String, String> syncAPILogData(Map<String, Object> map) {
+    public static Map<Map<String, String>, String> syncAPILogData(Map<String, Object> map) {
         String apictx = (String) map.get("context");
         String logLevel = (String) map.get("value");
         log.debug("Log level for " + apictx + " is changed to " + logLevel);
@@ -296,7 +296,7 @@ public class LogsHandler extends AbstractSynapseHandler {
         return APILoggerManager.getInstance().getPerAPILoggerList().get(context);
     }
 
-    public static Map<String, String> getLogData() {
+    public static Map<Map<String, String>, String> getLogData() {
         return APILoggerManager.getInstance().getPerAPILoggerList();
     }
 
@@ -307,7 +307,7 @@ public class LogsHandler extends AbstractSynapseHandler {
      * @return log level of the API or null if not
      */
     private String getAPILogLevel(MessageContext ctx) {
-        Map<String, String> logProperties = APILoggerManager.getInstance().getPerAPILoggerList();
+        Map<Map<String, String>, String> logProperties = APILoggerManager.getInstance().getPerAPILoggerList();
         // if the logging API data holder is empty or null return null
         if (!logProperties.isEmpty()) {
             return LogUtils.getMatchingLogLevel(ctx, logProperties);

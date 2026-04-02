@@ -25,13 +25,14 @@ import org.wso2.carbon.apimgt.common.jms.JMSTransportHandler;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
+import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
 import org.wso2.carbon.apimgt.impl.jms.listener.JMSListenerShutDownService;
 import org.wso2.carbon.apimgt.jms.listener.internal.ServiceReferenceHolder;
 import org.wso2.carbon.core.ServerShutdownHandler;
 import org.wso2.carbon.core.ServerStartupObserver;
 
 /**
- * This Class used to properly start and Close JMS listeners
+ * This Class used to properly start and Close JMS listeners.
  */
 public class JMSListenerStartupShutdownListener implements ServerStartupObserver, ServerShutdownHandler,
         JMSListenerShutDownService {
@@ -44,9 +45,13 @@ public class JMSListenerStartupShutdownListener implements ServerStartupObserver
         EventHubConfigurationDto.EventHubReceiverConfiguration eventHubReceiverConfiguration =
                 ServiceReferenceHolder.getInstance().getAPIMConfiguration().getEventHubConfigurationDto()
                         .getEventHubReceiverConfiguration();
+        ThrottleProperties.JMSConnectionProperties.JMSTaskManagerProperties jmsTaskManagerProperties =
+                ServiceReferenceHolder.getInstance().getAPIMConfiguration().getThrottleProperties()
+                        .getJmsConnectionProperties().getJmsTaskManagerProperties();
+
         if (eventHubReceiverConfiguration != null) {
-            this.jmsTransportHandlerForEventHub =
-                    new JMSTransportHandler(eventHubReceiverConfiguration.getJmsConnectionParameters());
+            this.jmsTransportHandlerForEventHub = new JMSTransportHandler(
+                    eventHubReceiverConfiguration.getJmsConnectionParameters(), jmsTaskManagerProperties);
         }
 
     }
@@ -59,15 +64,31 @@ public class JMSListenerStartupShutdownListener implements ServerStartupObserver
     @Override
     public void completedServerStartup() {
 
-        APIManagerConfiguration apimConfiguration = ServiceReferenceHolder.getInstance().getAPIMConfiguration();
-        if (apimConfiguration != null) {
-            String enableKeyManagerRetrieval =
-                    apimConfiguration.getFirstProperty(APIConstants.ENABLE_KEY_MANAGER_RETRIVAL);
-            if (JavaUtils.isTrueExplicitly(enableKeyManagerRetrieval)) {
-                jmsTransportHandlerForEventHub
-                        .subscribeForJmsEvents(JMSConstants.TOPIC_KEY_MANAGER, new KeyManagerJMSMessageListener());
+        String migrationEnabled = System.getProperty(APIConstants.MIGRATE);
+        if (migrationEnabled == null) {
+            APIManagerConfiguration apimConfiguration = ServiceReferenceHolder.getInstance().getAPIMConfiguration();
+            if (apimConfiguration != null) {
+                String enableKeyManagerRetrieval =
+                        apimConfiguration.getFirstProperty(APIConstants.ENABLE_KEY_MANAGER_RETRIVAL);
+                if (JavaUtils.isTrueExplicitly(enableKeyManagerRetrieval)) {
+                    jmsTransportHandlerForEventHub
+                            .subscribeForJmsEvents(JMSConstants.TOPIC_KEY_MANAGER, new KeyManagerJMSMessageListener());
+                    jmsTransportHandlerForEventHub
+                            .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_NOTIFICATION, new CorrelationConfigJMSMessageListener());
+                }
+                if (Boolean.parseBoolean(apimConfiguration.getFirstProperty(APIConstants.
+                        ENABLE_CERTIFICATE_MANAGEMENT_EVENT_LISTENING))) {
+                    log.info("Certificate management event listening is enabled. Subscribing to notification topic.");
+                    jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_NOTIFICATION,
+                            new CertificateManagerJMSMessageListener());
+                }
+                jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_API_KEY_USAGE,
+                        new APIKeyUsageListener());
             }
+        } else {
+            log.info("Running on migration enabled mode: Stopped at JMSListenerStartupShutdownListener completed");
         }
+
     }
 
     @Override
@@ -77,6 +98,7 @@ public class JMSListenerStartupShutdownListener implements ServerStartupObserver
             log.debug("Unsubscribe from JMS Events...");
             jmsTransportHandlerForEventHub.unSubscribeFromEvents();
         }
+        APIKeyUsageListener.shutdown();
     }
 
     @Override
@@ -86,5 +108,6 @@ public class JMSListenerStartupShutdownListener implements ServerStartupObserver
             log.debug("Unsubscribe from JMS Events...");
             jmsTransportHandlerForEventHub.unSubscribeFromEvents();
         }
+        APIKeyUsageListener.shutdown();
     }
 }

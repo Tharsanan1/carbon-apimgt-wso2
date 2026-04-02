@@ -22,16 +22,27 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
+import java.util.HashMap;
+import java.util.Map;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.LLMProviderConfiguration;
+import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
 import org.wso2.carbon.apimgt.api.model.APIStatus;
+import org.wso2.carbon.apimgt.api.model.LLMProviderInfo;
+import org.wso2.carbon.apimgt.common.jms.JMSConnectionEventListener;
 import org.wso2.carbon.apimgt.gateway.APILoggerManager;
 import org.wso2.carbon.apimgt.gateway.EndpointCertificateDeployer;
+import org.wso2.carbon.apimgt.gateway.GatewayPolicyDeployer;
 import org.wso2.carbon.apimgt.gateway.GoogleAnalyticsConfigDeployer;
 import org.wso2.carbon.apimgt.gateway.InMemoryAPIDeployer;
+import org.wso2.carbon.apimgt.gateway.notifiers.GatewayNotifier;
+import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
+import org.wso2.carbon.apimgt.gateway.utils.TenantUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIConstants.EventType;
 import org.wso2.carbon.apimgt.impl.APIConstants.PolicyType;
@@ -40,20 +51,12 @@ import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.dto.GatewayArtifactSynchronizerProperties;
 import org.wso2.carbon.apimgt.impl.dto.WebhooksDTO;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.exception.ArtifactSynchronizerException;
-import org.wso2.carbon.apimgt.impl.notifier.events.APIEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.APIPolicyEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.ApplicationEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.ApplicationPolicyEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.ApplicationRegistrationEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.CertificateEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.DeployAPIInGatewayEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.GoogleAnalyticsConfigEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.PolicyEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.ScopeEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.SubscriptionEvent;
-import org.wso2.carbon.apimgt.impl.notifier.events.SubscriptionPolicyEvent;
+import org.wso2.carbon.apimgt.impl.notifier.events.*;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
+import org.wso2.carbon.stratos.common.exception.TenantMgtException;
+import org.wso2.carbon.user.api.UserStoreException;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -65,16 +68,25 @@ import javax.jms.MessageListener;
 import javax.jms.TextMessage;
 import javax.jms.Topic;
 
-public class GatewayJMSMessageListener implements MessageListener {
+public class GatewayJMSMessageListener implements MessageListener, JMSConnectionEventListener {
 
     private static final Log log = LogFactory.getLog(GatewayJMSMessageListener.class);
     private boolean debugEnabled = log.isDebugEnabled();
+    private boolean refreshOnReconnect = false;
     private InMemoryAPIDeployer inMemoryApiDeployer = new InMemoryAPIDeployer();
     private EventHubConfigurationDto eventHubConfigurationDto = ServiceReferenceHolder.getInstance()
             .getAPIManagerConfiguration().getEventHubConfigurationDto();
     private GatewayArtifactSynchronizerProperties gatewayArtifactSynchronizerProperties = ServiceReferenceHolder
             .getInstance().getAPIManagerConfiguration().getGatewayArtifactSynchronizerProperties();
     ExecutorService executor = Executors.newSingleThreadExecutor(r -> new Thread(r, "DeploymentThread"));
+    private static GatewayNotifier gatewayNotifier = GatewayNotifier.getInstance();
+
+    public GatewayJMSMessageListener() {
+    }
+
+    public GatewayJMSMessageListener(boolean refreshOnReconnect) {
+        this.refreshOnReconnect = refreshOnReconnect;
+    }
 
     public void onMessage(Message message) {
 
@@ -96,7 +108,7 @@ public class GatewayJMSMessageListener implements MessageListener {
                 Topic jmsDestination = (Topic) message.getJMSDestination();
                 if (message instanceof TextMessage) {
                     String textMessage = ((TextMessage) message).getText();
-                    JsonNode payloadData =  new ObjectMapper().readTree(textMessage).path(APIConstants.EVENT_PAYLOAD).
+                    JsonNode payloadData = new ObjectMapper().readTree(textMessage).path(APIConstants.EVENT_PAYLOAD).
                             path(APIConstants.EVENT_PAYLOAD_DATA);
 
                     if (APIConstants.TopicNames.TOPIC_NOTIFICATION.equalsIgnoreCase(jmsDestination.getTopicName())) {
@@ -151,6 +163,9 @@ public class GatewayJMSMessageListener implements MessageListener {
                     DeployAPIInGatewayEvent gatewayEvent = new Gson().fromJson(new String(eventDecoded),
                             DeployAPIInGatewayEvent.class);
                     String tenantDomain = gatewayEvent.getTenantDomain();
+                    if (!TenantUtils.isTenantAvailable(tenantDomain)){
+                        return;
+                    }
                     boolean tenantLoaded = ServiceReferenceHolder.getInstance().isTenantLoaded(tenantDomain);
                     if (!tenantLoaded) {
                         String syncKey = tenantDomain.concat("__").concat(this.getClass().getName());
@@ -195,6 +210,8 @@ public class GatewayJMSMessageListener implements MessageListener {
                                         endTenantFlow();
                                     }
                                 }
+                                DataHolder.getInstance().removeAPIFromAllTenantMap(gatewayEvent.getContext(),
+                                        gatewayEvent.getTenantDomain());
                             }
                         }
 
@@ -209,46 +226,94 @@ public class GatewayJMSMessageListener implements MessageListener {
         if (EventType.APPLICATION_CREATE.toString().equals(eventType)
                 || EventType.APPLICATION_UPDATE.toString().equals(eventType)) {
             ApplicationEvent event = new Gson().fromJson(eventJson, ApplicationEvent.class);
-            ServiceReferenceHolder.getInstance().getKeyManagerDataService().addOrUpdateApplication(event);;
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
+            ServiceReferenceHolder.getInstance().getKeyManagerDataService().addOrUpdateApplication(event);
         } else if (EventType.SUBSCRIPTIONS_CREATE.toString().equals(eventType)
                 || EventType.SUBSCRIPTIONS_UPDATE.toString().equals(eventType)) {
             SubscriptionEvent event = new Gson().fromJson(eventJson, SubscriptionEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())) {
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().addOrUpdateSubscription(event);
         } else if (EventType.API_UPDATE.toString().equals(eventType)) {
             APIEvent event = new Gson().fromJson(eventJson, APIEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().addOrUpdateAPI(event);
+            DataHolder.getInstance().addAPIMetaData(event);
         } else if (EventType.API_LIFECYCLE_CHANGE.toString().equals(eventType)) {
             APIEvent event = new Gson().fromJson(eventJson, APIEvent.class);
-            if (APIStatus.CREATED.toString().equals(event.getApiStatus())
-                    || APIStatus.RETIRED.toString().equals(event.getApiStatus())) {
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
+            if (APIStatus.RETIRED.toString().equals(event.getApiStatus())) {
                 ServiceReferenceHolder.getInstance().getKeyManagerDataService().removeAPI(event);
+                DataHolder.getInstance().removeAPIFromAllTenantMap(event.getApiContext(), event.getTenantDomain());
             } else {
                 ServiceReferenceHolder.getInstance().getKeyManagerDataService().addOrUpdateAPI(event);
             }
         } else if (EventType.APPLICATION_REGISTRATION_CREATE.toString().equals(eventType)) {
             ApplicationRegistrationEvent event = new Gson().fromJson(eventJson, ApplicationRegistrationEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().addOrUpdateApplicationKeyMapping(event);
         } else if (EventType.SUBSCRIPTIONS_DELETE.toString().equals(eventType)) {
             SubscriptionEvent event = new Gson().fromJson(eventJson, SubscriptionEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().removeSubscription(event);
         } else if (EventType.APPLICATION_DELETE.toString().equals(eventType)) {
             ApplicationEvent event = new Gson().fromJson(eventJson, ApplicationEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().removeApplication(event);
         } else if (EventType.REMOVE_APPLICATION_KEYMAPPING.toString().equals(eventType)) {
             ApplicationRegistrationEvent event = new Gson().fromJson(eventJson, ApplicationRegistrationEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().removeApplicationKeyMapping(event);
-        } else if (EventType.SCOPE_CREATE.toString().equals(eventType)) {
-            ScopeEvent event = new Gson().fromJson(eventJson,ScopeEvent.class);
-            ServiceReferenceHolder.getInstance().getKeyManagerDataService().addScope(event);
-        } else if (EventType.SCOPE_UPDATE.toString().equals(eventType)) {
+        } else if (EventType.SCOPES_UPDATE.toString().equals(eventType)) {
+            ScopesEvent event = new Gson().fromJson(eventJson, ScopesEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
+            for (ScopeEvent scopeEvent : event.getScopes()) {
+                ServiceReferenceHolder.getInstance().getKeyManagerDataService().addScope(scopeEvent);
+            }
+        } else if (EventType.SCOPE_CREATE.toString().equals(eventType) ||
+                EventType.SCOPE_UPDATE.toString().equals(eventType)) {
             ScopeEvent event = new Gson().fromJson(eventJson, ScopeEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().addScope(event);
+            APIUtil.logAuditMessage(APIConstants.AuditLogConstants.SCOPE, event.getName() + ": " + eventType,
+                    APIConstants.AuditLogConstants.DEPLOYED,
+                    APIConstants.AuditLogConstants.SYSTEM + ": " + event.getTenantDomain());
         } else if (EventType.SCOPE_DELETE.toString().equals(eventType)) {
             ScopeEvent event = new Gson().fromJson(eventJson, ScopeEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             ServiceReferenceHolder.getInstance().getKeyManagerDataService().deleteScope(event);
+            APIUtil.logAuditMessage(APIConstants.AuditLogConstants.SCOPE, event.getName() + ": " + eventType,
+                    APIConstants.AuditLogConstants.DEPLOYED,
+                    APIConstants.AuditLogConstants.SYSTEM + ": " + event.getTenantDomain());
         } else if (EventType.POLICY_CREATE.toString().equals(eventType) ||
-                EventType.POLICY_DELETE.toString().equals(eventType)) {
+                EventType.POLICY_DELETE.toString().equals(eventType) ||
+                EventType.POLICY_UPDATE.toString().equals(eventType)) {
+            String policyName = null;
             PolicyEvent event = new Gson().fromJson(eventJson, PolicyEvent.class);
+            if (!TenantUtils.isTenantAvailable(event.getTenantDomain())){
+                return;
+            }
             boolean updatePolicy = false;
             boolean deletePolicy = false;
             if (EventType.POLICY_CREATE.toString().equals(eventType)
@@ -266,6 +331,7 @@ public class GatewayJMSMessageListener implements MessageListener {
                     ServiceReferenceHolder.getInstance().getKeyManagerDataService()
                             .removeAPIPolicy(policyEvent);
                 }
+                policyName = policyEvent.getPolicyName();
             } else if (event.getPolicyType() == PolicyType.SUBSCRIPTION) {
                 SubscriptionPolicyEvent policyEvent = new Gson().fromJson(eventJson, SubscriptionPolicyEvent.class);
                 if (updatePolicy) {
@@ -275,6 +341,7 @@ public class GatewayJMSMessageListener implements MessageListener {
                     ServiceReferenceHolder.getInstance().getKeyManagerDataService()
                             .removeSubscriptionPolicy(policyEvent);
                 }
+                policyName = policyEvent.getPolicyName();
             } else if (event.getPolicyType() == PolicyType.APPLICATION) {
                 ApplicationPolicyEvent policyEvent = new Gson().fromJson(eventJson, ApplicationPolicyEvent.class);
                 if (updatePolicy) {
@@ -284,10 +351,17 @@ public class GatewayJMSMessageListener implements MessageListener {
                     ServiceReferenceHolder.getInstance().getKeyManagerDataService()
                             .removeApplicationPolicy(policyEvent);
                 }
+                policyName = policyEvent.getPolicyName();
             }
+            APIUtil.logAuditMessage(event.getPolicyType().toString(), policyName + ": " + eventType,
+                    APIConstants.AuditLogConstants.DEPLOYED,
+                    APIConstants.AuditLogConstants.SYSTEM + ": " + event.getTenantDomain());
         } else if (EventType.ENDPOINT_CERTIFICATE_ADD.toString().equals(eventType) ||
                 EventType.ENDPOINT_CERTIFICATE_REMOVE.toString().equals(eventType)) {
             CertificateEvent certificateEvent = new Gson().fromJson(eventJson, CertificateEvent.class);
+            if (!TenantUtils.isTenantAvailable(certificateEvent.getTenantDomain())){
+                return;
+            }
             if (EventType.ENDPOINT_CERTIFICATE_ADD.toString().equals(eventType)) {
                 try {
                     new EndpointCertificateDeployer(certificateEvent.getTenantDomain())
@@ -312,6 +386,9 @@ public class GatewayJMSMessageListener implements MessageListener {
         } else if (EventType.GA_CONFIG_UPDATE.toString().equals(eventType)) {
             GoogleAnalyticsConfigEvent googleAnalyticsConfigEvent =
                     new Gson().fromJson(eventJson, GoogleAnalyticsConfigEvent.class);
+            if (!TenantUtils.isTenantAvailable(googleAnalyticsConfigEvent.getTenantDomain())){
+                return;
+            }
             try {
                 new GoogleAnalyticsConfigDeployer(googleAnalyticsConfigEvent.getTenantDomain()).deploy();
             } catch (APIManagementException e) {
@@ -319,8 +396,277 @@ public class GatewayJMSMessageListener implements MessageListener {
             }
         } else if (EventType.UDATE_API_LOG_LEVEL.toString().equals(eventType)) {
             APIEvent apiEvent = new Gson().fromJson(eventJson, APIEvent.class);
-            APILoggerManager.getInstance().updateLoggerMap(apiEvent.getApiContext(), apiEvent.getLogLevel());
+            if (!TenantUtils.isTenantAvailable(apiEvent.getTenantDomain())){
+                return;
+            }
+            APILoggerManager.getInstance().updateLoggerMap(apiEvent.getApiContext(), apiEvent.getLogLevel(),
+                    apiEvent.getResourceMethod(), apiEvent.getResourcePath());
+        } else if (EventType.CUSTOM_POLICY_ADD.toString().equals(eventType)) {
+            KeyTemplateEvent keyTemplateEvent = new Gson().fromJson(eventJson, KeyTemplateEvent.class);
+            if (!TenantUtils.isTenantAvailable(keyTemplateEvent.getTenantDomain())){
+                return;
+            }
+            String key = keyTemplateEvent.getKeyTemplate();
+            String keyTemplateValue = keyTemplateEvent.getKeyTemplate();
+            ServiceReferenceHolder.getInstance().getAPIThrottleDataService()
+                    .addKeyTemplate(key, keyTemplateValue);
+        } else if (EventType.CUSTOM_POLICY_DELETE.toString().equals(eventType)) {
+            KeyTemplateEvent keyTemplateEvent = new Gson().fromJson(eventJson, KeyTemplateEvent.class);
+            if (!TenantUtils.isTenantAvailable(keyTemplateEvent.getTenantDomain())){
+                return;
+            }
+            String key = keyTemplateEvent.getKeyTemplate();
+            ServiceReferenceHolder.getInstance().getAPIThrottleDataService()
+                    .removeKeyTemplate(key);
+        } else if (EventType.CUSTOM_POLICY_UPDATE.toString().equals(eventType)) {
+            KeyTemplateEvent keyTemplateEvent = new Gson().fromJson(eventJson, KeyTemplateEvent.class);
+            if (!TenantUtils.isTenantAvailable(keyTemplateEvent.getTenantDomain())){
+                return;
+            }
+            String oldKey = keyTemplateEvent.getOldKeyTemplate();
+            String newKey = keyTemplateEvent.getNewKeyTemplate();
+            String newTemplateValue = newKey;
+            ServiceReferenceHolder.getInstance().getAPIThrottleDataService()
+                    .removeKeyTemplate(oldKey);
+            ServiceReferenceHolder.getInstance().getAPIThrottleDataService()
+                    .addKeyTemplate(newKey, newTemplateValue);
+        } else if (EventType.DEPLOY_POLICY_MAPPING_IN_GATEWAY.toString().equals(eventType)
+                || EventType.REMOVE_POLICY_MAPPING_FROM_GATEWAY.toString().equals(eventType)) {
+            GatewayPolicyEvent gatewayPolicyEvent = new Gson().fromJson(eventJson, GatewayPolicyEvent.class);
+            if (!TenantUtils.isTenantAvailable(gatewayPolicyEvent.getTenantDomain())) {
+                return;
+            }
+            Set<String> systemConfiguredGatewayLabels = new HashSet(gatewayPolicyEvent.getGatewayLabels());
+            systemConfiguredGatewayLabels.retainAll(gatewayArtifactSynchronizerProperties.getGatewayLabels());
+            if (!systemConfiguredGatewayLabels.isEmpty()) {
+                if (EventType.DEPLOY_POLICY_MAPPING_IN_GATEWAY.toString().equals(eventType)) {
+                    boolean tenantFlowStarted = false;
+                    try {
+                        PrivilegedCarbonContext.startTenantFlow();
+                        PrivilegedCarbonContext.getThreadLocalCarbonContext()
+                                .setTenantDomain(gatewayPolicyEvent.getTenantDomain(), true);
+                        tenantFlowStarted = true;
+                        new GatewayPolicyDeployer(
+                                gatewayPolicyEvent.getGatewayPolicyMappingUuid()).deployGatewayPolicyMapping();
+                    } catch (ArtifactSynchronizerException | APIManagementException e) {
+                        log.error(
+                                "Error in deploying artifacts for " + gatewayPolicyEvent.getGatewayPolicyMappingUuid() +
+                                        "in the Gateway");
+                    } finally {
+                        if (tenantFlowStarted) {
+                            PrivilegedCarbonContext.endTenantFlow();
+                        }
+                    }
+                } else if (EventType.REMOVE_POLICY_MAPPING_FROM_GATEWAY.toString().equals(eventType)) {
+                    boolean tenantFlowStarted = false;
+                    try {
+                        PrivilegedCarbonContext.startTenantFlow();
+                        PrivilegedCarbonContext.getThreadLocalCarbonContext()
+                                .setTenantDomain(gatewayPolicyEvent.getTenantDomain(), true);
+                        tenantFlowStarted = true;
+                        new GatewayPolicyDeployer(
+                                gatewayPolicyEvent.getGatewayPolicyMappingUuid()).undeployGatewayPolicyMapping();
+                    } catch (ArtifactSynchronizerException | APIManagementException e) {
+                        log.error("Error while un-deploying artifacts for " +
+                                gatewayPolicyEvent.getGatewayPolicyMappingUuid() + "from the Gateway");
+                    } finally {
+                        if (tenantFlowStarted) {
+                            PrivilegedCarbonContext.endTenantFlow();
+                        }
+                    }
+                }
+            }
+        } else if (EventType.LLM_PROVIDER_CREATE.toString().equals(eventType)) {
+            try {
+                LLMProviderEvent providerEvent = new Gson().fromJson(eventJson, LLMProviderEvent.class);
+                if (!TenantUtils.isTenantAvailable(providerEvent.getTenantDomain())){
+                    return;
+                }
+                addProviderConfigurations(providerEvent, providerEvent.getTenantDomain());
+            } catch (Exception e) {
+                log.error("Error while handling LLM provider add event", e);
+            }
+        } else if (EventType.LLM_PROVIDER_DELETE.toString().equals(eventType)) {
+            try {
+                LLMProviderEvent providerEvent = new Gson().fromJson(eventJson, LLMProviderEvent.class);
+                if (!TenantUtils.isTenantAvailable(providerEvent.getTenantDomain())){
+                    return;
+                }
+                removeProviderConfigurations(providerEvent.getId());
+            } catch (Exception e) {
+                log.error("Error while handling LLM provider delete event", e);
+            }
+        } else if (EventType.LLM_PROVIDER_UPDATE.toString().equals(eventType)) {
+            try {
+                LLMProviderEvent providerEvent = new Gson().fromJson(eventJson, LLMProviderEvent.class);
+                if (!TenantUtils.isTenantAvailable(providerEvent.getTenantDomain())){
+                    return;
+                }
+                updateProviderConfigurations(providerEvent, providerEvent.getTenantDomain());
+            } catch (Exception e) {
+                log.error("Error while handling LLM provider update event", e);
+            }
+        } else if (EventType.TENANT_CREATE.toString().equals(eventType) ||
+                EventType.TENANT_UPDATE.toString().equals(eventType) ||
+                EventType.TENANT_ACTIVATION.toString().equals(eventType) ||
+                EventType.TENANT_DEACTIVATION.toString().equals(eventType)) {
+            if (GatewayUtils.isTenantLoadingEnable()) {
+                try {
+                    TenantEvent tenantEvent = new Gson().fromJson(eventJson, TenantEvent.class);
+                    if (!TenantUtils.isTenantAvailable(tenantEvent.getTenantDomain())){
+                        return;
+                    }
+                    addOrUpdateTenant(tenantEvent);
+                } catch (Exception e) {
+                    log.error("Error while loading tenant into gateway.", e);
+                }
+            }
+        } else if (EventType.API_KEY_CREATE.toString().equals(eventType) ||
+                EventType.API_KEY_DELETE.toString().equals(eventType)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Processing API key event. Event type: " + eventType);
+            }
+            APIKeyEvent apiKeyEvent = new Gson().fromJson(eventJson, APIKeyEvent.class);
+            if (!TenantUtils.isTenantAvailable(apiKeyEvent.getTenantDomain())){
+                return;
+            }
+            APIKeyInfo apiKeyInfo = fromAPIKeyEventToAPIKeyInfo(apiKeyEvent);
+            if (EventType.API_KEY_DELETE.toString().equals(eventType)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Removing API key with lookup key: " + apiKeyInfo.getLookupKey() +
+                            " from the in-memory store");
+                }
+                DataHolder.getInstance().removeOpaqueAPIKeyInfo(apiKeyInfo.getLookupKey());
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug(
+                            "Adding API key with lookup key: " + apiKeyInfo.getLookupKey() + " to the in-memory store");
+                }
+                DataHolder.getInstance().addOpaqueAPIKeyInfo(apiKeyInfo);
+            }
+        } else if (EventType.API_KEY_ASSOCIATION_CREATE.toString().equals(eventType) ||
+                EventType.API_KEY_ASSOCIATION_DELETE.toString().equals(eventType)) {
+            if (log.isDebugEnabled()) {
+                log.debug("Processing API key event. Event type: " + eventType);
+            }
+            APIKeyAssociationEvent apiKeyAssociationEvent = new Gson().fromJson(eventJson, APIKeyAssociationEvent.class);
+            if (!TenantUtils.isTenantAvailable(apiKeyAssociationEvent.getTenantDomain())){
+                return;
+            }
+            String lookupKey = apiKeyAssociationEvent.getApiKeyHash();
+            APIKeyInfo apiKeyInfo = DataHolder.getInstance().getOpaqueAPIKeyInfo(lookupKey);
+            if (apiKeyInfo != null) {
+                if (EventType.API_KEY_ASSOCIATION_CREATE.toString().equals(eventType)) {
+                    apiKeyInfo.setApplicationId(apiKeyAssociationEvent.getApplicationUUId());
+                    apiKeyInfo.setAppId(apiKeyAssociationEvent.getApplicationId());
+                } else {
+                    apiKeyInfo.setApplicationId(null);
+                    apiKeyInfo.setAppId(-1);
+                }
+                DataHolder.getInstance().addOpaqueAPIKeyInfo(apiKeyInfo);
+            }
         }
+    }
+
+    private APIKeyInfo fromAPIKeyEventToAPIKeyInfo(APIKeyEvent apiKeyEvent) {
+        APIKeyInfo apiKeyInfo = new APIKeyInfo();
+        apiKeyInfo.setApiId(apiKeyEvent.getApiId());
+        apiKeyInfo.setApiKeyHash(apiKeyEvent.getApiKeyHash());
+        apiKeyInfo.setAuthUser(apiKeyEvent.getUser());
+        apiKeyInfo.setCreatedTime(apiKeyEvent.getTimeCreated());
+        long validityPeriodInSeconds = apiKeyEvent.getValidityPeriod();
+        if (validityPeriodInSeconds < 0) {
+            apiKeyInfo.setExpiresAt(Long.MAX_VALUE);
+        } else {
+            long validityPeriodInMillis = validityPeriodInSeconds * 1000L;
+            long createdTimeMillis = apiKeyEvent.getTimeCreated();
+            // Guard against arithmetic overflow before adding
+            if (validityPeriodInMillis < 0
+                    || validityPeriodInMillis > Long.MAX_VALUE - createdTimeMillis) {
+                apiKeyInfo.setExpiresAt(Long.MAX_VALUE);
+            } else {
+                apiKeyInfo.setExpiresAt(createdTimeMillis + validityPeriodInMillis);
+            }
+        }
+        apiKeyInfo.setValidityPeriod(validityPeriodInSeconds);
+        apiKeyInfo.setValidityPeriod(apiKeyEvent.getValidityPeriod());
+        apiKeyInfo.setKeyType(apiKeyEvent.getKeyType());
+        apiKeyInfo.setLookupKey(apiKeyEvent.getApiKeyHash());
+        apiKeyInfo.setApplicationId(apiKeyEvent.getApplicationUUId());
+        apiKeyInfo.setAppId(apiKeyEvent.getApplicationId());
+        apiKeyInfo.setApiUUId(apiKeyEvent.getApiUUId());
+        apiKeyInfo.setStatus(apiKeyEvent.getStatus());
+        apiKeyInfo.setProperties(apiKeyEvent.getProperties());
+        Map<String, String> additionalProperties = new HashMap<>();
+        additionalProperties.put(APIConstants.JwtTokenConstants.PERMITTED_IP, apiKeyEvent.getPermittedIP());
+        additionalProperties.put(APIConstants.JwtTokenConstants.PERMITTED_REFERER, apiKeyEvent.getPermittedReferer());
+        apiKeyInfo.setAdditionalProperties(additionalProperties);
+        apiKeyInfo.setKeyBoundary(apiKeyEvent.getBound());
+        return apiKeyInfo;
+    }
+
+    private void addOrUpdateTenant(TenantEvent tenantEvent) throws TenantMgtException, UserStoreException {
+        if (ServiceReferenceHolder.getInstance().getTenantMgtService().isDomainAvailable(tenantEvent.getTenantDomain())) {
+            TenantUtils.addTenant(tenantEvent);
+        } else {
+            TenantUtils.updateTenant(tenantEvent);
+        }
+    }
+
+
+    /**
+     * Adds new LLM provider configurations to the DataHolder.
+     *
+     * @param providerEvent LLMProviderEvent containing provider details.
+     * @param tenantDomain  Tenant Domain.
+     */
+    private void addProviderConfigurations(LLMProviderEvent providerEvent, String tenantDomain) {
+
+        LLMProviderInfo providerInfo = buildProviderInfo(providerEvent, tenantDomain);
+        DataHolder.getInstance().addLLMProviderConfigurations(providerInfo);
+    }
+
+    /**
+     * Updates existing LLM provider configurations in the DataHolder.
+     *
+     * @param providerEvent LLMProviderEvent containing provider details.
+     * @param tenantDomain  Tenant Domain.
+     */
+    private void updateProviderConfigurations(LLMProviderEvent providerEvent, String tenantDomain) {
+
+        LLMProviderInfo providerInfo = buildProviderInfo(providerEvent, tenantDomain);
+        DataHolder.getInstance().updateLLMProviderConfigurations(providerInfo);
+    }
+
+    /**
+     * Helper method to build LLMProviderInfo object from the event.
+     *
+     * @param providerEvent LLMProviderEvent containing provider details.
+     * @param tenantDomain  Tenant Domain.
+     * @return LLMProviderInfo object with populated configurations.
+     */
+    private LLMProviderInfo buildProviderInfo(LLMProviderEvent providerEvent, String tenantDomain) {
+
+        LLMProviderInfo providerInfo = new LLMProviderInfo();
+        providerInfo.setId(providerEvent.getId());
+        providerInfo.setName(providerEvent.getName());
+        providerInfo.setApiVersion(providerEvent.getApiVersion());
+        LLMProviderConfiguration configurations = new Gson().fromJson(providerEvent.getConfiguration(),
+                LLMProviderConfiguration.class);
+        providerInfo.setConfigurations(configurations);
+
+        return providerInfo;
+    }
+
+
+    /**
+     * Removes LLM provider configurations from the DataHolder.
+     *
+     * @param providerId LLMProvider ID.
+     */
+    private void removeProviderConfigurations(String providerId) {
+
+        DataHolder.getInstance().removeLLMProviderConfigurations(providerId);
     }
 
     private void endTenantFlow() {
@@ -383,5 +729,46 @@ public class GatewayJMSMessageListener implements MessageListener {
         subscriber.setSecret(payloadData.get(APIConstants.Webhooks.SECRET).textValue());
         ServiceReferenceHolder.getInstance().getSubscriptionsDataService()
                 .removeSubscription(apiKey, topicName, tenantDomain, subscriber);
+    }
+
+    @Override
+    public void onReconnect() {
+        if (refreshOnReconnect) {
+            log.info("Re-register gateway on reconnect.");
+            gatewayNotifier.registerGateway();
+            log.info("Refreshing gateway data stores and deployments.");
+            new Thread(() -> {
+                synchronized (this) {
+                    SubscriptionDataHolder.getInstance().refreshSubscriptionStore();
+                    redeployGatewayArtifacts();
+                }
+            }).start();
+        }
+    }
+
+    private void redeployGatewayArtifacts() {
+        Set<String> activeTenants = ServiceReferenceHolder.getInstance().getActiveTenants();
+        activeTenants.forEach(tenantDomain -> {
+            try {
+                new EndpointCertificateDeployer(tenantDomain).deployCertificatesAtStartup();
+                if (log.isDebugEnabled()) {
+                    log.debug("Redeploying artifacts for tenant: " + tenantDomain);
+                }
+                inMemoryApiDeployer.
+                        deployAllAPIs(gatewayArtifactSynchronizerProperties.getGatewayLabels(),
+                                tenantDomain, true);
+            } catch (ArtifactSynchronizerException e) {
+                log.error("Error while redeploying gateway artifacts for tenant: " + tenantDomain, e);
+            } catch (APIManagementException e) {
+                log.error("Error while redeploying endpoint certificates for tenant: " + tenantDomain, e);
+            }
+        });
+
+    }
+
+    @Override
+    public void onDisconnect() {
+        // We currently do not have any logic to execute for this scenario.
+        // Added in case we need to implement an operation in the future.
     }
 }

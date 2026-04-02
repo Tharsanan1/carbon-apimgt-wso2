@@ -47,6 +47,7 @@ public class SOAPToRESTConstants {
     public static final String SOAP11_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/";
     public static final String SOAP12_NAMSPACE = "http://www.w3.org/2003/05/soap-envelope";
     public static final String TEXT_XML = "text/xml";
+    public static final String APPLICATION_SOAP_XML = "application/soap+xml";
     public static final String ELEMENT_FORM_DEFAULT= "elementFormDefault";
     public static final String QUALIFIED = "qualified";
     public static final String X_NAMESPACE_QUALIFIED = "x-namespace-qualified";
@@ -86,6 +87,8 @@ public class SOAPToRESTConstants {
         public static final String SOAP_VERSION= "x-soap-version";
         public static final String SOAP_MESSAGE_TYPE = "x-soap-message-type";
         public static final String SOAP_STYLE = "x-soap-style";
+        public static final String OBJECT_TYPE ="object";
+        public static final String ARRAY_TYPE ="array";
 
     }
 
@@ -142,5 +145,6 @@ public class SOAPToRESTConstants {
         public static final String IN_SEQUENCES = "in_sequences";
         public static final String OUT_SEQUENCES = "out_sequences";
         public static final String NOT_DEFINED = "not-defined";
+        public static final String MEDIA_TYPE = "mediaType";
     }
 }

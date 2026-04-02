@@ -18,18 +18,29 @@
 
 package org.wso2.carbon.apimgt.gateway.handlers;
 
+import org.apache.axis2.Constants;
+import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpHeaders;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.api.API;
+import org.apache.synapse.api.ApiUtils;
+import org.apache.synapse.api.Resource;
+import org.apache.synapse.api.dispatch.DispatcherHelper;
+import org.apache.synapse.api.dispatch.RESTDispatcher;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.impl.APIConstants;
-
+import org.apache.commons.logging.Log;
+import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Provides util methods for the LogsHandler
  */
 class LogUtils {
+
+    private static final Log log = LogFactory.getLog(LogUtils.class);
 
     protected static String getAuthorizationHeader(Map headers) {
         return (String) headers.get(HttpHeaders.AUTHORIZATION);
@@ -91,7 +102,7 @@ class LogUtils {
         return (String) messageContext.getProperty("API_ELECTED_RESOURCE");
     }
 
-    protected static String getResourceCacheKey(org.apache.synapse.MessageContext messageContext){
+    protected static String getResourceCacheKey(org.apache.synapse.MessageContext messageContext) {
         return (String) messageContext.getProperty("API_RESOURCE_CACHE_KEY");
     }
 
@@ -119,16 +130,111 @@ class LogUtils {
         return transportInURL.substring(1);
     }
 
-    protected static String getMatchingLogLevel(MessageContext ctx, Map<String, String> logProperties) {
-        String apiCtx = LogUtils.getTransportInURL(ctx);
-        for (Map.Entry<String, String> entry : logProperties.entrySet()) {
-            String key = entry.getKey().substring(1);
-            if (apiCtx.startsWith(key + "/") || apiCtx.equals(key)) {
-                ctx.setProperty(LogsHandler.LOG_LEVEL, entry.getValue());
-                ctx.setProperty("API_TO", apiCtx);
-                return entry.getValue();
+    protected static String getMatchingLogLevel(MessageContext messageContext,
+                                          Map<Map<String, String>, String> logProperties) {
+        //initializing variables to store resource level logging
+        String apiLogLevel = null;
+        String resourceLogLevel = null;
+        String resourcePath = null;
+        String resourceMethod = null;
+        Resource selectedResource = null;
+        //obtain the selected API by context and path
+        API selectedApi = ApiUtils.getSelectedAPI(messageContext);
+        String apiContext = ((Axis2MessageContext) messageContext).getAxis2MessageContext()
+                .getProperty("TransportInURL").toString();
+        String httpMethod = (String) ((Axis2MessageContext) messageContext).getAxis2MessageContext()
+                .getProperty(Constants.Configuration.HTTP_METHOD);
+
+        if (selectedApi != null) {
+            Utils.setSubRequestPath(selectedApi, messageContext);
+            //iterating through all the existing resources to match with the requesting method
+            Map<String, Resource> resourcesMap = selectedApi.getResourcesMap();
+            Set<Resource> acceptableResources = ApiUtils
+                    .getAcceptableResources(resourcesMap, messageContext);
+            if ("OPTIONS".equals(httpMethod)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Processing OPTIONS request for CORS pre-flight check");
+                }
+                Map headers = getTransportHeaders(messageContext);
+                String actualVerb = (String) headers.get("Access-Control-Request-Method");
+                if (actualVerb != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Access-Control-Request-Method header found with value: " + actualVerb);
+                    }
+                    Resource[] filteredResources = acceptableResources.toArray(new Resource[0]);
+                    acceptableResources = Utils.getAcceptableResources(
+                            filteredResources, httpMethod, actualVerb, messageContext);
+                }
+            }
+            messageContext.setProperty("ACCEPTABLE_RESOURCES", acceptableResources);
+            if (log.isDebugEnabled()) {
+                log.debug("Set ACCEPTABLE_RESOURCES property with " + acceptableResources.size() + " resources");
+            }
+            if (!acceptableResources.isEmpty()) {
+                for (RESTDispatcher dispatcher : ApiUtils.getDispatchers()) {
+                    selectedResource = dispatcher.findResource(messageContext, acceptableResources);
+                    if (selectedResource != null) {
+                        DispatcherHelper helper = selectedResource.getDispatcherHelper();
+                        for (Map.Entry<Map<String, String>, String> entry : logProperties.entrySet()) {
+                            Map<String, String> key = entry.getKey();
+                            //if resource path is empty, proceeding with API level logs
+                            if (selectedApi.getContext().equals(key.get(APIConstants.API_CONTEXT_FOR_RESOURCE))) {
+                                if (key.get(APIConstants.PATH_FOR_RESOURCE) == null && key.get(
+                                        APIConstants.METHOD_FOR_RESOURCE) == null) {
+                                    apiLogLevel = entry.getValue();
+                                    //matching the methods first and then the resource path
+                                } else if (httpMethod.equals(key.get(APIConstants.METHOD_FOR_RESOURCE))) {
+                                    if (helper.getString().equals(key.get(APIConstants.PATH_FOR_RESOURCE))) {
+                                        resourceLogLevel = entry.getValue();
+                                        resourcePath = key.get(APIConstants.PATH_FOR_RESOURCE);
+                                        resourceMethod = key.get(APIConstants.METHOD_FOR_RESOURCE);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
-        return null;
+        boolean isResourceLevelHasHighPriority = false;
+        if (resourceLogLevel != null) {
+            switch (resourceLogLevel) {
+                case APIConstants.LOG_LEVEL_FULL:
+                    isResourceLevelHasHighPriority = true;
+                    break;
+                case APIConstants.LOG_LEVEL_STANDARD:
+                    if (apiLogLevel != null && (apiLogLevel.equals(APIConstants.LOG_LEVEL_BASIC)
+                            || apiLogLevel.equals(APIConstants.LOG_LEVEL_OFF))) {
+                        isResourceLevelHasHighPriority = true;
+                        break;
+                    } else {
+                        break;
+                    }
+                case APIConstants.LOG_LEVEL_BASIC:
+                    if (apiLogLevel == null || apiLogLevel.equals(APIConstants.LOG_LEVEL_OFF)) {
+                        isResourceLevelHasHighPriority = true;
+                    } else {
+                        break;
+                    }
+            }
+            if (isResourceLevelHasHighPriority || apiLogLevel == null) {
+                messageContext.setProperty(LogsHandler.LOG_LEVEL, resourceLogLevel);
+                messageContext.setProperty(LogsHandler.RESOURCE_PATH, resourcePath);
+                messageContext.setProperty(LogsHandler.RESOURCE_METHOD, resourceMethod);
+                messageContext.setProperty("API_TO", apiContext);
+                return resourceLogLevel;
+            } else {
+                messageContext.setProperty(LogsHandler.LOG_LEVEL, apiLogLevel);
+                messageContext.setProperty("API_TO", apiContext);
+                return apiLogLevel;
+            }
+        } else if (apiLogLevel != null) {
+            messageContext.setProperty(LogsHandler.LOG_LEVEL, apiLogLevel);
+            messageContext.setProperty("API_TO", apiContext);
+            return apiLogLevel;
+        } else {
+            return null;
+        }
     }
+
 }

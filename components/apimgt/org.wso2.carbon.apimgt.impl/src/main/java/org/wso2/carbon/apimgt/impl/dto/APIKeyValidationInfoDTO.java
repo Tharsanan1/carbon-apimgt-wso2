@@ -57,8 +57,10 @@ public class APIKeyValidationInfoDTO implements Serializable {
     //should be its first element.
     private  List<String> throttlingDataList;
     private int spikeArrestLimit;
+    private int applicationSpikeArrestLimit;
     private String subscriberTenantDomain;
     private String spikeArrestUnit;
+    private String applicationSpikeArrestUnit;
     private boolean stopOnQuotaReach;
     //keeps productId of product for which the key was validated, if key was validated for an api this will be null
     private String productName;
@@ -70,6 +72,7 @@ public class APIKeyValidationInfoDTO implements Serializable {
     private String applicationUUID;
     private Set<String> applicationGroupIds = new HashSet<>();
     private Map<String, String> appAttributes;
+    private boolean isExpired = false;
 
     public List<String> getThrottlingDataList() {
         return throttlingDataList;
@@ -103,6 +106,20 @@ public class APIKeyValidationInfoDTO implements Serializable {
 
     private String apiPublisher;
 
+    public String getApplicationSpikeArrestUnit() {
+        return applicationSpikeArrestUnit;
+    }
+
+    public void setApplicationSpikeArrestUnit(String applicationSpikeArrestUnit) {
+        this.applicationSpikeArrestUnit = applicationSpikeArrestUnit;
+    }
+    public int getApplicationSpikeArrestLimit() {
+        return applicationSpikeArrestLimit;
+    }
+
+    public void setApplicationSpikeArrestLimit(int applicationSpikeArrestLimit) {
+        this.applicationSpikeArrestLimit = applicationSpikeArrestLimit;
+    }
     public boolean isAuthorized() {
         return authorized;
     }
@@ -398,6 +415,14 @@ public class APIKeyValidationInfoDTO implements Serializable {
     public void setAppAttributes(Map<String, String> appAttributes) {
 
         this.appAttributes = appAttributes;
+    }
+
+    public boolean isExpired() {
+        return isExpired;
+    }
+
+    public void setExpired(boolean expired) {
+        isExpired = expired;
     }
 }
 

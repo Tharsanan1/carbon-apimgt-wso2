@@ -12,10 +12,16 @@ public class GatewayArtifactSynchronizerProperties {
     private String saverName = APIConstants.GatewayArtifactSynchronizer.DB_SAVER_NAME;
     private String retrieverName = APIConstants.GatewayArtifactSynchronizer.DB_RETRIEVER_NAME;
     private Set<String> gatewayLabels = new HashSet<>();
+    private Set<String> fileBasedApiContexts = new HashSet<>();
     private String artifactSynchronizerDataSource = "jdbc/WSO2AM_DB";
     private long retryDuartion = 15000 ;
+    private int maxRetryCount = 5;
+    private double retryProgressionFactor = 2.0;
     private String gatewayStartup = "sync";
     private long eventWaitingTime = 1;
+    private boolean onDemandLoading;
+    private boolean tenantLoading;
+    private LoadingTenants loadingTenants = new LoadingTenants();
 
 
     public String getSaverName() {
@@ -74,6 +80,16 @@ public class GatewayArtifactSynchronizerProperties {
         this.gatewayLabels = gatewayLabels;
     }
 
+    public Set<String> getFileBasedApiContexts() {
+
+        return fileBasedApiContexts;
+    }
+
+    public void setFileBasedApiContexts(Set<String> fileBasedApiContexts) {
+
+        this.fileBasedApiContexts = fileBasedApiContexts;
+    }
+
     public void setPublishDirectlyToGatewayEnabled(boolean publishDirectlyToGatewayEnabled) {
 
     }
@@ -108,6 +124,26 @@ public class GatewayArtifactSynchronizerProperties {
         this.retryDuartion = retryDuartion;
     }
 
+    public int getMaxRetryCount() {
+
+        return maxRetryCount;
+    }
+
+    public void  setMaxRetryCount(int maxRetryCount) {
+
+        this.maxRetryCount = maxRetryCount;
+    }
+
+    public double getRetryProgressionFactor() {
+
+        return retryProgressionFactor;
+    }
+
+    public void  setRetryProgressionFactor(double retryProgressionFactor) {
+
+        this.retryProgressionFactor = retryProgressionFactor;
+    }
+
     public String getGatewayStartup() {
 
         return gatewayStartup;
@@ -116,5 +152,29 @@ public class GatewayArtifactSynchronizerProperties {
     public void  setGatewayStartup(String gatewayStartup) {
 
         this.gatewayStartup = gatewayStartup;
+    }
+
+    public void setOnDemandLoading(boolean onDemandLoading) {
+        this.onDemandLoading = onDemandLoading;
+    }
+
+    public boolean isOnDemandLoading() {
+        return onDemandLoading;
+    }
+
+    public boolean isTenantLoading() {
+        return tenantLoading;
+    }
+
+    public void setTenantLoading(boolean tenantLoading) {
+        this.tenantLoading = tenantLoading;
+    }
+
+    public LoadingTenants getLoadingTenants() {
+        return loadingTenants;
+    }
+
+    public void setLoadingTenants(LoadingTenants loadingTenants) {
+        this.loadingTenants = loadingTenants;
     }
 }

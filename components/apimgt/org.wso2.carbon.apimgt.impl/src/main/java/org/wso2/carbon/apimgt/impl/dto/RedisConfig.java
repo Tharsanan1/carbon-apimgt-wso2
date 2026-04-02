@@ -28,7 +28,7 @@ public class RedisConfig {
     private int port;
     private String user;
     private char[] password;
-    private int databaseId;
+    private int databaseId = 0;
     private int connectionTimeout;
     private boolean isSslEnabled;
     private int maxTotal = 8;
@@ -37,12 +37,14 @@ public class RedisConfig {
     private boolean testOnBorrow = false;
     private boolean testOnReturn = false;
     private boolean testWhileIdle = true;
-
     private boolean blockWhenExhausted = true;
     private long minEvictableIdleTimeMillis = 60000L;
     private long timeBetweenEvictionRunsMillis = 30000L;
     private int numTestsPerEvictionRun = -1;
-
+    private String gatewayId;
+    private long minGatewayCount;
+    private long keyLockRetrievalTimeout;
+    private String hybridThrottleProcessorType;
     public int getMaxTotal() {
 
         return maxTotal;
@@ -228,5 +230,36 @@ public class RedisConfig {
     public void setSslEnabled(boolean sslEnabled) {
 
         isSslEnabled = sslEnabled;
+    }
+
+    public void setGatewayId(String gatewayId) {
+        this.gatewayId = gatewayId;
+    }
+
+    public String getGatewayId() {
+        return gatewayId;
+    }
+
+    public void setMinGatewayCount(long minGatewayCount) {
+        this.minGatewayCount = minGatewayCount;
+    }
+    public long getMinGatewayCount() {
+        return minGatewayCount;
+    }
+
+    public void setKeyLockRetrievalTimeout(long keyLockRetrievalTimeout) {
+        this.keyLockRetrievalTimeout = keyLockRetrievalTimeout;
+    }
+
+    public long getKeyLockRetrievalTimeout() {
+        return keyLockRetrievalTimeout;
+    }
+
+    public void setHybridThrottleProcessorType(String hybridThrottleProcessorType) {
+        this.hybridThrottleProcessorType = hybridThrottleProcessorType;
+    }
+
+    public String getHybridThrottleProcessorType() {
+        return hybridThrottleProcessorType;
     }
 }

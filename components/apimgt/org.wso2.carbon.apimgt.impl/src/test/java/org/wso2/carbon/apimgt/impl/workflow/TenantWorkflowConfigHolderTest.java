@@ -21,6 +21,8 @@ package org.wso2.carbon.apimgt.impl.workflow;
 import org.apache.axiom.om.OMElement;
 import org.apache.axiom.om.impl.builder.StAXOMBuilder;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,6 +51,7 @@ import javax.xml.stream.XMLStreamException;
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ServiceReferenceHolder.class, TenantWorkflowConfigHolder.class})
 public class TenantWorkflowConfigHolderTest {
+    private static final Log log = LogFactory.getLog(TenantWorkflowConfigHolderTest.class);
 
     private int tenantID = -1234;
     private String tenantDomain = "carbon.super";
@@ -72,6 +75,7 @@ public class TenantWorkflowConfigHolderTest {
         Mockito.when(apimConfigService.getWorkFlowConfig(tenantDomain)).thenReturn(IOUtils.toString(defaultWFConfigContent));
         try {
             tenantWorkflowConfigHolder.load();
+            Assert.assertNotNull(tenantWorkflowConfigHolder.getWorkflowExecutor("AM_REVISION_DEPLOYMENT"));
             Assert.assertNotNull(tenantWorkflowConfigHolder.getWorkflowExecutor("AM_APPLICATION_CREATION"));
             Assert.assertNotNull(tenantWorkflowConfigHolder.getWorkflowExecutor
                     ("AM_APPLICATION_REGISTRATION_PRODUCTION"));
@@ -97,6 +101,7 @@ public class TenantWorkflowConfigHolderTest {
         Mockito.when(apimConfigService.getWorkFlowConfig(tenantDomain)).thenReturn(IOUtils.toString(defaultWFConfigContent));
         try {
             tenantWorkflowConfigHolder.load();
+            Assert.assertNotNull(tenantWorkflowConfigHolder.getWorkflowExecutor("AM_REVISION_DEPLOYMENT"));
             Assert.assertNotNull(tenantWorkflowConfigHolder.getWorkflowExecutor("AM_APPLICATION_CREATION"));
             Assert.assertNotNull(tenantWorkflowConfigHolder.getWorkflowExecutor
                     ("AM_APPLICATION_REGISTRATION_PRODUCTION"));
@@ -126,21 +131,26 @@ public class TenantWorkflowConfigHolderTest {
 
     @Test
     public void testFailureToLoadTenantWFConfigWhenWFExecutorClassNotFound() throws Exception {
-        //Workflow executor is an non existing class so that ClassNotFoundException will be thrown
-        String invalidWFExecutor =
-                "<WorkFlowExtensions>\n" +
-                        "    <ApplicationCreation executor=\"org.wso2.carbon.apimgt.impl.workflow" +
-                        ".TestExecutor\"/></WorkFlowExtensions>";
+        //For signup workflow we set TestUserSignUpSimpleWorkflowExecutor. since it is not there, default signup executor should be used.
+        String invalidWFExecutor = "<WorkFlowExtensions>\n"
+                + "    <APIRevisionDeployment executor=\"org.wso2.carbon.apimgt.impl.workflow.APIRevisionDeploymentSimpleWorkflowExecutor\"/>\n"
+                + "    <ApplicationCreation executor=\"org.wso2.carbon.apimgt.impl.workflow.ApplicationCreationSimpleWorkflowExecutor\"/>\n"
+                + "    <ProductionApplicationRegistration executor=\"org.wso2.carbon.apimgt.impl.workflow.ApplicationRegistrationSimpleWorkflowExecutor\"/>\n"
+                + "    <SandboxApplicationRegistration executor=\"org.wso2.carbon.apimgt.impl.workflow.ApplicationRegistrationSimpleWorkflowExecutor\"/>\n"
+                + "    <SubscriptionCreation executor=\"org.wso2.carbon.apimgt.impl.workflow.SubscriptionCreationSimpleWorkflowExecutor\"/>\n"
+                + "    <SubscriptionUpdate executor=\"org.wso2.carbon.apimgt.impl.workflow.SubscriptionUpdateSimpleWorkflowExecutor\"/>\n"
+                + "    <UserSignUp executor=\"org.wso2.carbon.apimgt.impl.workflow.TestUserSignUpSimpleWorkflowExecutor\"/>\n"
+                + "    <SubscriptionDeletion executor=\"org.wso2.carbon.apimgt.impl.workflow.SubscriptionDeletionSimpleWorkflowExecutor\"/>\n"
+                + "    <ApplicationDeletion executor=\"org.wso2.carbon.apimgt.impl.workflow.ApplicationDeletionSimpleWorkflowExecutor\"/>\n"
+                + "</WorkFlowExtensions>";
         TenantWorkflowConfigHolder tenantWorkflowConfigHolder = new TenantWorkflowConfigHolder(tenantDomain, tenantID);
         Mockito.when(apimConfigService.getWorkFlowConfig(tenantDomain)).thenReturn(invalidWFExecutor);
-        try {
-            tenantWorkflowConfigHolder.load();
-            Assert.fail("Expected WorkflowException has not been thrown when workflow executor class not found");
-        } catch (WorkflowException e) {
-            Assert.assertEquals(e.getMessage(), "Unable to find class");
-        }
+        tenantWorkflowConfigHolder.load();
+        WorkflowExecutor executor = tenantWorkflowConfigHolder.getWorkflowExecutor(WorkflowConstants.WF_TYPE_AM_USER_SIGNUP);
+        Assert.assertEquals("Default class is not loaded for missing class",
+                "org.wso2.carbon.apimgt.impl.workflow.UserSignUpSimpleWorkflowExecutor", executor.getClass().getName());
+        
     }
-
 
     @Test
     public void testFailureToLoadTenantWFConfigWhenWFExecutorClassCannotBeInstantiated() throws Exception {
@@ -271,6 +281,8 @@ public class TenantWorkflowConfigHolderTest {
         //Workflow executor class setter methods are available for different parameter types
         String invalidWFExecutor =
                 "<WorkFlowExtensions>\n" +
+                        "    <APIRevisionDeployment executor=\"org.wso2.carbon.apimgt.impl.workflow." +
+                        "APIRevisionDeploymentSimpleWorkflowExecutor\"/>\n" +
                         "     <ApplicationCreation executor=\"org.wso2.carbon.apimgt.impl.workflow" +
                         ".WorkflowExecutorWithMultipleParamTypes\">\n" +
                         "         <Property name=\"stringParam\">admin</Property>\n" +

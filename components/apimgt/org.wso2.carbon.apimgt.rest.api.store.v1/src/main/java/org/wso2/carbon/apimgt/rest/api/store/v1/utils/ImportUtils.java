@@ -18,6 +18,7 @@
 package org.wso2.carbon.apimgt.rest.api.store.v1.utils;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -34,6 +35,8 @@ import org.wso2.carbon.apimgt.api.model.APIProduct;
 import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.api.model.Application;
 import org.wso2.carbon.apimgt.api.model.ApplicationConstants;
+import org.wso2.carbon.apimgt.api.model.ConsumerSecretRequest;
+import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
 import org.wso2.carbon.apimgt.api.model.Subscriber;
 import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.impl.APIConstants;
@@ -42,6 +45,7 @@ import org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants;
 import org.wso2.carbon.apimgt.impl.importexport.utils.CommonUtil;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.ApplicationKeyDTO;
+import org.wso2.carbon.apimgt.rest.api.store.v1.dto.ConsumerSecretDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.models.ExportedSubscribedAPI;
 import org.wso2.carbon.user.api.UserStoreException;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
@@ -49,9 +53,13 @@ import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class ImportUtils {
     private static final Log log = LogFactory.getLog(ImportUtils.class);
@@ -114,6 +122,26 @@ public class ImportUtils {
     }
 
     /**
+     * Check whether a provided userId corresponds to a valid consumer of the store and subscribe if valid
+     *
+     * @param userId      Username of the Owner
+     * @param groupId     The groupId to which the target subscriber belongs to
+     * @param apiConsumer API Consumer
+     * @throws APIManagementException if an error occurs while checking the validity of user
+     */
+    public static void validateSubscriber(String userId, String groupId, APIConsumer apiConsumer)
+            throws APIManagementException {
+        Subscriber subscriber = apiConsumer.getSubscriber(userId);
+        try {
+            if (subscriber == null && !APIUtil.isPermissionCheckDisabled()) {
+                apiConsumer.addSubscriberOnly(userId, groupId);
+            }
+        } catch (APIManagementException e) {
+            throw new APIManagementException("Provided Application Owner is Invalid", e);
+        }
+    }
+
+    /**
      * This extracts information for creating an APIKey from an OAuthApplication
      *
      * @param applicationKeyDto Application Key DTO
@@ -150,18 +178,90 @@ public class ImportUtils {
      * @throws UserStoreException     if an error occurs while checking whether the tenant domain exists
      */
     public static List<APIIdentifier> importSubscriptions(Set<ExportedSubscribedAPI> subscribedAPIs, String userId,
-                                                          Application application, Boolean update, APIConsumer apiConsumer, String organization)
+                                                          Application application, Boolean update,Boolean ignoreTier,
+                                                          APIConsumer apiConsumer, String organization)
             throws APIManagementException,
             UserStoreException {
         List<APIIdentifier> skippedAPIList = new ArrayList<>();
-        for (ExportedSubscribedAPI subscribedAPI : subscribedAPIs) {
+
+        // Create a map of the imported subscriptions. The key is a combination of apiName and version
+        Map<String, ExportedSubscribedAPI> importedSubscriptionMap = subscribedAPIs.stream()
+                .collect(Collectors.toMap(
+                        api -> api.getApiId().getApiName() + "_" + api.getApiId().getVersion(),
+                        api -> api));
+
+        // If update flag is set, remove the existing subscriptions that are not in the imported list
+        if (update) {
+            Subscriber subscriber = apiConsumer.getSubscriber(userId);
+            Set<SubscribedAPI> currentSubscribedAPIs = apiConsumer.getSubscribedAPIs(subscriber,
+                    application.getName(), application.getGroupId());
+
+            for (SubscribedAPI existingSubscribedAPI : currentSubscribedAPIs) {
+                String existingSubscriptionKey = existingSubscribedAPI.getIdentifier().getName() + "_" +
+                        existingSubscribedAPI.getIdentifier().getVersion();
+                APIIdentifier existingApi = existingSubscribedAPI.getAPIIdentifier();
+                if (importedSubscriptionMap.containsKey(existingSubscriptionKey)) {
+
+                    // Update the tier if the existing tier is different from the imported tier
+                    if (!existingSubscribedAPI.getTier().getName().equals(
+                            importedSubscriptionMap.get(existingSubscriptionKey).getThrottlingPolicy())) {
+
+
+                        String tenantDomain = MultitenantUtils
+                                .getTenantDomain(APIUtil.replaceEmailDomainBack(existingApi.getProviderName()));
+                        if (!StringUtils.isEmpty(tenantDomain) && APIUtil.isTenantAvailable(tenantDomain)) {
+                            String uuidFromIdentifier = ApiMgtDAO.getInstance().getUUIDFromIdentifier(existingApi,
+                                    tenantDomain);
+                            if (StringUtils.isNotEmpty(uuidFromIdentifier)) {
+                                ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(
+                                        uuidFromIdentifier, tenantDomain);
+                                // Tier of the imported subscription
+                                String targetTier = importedSubscriptionMap.get(existingSubscriptionKey).
+                                        getThrottlingPolicy();
+                                // Checking whether the target tier is available
+                                if (isTierAvailable(targetTier, apiTypeWrapper) && apiTypeWrapper.getStatus() != null
+                                        && APIConstants.PUBLISHED.equals(apiTypeWrapper.getStatus())) {
+
+                                    apiConsumer.updateSubscription(apiTypeWrapper, userId, application,
+                                            existingSubscribedAPI.getUUID(), existingSubscribedAPI.getTier().getName(),
+                                            targetTier);
+                                } else {
+                                    log.error("Failed to import Subscription as API/API Product "
+                                            + existingApi.getName() + "-" + existingApi.getVersion() +
+                                            " as one or more tiers may be unavailable or the API/API Product may " +
+                                            "not have been published ");
+                                }
+                            } else {
+                                log.error("Failed to import Subscription as API " + existingApi.getName() + "-" +
+                                        existingApi.getVersion() + " is not available");
+                            }
+                        } else {
+                            log.error("Failed to import Subscription as Tenant domain: " + tenantDomain +
+                                    " is not available");
+                        }
+                    }
+
+                    // Remove the existing subscription from the imported list
+                    importedSubscriptionMap.remove(existingSubscriptionKey);
+                } else {
+                    // Remove the subscription if it is not in the imported list
+                    apiConsumer.removeSubscription(existingApi, userId, application.getId(), application.getGroupId(),
+                            organization);
+
+                }
+            }
+        }
+
+        for (String importedSubscriptionKey : importedSubscriptionMap.keySet()) {
+            ExportedSubscribedAPI subscribedAPI = importedSubscriptionMap.get(importedSubscriptionKey);
             APIIdentifier apiIdentifier = subscribedAPI.getApiId();
             String tenantDomain = MultitenantUtils
                     .getTenantDomain(APIUtil.replaceEmailDomainBack(apiIdentifier.getProviderName()));
             if (!StringUtils.isEmpty(tenantDomain) && APIUtil.isTenantAvailable(tenantDomain)) {
                 String uuidFromIdentifier = ApiMgtDAO.getInstance().getUUIDFromIdentifier(apiIdentifier, tenantDomain);
                 if (StringUtils.isNotEmpty(uuidFromIdentifier)) {
-                    ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(uuidFromIdentifier, organization);
+                    ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(uuidFromIdentifier,
+                            tenantDomain);
                     // Tier of the imported subscription
                     String targetTier = subscribedAPI.getThrottlingPolicy();
                     // Checking whether the target tier is available
@@ -177,9 +277,22 @@ public class ImportUtils {
                             // on update skip subscriptions that already exists
                             apiConsumer.addSubscription(apiTypeWrapper, userId, application);
                         }
+                    } else if (ignoreTier != null && ignoreTier && apiTypeWrapper.getStatus() != null
+                            && APIConstants.PUBLISHED.equals(apiTypeWrapper.getStatus())) {
+                        apiTypeWrapper.setTier(targetTier);
+                        // Add subscription if update flag is not specified
+                        // It will throw an error if subscriber already exists
+                        if (update == null || !update) {
+                            apiConsumer.addSubscription(apiTypeWrapper, userId, application);
+                        } else if (!apiConsumer.isSubscribedToApp(subscribedAPI.getApiId(), userId
+                                , application.getId())) {
+                            // on update skip subscriptions that already exists
+                            apiConsumer.addSubscription(apiTypeWrapper, userId, application);
+                        }
                     } else {
                         log.error("Failed to import Subscription as API/API Product "
-                                + apiIdentifier.getName() + "-" + apiIdentifier.getVersion() + " as one or more tiers may "
+                                + apiIdentifier.getName() + "-" + apiIdentifier.getVersion() + " as one or more " +
+                                "tiers may "
                                 + "be unavailable or the API/API Product may not have been published ");
                         skippedAPIList.add(subscribedAPI.getApiId());
                     }
@@ -231,14 +344,31 @@ public class ImportUtils {
             }
         }
         if (!apiTypeWrapper.isAPIProduct()) {
-            log.error("Tier:" + targetTierName + " is not available for API " + api.getId().getApiName() + "-" + api
+            log.warn("Tier:" + targetTierName + " is not available for API " + api.getId().getApiName() + "-" + api
                     .getId().getVersion());
         } else {
-            log.error(
+            log.warn(
                     "Tier:" + targetTierName + " is not available for API Product " + apiProduct.getId().getName() + "-"
                             + apiProduct.getId().getVersion());
         }
         return false;
+    }
+
+    /**
+     * Convert an absolute expiry epoch-seconds value to a relative {@code expiresIn} seconds value.
+     *
+     * @param expiresAtSecs absolute expiry time in epoch seconds
+     * @return remaining seconds until expiry, or {@code null} if already expired or no expiry
+     */
+    private static Integer convertExpiresAtToExpiresIn(long expiresAtSecs) {
+
+        if (expiresAtSecs > 0) {
+            long expiresIn = expiresAtSecs - Instant.now().getEpochSecond();
+            if (expiresIn > 0) {
+                return expiresIn > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) expiresIn;
+            }
+        }
+        return null;
     }
 
     /**
@@ -254,39 +384,70 @@ public class ImportUtils {
     public static void addApplicationKey(String username, Application application, ApplicationKeyDTO applicationKeyDTO,
             APIConsumer apiConsumer, Boolean update) throws APIManagementException {
         String[] accessAllowDomainsArray = { "ALL" };
-        JSONObject jsonParamObj = new JSONObject();
-        jsonParamObj.put(ApplicationConstants.OAUTH_CLIENT_USERNAME, username);
+        JsonObject jsonParamObj = new JsonObject();
+        jsonParamObj.addProperty(ApplicationConstants.OAUTH_CLIENT_USERNAME, username);
         String grantTypes = StringUtils.join(applicationKeyDTO.getSupportedGrantTypes(), ',');
         if (!StringUtils.isEmpty(grantTypes)) {
-            jsonParamObj.put(APIConstants.JSON_GRANT_TYPES, grantTypes);
+            jsonParamObj.addProperty(APIConstants.JSON_GRANT_TYPES, grantTypes);
         }
         /* Read clientId & clientSecret from ApplicationKeyGenerateRequestDTO object.
            User can provide clientId only or both clientId and clientSecret
            User cannot provide clientSecret only
          */
+        List<ConsumerSecretDTO> consumerSecrets = applicationKeyDTO.getConsumerSecrets();
+        String secretDescription = null;
+        Integer secretExpiresIn = null;
         if (!StringUtils.isEmpty(applicationKeyDTO.getConsumerKey())) {
-            jsonParamObj.put(APIConstants.JSON_CLIENT_ID, applicationKeyDTO.getConsumerKey());
-            if (!StringUtils.isEmpty(applicationKeyDTO.getConsumerSecret())) {
+            jsonParamObj.addProperty(APIConstants.JSON_CLIENT_ID, applicationKeyDTO.getConsumerKey());
+            if (APIUtil.isMultipleClientSecretsEnabled() && consumerSecrets != null && !consumerSecrets.isEmpty()) {
+                ConsumerSecretDTO consumerSecret = consumerSecrets.get(0);
+                String latestSecretValue = consumerSecret != null ? consumerSecret.getSecretValue() : null;
+                if (!StringUtils.isEmpty(latestSecretValue)) {
+                    byte[] bytes = Base64.decodeBase64(latestSecretValue);
+                    jsonParamObj.addProperty(APIConstants.JSON_CLIENT_SECRET, new String(bytes, StandardCharsets.UTF_8));
+                }
+                Object secretDescriptionObj = consumerSecret != null && consumerSecret.getAdditionalProperties() != null
+                        ? consumerSecret.getAdditionalProperties().get(ApplicationConstants.SECRET_DESCRIPTION)
+                        : null;
+                secretDescription = secretDescriptionObj instanceof String ? (String) secretDescriptionObj : null;
+
+                Object expiresAtObj = consumerSecret != null && consumerSecret.getAdditionalProperties() != null
+                        ? consumerSecret.getAdditionalProperties().get(ApplicationConstants.SECRET_EXPIRES_AT)
+                        : null;
+                Number expiresAt = expiresAtObj instanceof Number ? (Number) expiresAtObj : null;
+                secretExpiresIn = expiresAt != null ? convertExpiresAtToExpiresIn(expiresAt.longValue()) : null;
+            } else if (!StringUtils.isEmpty(applicationKeyDTO.getConsumerSecret())) {
                 byte[] bytes = Base64.decodeBase64(applicationKeyDTO.getConsumerSecret());
-                String consumerSecret = new String(bytes, StandardCharsets.UTF_8);
-                jsonParamObj.put(APIConstants.JSON_CLIENT_SECRET, consumerSecret);
+                jsonParamObj.addProperty(APIConstants.JSON_CLIENT_SECRET, new String(bytes, StandardCharsets.UTF_8));
             }
         }
         if (!StringUtils.isEmpty(applicationKeyDTO.getCallbackUrl())) {
-            jsonParamObj.put(APIConstants.JSON_CALLBACK_URL, applicationKeyDTO.getCallbackUrl());
+            jsonParamObj.addProperty(APIConstants.JSON_CALLBACK_URL, applicationKeyDTO.getCallbackUrl());
         }
         if (applicationKeyDTO.getAdditionalProperties() != null) {
-            String additionalProperties = new Gson().toJson(applicationKeyDTO.getAdditionalProperties());
-            org.json.JSONObject jsonObject = new org.json.JSONObject(additionalProperties);
+            Gson gson = new Gson();
+            String additionalProperties = gson.toJson(applicationKeyDTO.getAdditionalProperties());
+            JsonObject jsonObject = gson.fromJson(additionalProperties, JsonObject.class);
             Set<String> keysSet = jsonObject.keySet();
             for (String key : keysSet) {
-                if (jsonObject.get(key) instanceof Double) {
-                    jsonObject.put(key, String.valueOf(((Double) jsonObject.get(key)).intValue()));
+                if (jsonObject.get(key).isJsonPrimitive()) {
+                    if (jsonObject.getAsJsonPrimitive(key).isNumber()) {
+                        jsonObject.addProperty(key, String.valueOf(jsonObject.getAsJsonPrimitive(key).getAsLong()));
+                    } else {
+                        jsonObject.addProperty(key, jsonObject.getAsJsonPrimitive(key).getAsString());
+                    }
                 } else {
-                    jsonObject.put(key, jsonObject.get(key).toString());
+                    jsonObject.addProperty(key, jsonObject.get(key).toString());
                 }
             }
-            jsonParamObj.put(APIConstants.JSON_ADDITIONAL_PROPERTIES, jsonObject.toString());
+            if (!StringUtils.isEmpty(secretDescription)) {
+                jsonObject.addProperty(APIConstants.KeyManager.CLIENT_SECRET_DESCRIPTION, secretDescription);
+            }
+            if (secretExpiresIn != null) {
+                jsonObject.addProperty(APIConstants.KeyManager.CLIENT_SECRET_EXPIRES_IN,
+                        String.valueOf(secretExpiresIn));
+            }
+            jsonParamObj.addProperty(APIConstants.JSON_ADDITIONAL_PROPERTIES, jsonObject.toString());
         }
         String jsonParams = jsonParamObj.toString();
         String tokenScopes = StringUtils.join(applicationKeyDTO.getToken().getTokenScopes(), ',');
@@ -300,6 +461,36 @@ public class ImportUtils {
             apiConsumer.updateAuthClient(username, application, applicationKeyDTO.getKeyType().toString(),
                     applicationKeyDTO.getCallbackUrl(), null, null, null, application.getGroupId(), jsonParams,
                     applicationKeyDTO.getKeyManager());
+        }
+
+        // Re-Hydrate Key Manager with other client secrets.
+        if (APIUtil.isMultipleClientSecretsEnabled() && consumerSecrets != null && consumerSecrets.size() > 1) {
+            String consumerKey = applicationKeyDTO.getConsumerKey();
+            // skiping the first secret as it is already added/updated above
+            for (ConsumerSecretDTO secretDTO : consumerSecrets.subList(1, consumerSecrets.size())) {
+                ConsumerSecretRequest consumerSecretRequest = new ConsumerSecretRequest();
+                consumerSecretRequest.setClientId(consumerKey);
+                if (secretDTO.getAdditionalProperties() != null) {
+                    Map<String, Object> additionalProps = new HashMap<>(secretDTO.getAdditionalProperties());
+                    Object expiresAtObj = additionalProps.remove(ApplicationConstants.SECRET_EXPIRES_AT);
+                    if (expiresAtObj instanceof Number) {
+                        Integer expiresIn = convertExpiresAtToExpiresIn(((Number) expiresAtObj).longValue());
+                        if (expiresIn != null) {
+                            additionalProps.put(ApplicationConstants.SECRET_EXPIRES_IN, expiresIn);
+                        }
+                    }
+                    consumerSecretRequest.putAll(additionalProps);
+                }
+                if (!StringUtils.isEmpty(secretDTO.getSecretValue())) {
+                    byte[] decodedBytes = Base64.decodeBase64(secretDTO.getSecretValue());
+                    consumerSecretRequest.setClientSecret(new String(decodedBytes, StandardCharsets.UTF_8));
+                }
+                try {
+                    apiConsumer.generateConsumerSecret(applicationKeyDTO.getKeyManager(), consumerSecretRequest);
+                } catch (Exception e) {
+                    log.error("Failed to restore client secret for application key: " + consumerKey, e);
+                }
+            }
         }
     }
 }

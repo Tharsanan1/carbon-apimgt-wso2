@@ -6,6 +6,7 @@ import com.nimbusds.jose.JWSSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
@@ -17,6 +18,7 @@ import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
 import java.security.PrivateKey;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -50,20 +52,39 @@ public class InternalAPIKeyGenerator implements ApiKeyGenerator {
             expireIn = currentTime + jwtTokenInfoDTO.getExpirationTime();
         }
         String issuerIdentifier = OAuthServerConfiguration.getInstance().getOpenIDConnectIDTokenIssuerIdentifier();
+        String internalKeyIssuer = APIUtil.getInternalKeyIssuer();
+        if (internalKeyIssuer != null && !StringUtils.isEmpty(internalKeyIssuer)) {
+            issuerIdentifier = internalKeyIssuer;
+        }
         JWTClaimsSet.Builder jwtClaimsSetBuilder = new JWTClaimsSet.Builder();
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.END_USERNAME,
                 APIUtil.getUserNameWithTenantSuffix(jwtTokenInfoDTO.getEndUserName()));
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.JWT_ID, UUID.randomUUID().toString());
+        jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.AUDIENCE, jwtTokenInfoDTO.getAudience());
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.ISSUER_IDENTIFIER, issuerIdentifier);
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.ISSUED_TIME, currentTime);
         if (expireIn != -1) {
             jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.EXPIRY_TIME, expireIn);
         }
-        jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.SUBSCRIBED_APIS,
-                jwtTokenInfoDTO.getSubscribedApiDTOList());
+        if (jwtTokenInfoDTO.getSubscribedApiDTOList() != null &&
+                !jwtTokenInfoDTO.getSubscribedApiDTOList().isEmpty()) {
+            jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.SUBSCRIBED_APIS,
+                    jwtTokenInfoDTO.getSubscribedApiDTOList());
+        }
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.KEY_TYPE, jwtTokenInfoDTO.getKeyType());
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.TOKEN_TYPE,
                 APIConstants.JwtTokenConstants.INTERNAL_KEY_TOKEN_TYPE);
+
+        Map<String, String> custom = jwtTokenInfoDTO.getCustomClaims();
+        if (custom != null) {
+            for (Map.Entry<String, String> entry : custom.entrySet()) {
+                String key = entry.getKey();
+                if (APIConstants.JwtTokenConstants.RESERVED_CLAIMS.contains(key)) {
+                    continue;
+                }
+                jwtClaimsSetBuilder.claim(key, entry.getValue());
+            }
+        }
         return jwtClaimsSetBuilder.build();
     }
 

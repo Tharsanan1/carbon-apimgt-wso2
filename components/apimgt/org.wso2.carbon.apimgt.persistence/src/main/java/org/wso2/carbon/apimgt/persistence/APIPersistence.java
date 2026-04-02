@@ -16,7 +16,11 @@
 
 package org.wso2.carbon.apimgt.persistence;
 
+import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.APIIdentifier;
+import org.wso2.carbon.apimgt.api.model.SOAPToRestSequence;
 import org.wso2.carbon.apimgt.api.model.Tag;
+import org.wso2.carbon.apimgt.persistence.dto.AdminContentSearchResult;
 import org.wso2.carbon.apimgt.persistence.dto.DevPortalAPI;
 import org.wso2.carbon.apimgt.persistence.dto.DevPortalAPISearchResult;
 import org.wso2.carbon.apimgt.persistence.dto.DevPortalContentSearchResult;
@@ -114,6 +118,27 @@ public interface APIPersistence {
     PublisherAPI updateAPI(Organization org, PublisherAPI publisherAPI) throws APIPersistenceException;
 
     /**
+     * Updates resource policy resource for the given resource id from the registry.
+     *
+     * @param identifier API identifier
+     * @param resourceId Resource identifier
+     * @param content    resource policy content
+     * @throws APIPersistenceException
+     */
+     void updateResourcePolicyFromRegistryResourceId(APIIdentifier identifier, String resourceId, String content)
+            throws APIPersistenceException;
+
+    /**
+     * Get security scheme of API
+     *
+     * @param org   Organization the API is owned by
+     * @param apiId API ID
+     * @return A String contains the security scheme of the API
+     * @throws APIPersistenceException if failed to get the security scheme of the API
+     */
+    String getSecuritySchemeOfAPI(Organization org, String apiId) throws APIPersistenceException;
+
+    /**
      * Get the API information stored in persistence layer, that is used for publisher operations
      *
      * @param org   Organization the API is owned by
@@ -124,6 +149,17 @@ public interface APIPersistence {
     PublisherAPI getPublisherAPI(Organization org, String apiId) throws APIPersistenceException;
 
     /**
+     * Get the API information stored in persistence layer, that is used for publisher operations
+     *
+     * @param org     Organization the API is owned by
+     * @param apiId   API ID
+     * @param apiType API Type
+     * @return API information
+     * @throws APIPersistenceException
+     */
+    PublisherAPI getPublisherAPI(Organization org, String apiId, String apiType) throws APIPersistenceException;
+
+    /**
      * Get the API information stored in persistence layer, that is used for DevPortal operations
      *
      * @param org   Organization the API is owned by
@@ -132,6 +168,18 @@ public interface APIPersistence {
      * @throws APIPersistenceException
      */
     DevPortalAPI getDevPortalAPI(Organization org, String apiId) throws APIPersistenceException;
+
+    /**
+     * Get the API information stored in persistence layer, that is used for DevPortal operations
+     *
+     * @param org     Organization the API is owned by
+     * @param apiId   API ID
+     * @param apiType API Type
+     * @return API information
+     * @throws APIPersistenceException
+     */
+    DevPortalAPI getDevPortalAPI(Organization org, String apiId, String apiType) throws APIPersistenceException;
+
 
     /**
      * Delete API
@@ -157,13 +205,11 @@ public interface APIPersistence {
      * @param searchQuery search query
      * @param start       starting index
      * @param offset      offset to search
-     * @param sortBy      sort criteria
-     * @param sortOrder       sort order
      * @return Publisher API Search Result
      * @throws APIPersistenceException
      */
     PublisherAPISearchResult searchAPIsForPublisher(Organization org, String searchQuery, int start,
-            int offset, UserContext ctx, String sortBy, String sortOrder) throws APIPersistenceException;
+            int offset, UserContext ctx) throws APIPersistenceException;
 
     /**
      * Search APIs to be displayed on Dev Portal API listing
@@ -507,5 +553,20 @@ public interface APIPersistence {
      * @return list of all the tags of an organization
      */
     Set<Tag> getAllTags(Organization org, UserContext ctx) throws APIPersistenceException;
+    
+    /**
+     * Update SoapToRest Sequences for the given API.
+     * @param org  Organization the API product is owned by
+     * @param apiId  API ID
+     * @param sequences list of SOAPToRestSequence.
+     * @throws APIPersistenceException
+     */
+    void updateSoapToRestSequences(Organization org, String apiId, List<SOAPToRestSequence> sequences)
+            throws APIPersistenceException;
 
+    void changeApiProvider(String providerName, String apiId, String org) throws APIManagementException,
+            APIPersistenceException;
+
+    AdminContentSearchResult searchContentForAdmin(String org, String searchQuery, int start, int count,
+                                                          int limit) throws APIPersistenceException;
 }

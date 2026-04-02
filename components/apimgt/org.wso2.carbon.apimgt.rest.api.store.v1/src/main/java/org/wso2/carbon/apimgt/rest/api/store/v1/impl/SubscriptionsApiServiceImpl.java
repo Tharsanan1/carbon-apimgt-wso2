@@ -26,18 +26,22 @@ import org.apache.cxf.jaxrs.ext.MessageContext;
 import org.wso2.carbon.apimgt.api.APIConsumer;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIMgtAuthorizationFailedException;
+import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.MonetizationException;
 import org.wso2.carbon.apimgt.api.SubscriptionAlreadyExistingException;
+import org.wso2.carbon.apimgt.api.SubscriptionBlockedException;
 import org.wso2.carbon.apimgt.api.WorkflowResponse;
 import org.wso2.carbon.apimgt.api.WorkflowStatus;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.api.model.Application;
 import org.wso2.carbon.apimgt.api.model.Monetization;
+import org.wso2.carbon.apimgt.api.model.OrganizationInfo;
 import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
 import org.wso2.carbon.apimgt.api.model.Subscriber;
 import org.wso2.carbon.apimgt.api.model.SubscriptionResponse;
-import org.wso2.carbon.apimgt.impl.*;
+import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.impl.workflow.HttpWorkflowResponse;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiConstants;
@@ -214,6 +218,13 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 return null;
             }
 
+            if (APIConstants.DEFAULT_SUB_POLICY_SUBSCRIPTIONLESS.equalsIgnoreCase(body.getThrottlingPolicy())
+                    || APIConstants.DEFAULT_SUB_POLICY_ASYNC_SUBSCRIPTIONLESS
+                    .equalsIgnoreCase(body.getThrottlingPolicy())) {
+                throw new APIManagementException("Subscribing to the API with an internal business plan is not allowed",
+                        ExceptionCodes.from(ExceptionCodes.BUSINESS_PLAN_NOT_ALLOWED, body.getThrottlingPolicy()));
+            }
+
             if (!RestAPIStoreUtils.isUserAccessAllowedForApplication(application)) {
                 //application access failure occurred
                 RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_APPLICATION, applicationId, log);
@@ -221,6 +232,12 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
 
             ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(body.getApiId(), organization);
 
+            OrganizationInfo userOrgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+            userOrgInfo.setSuperOrganization(organization);
+            if (!apiTypeWrapper.isAPIProduct() && !StringUtils.isEmpty(userOrgInfo.getOrganizationId())) {
+                org.wso2.carbon.apimgt.rest.api.store.v1.utils.APIUtils
+                        .updateAvailableTiersByOrganization(apiTypeWrapper.getApi(), userOrgInfo.getOrganizationId());
+            }
 
             apiTypeWrapper.setTier(body.getThrottlingPolicy());
 
@@ -247,6 +264,9 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             RestApiUtil.handleResourceAlreadyExistsError(
                     "Specified subscription already exists for API " + body.getApiId() + ", for application "
                             + body.getApplicationId(), e, log);
+        } catch (SubscriptionBlockedException e) {
+            RestApiUtil.handleOperationBlockedError("Subscription blocked. " + e.getMessage()
+                    + ". Please contact the API publisher.", e, log);
         } catch (URISyntaxException e) {
             if (RestApiUtil.isDueToResourceNotFound(e)) {
                 //this happens when the specified API identifier does not exist
@@ -283,17 +303,21 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             SubscribedAPI subscribedAPI = apiConsumer.getSubscriptionByUUID(subscriptionId);
             //Check whether the subscription status is not empty and also not blocked
             if (body.getStatus() != null && subscribedAPI != null) {
-                if ("BLOCKED".equals(body.getStatus().value()) || "ON_HOLD".equals(body.getStatus().value())
-                        || "REJECTED".equals(body.getStatus().value()) || "BLOCKED".equals(subscribedAPI.getSubStatus())
-                        || "ON_HOLD".equals(subscribedAPI.getSubStatus())
-                        || "REJECTED".equals(subscribedAPI.getSubStatus())) {
-                    RestApiUtil.handleBadRequest(
-                            "Cannot update subscriptions with provided or existing status", log);
+                String bodyStatus = body.getStatus().value();
+                String subscribedStatus = subscribedAPI.getSubStatus();
+                if (APIConstants.SubscriptionStatus.BLOCKED.equals(
+                        bodyStatus) || APIConstants.SubscriptionStatus.ON_HOLD.equals(
+                        bodyStatus) || APIConstants.SubscriptionStatus.PROD_ONLY_BLOCKED.equals(
+                        bodyStatus) || APIConstants.SubscriptionStatus.PROD_ONLY_BLOCKED.equals(
+                        subscribedStatus) || APIConstants.SubscriptionStatus.REJECTED.equals(
+                        bodyStatus) || APIConstants.SubscriptionStatus.BLOCKED.equals(
+                        subscribedStatus) || APIConstants.SubscriptionStatus.ON_HOLD.equals(
+                        subscribedStatus) || APIConstants.SubscriptionStatus.REJECTED.equals(subscribedStatus)) {
+                    RestApiUtil.handleBadRequest("Cannot update subscriptions with provided or existing status", log);
                     return null;
                 }
             } else {
-                RestApiUtil.handleBadRequest(
-                        "Request must contain status of the subscription", log);
+                RestApiUtil.handleBadRequest("Request must contain status of the subscription", log);
                 return null;
             }
 
@@ -321,8 +345,21 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_APPLICATION, applicationId, log);
             }
 
+            if (APIConstants.DEFAULT_SUB_POLICY_SUBSCRIPTIONLESS.equalsIgnoreCase(body.getRequestedThrottlingPolicy())
+                    || APIConstants.DEFAULT_SUB_POLICY_ASYNC_SUBSCRIPTIONLESS
+                    .equalsIgnoreCase(body.getRequestedThrottlingPolicy())) {
+                throw new APIManagementException(ExceptionCodes.from(ExceptionCodes.BUSINESS_PLAN_NOT_ALLOWED,
+                        body.getRequestedThrottlingPolicy()));
+            }
+
             ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(body.getApiId(), organization);
 
+            OrganizationInfo userOrgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+            userOrgInfo.setSuperOrganization(organization);
+            if (!apiTypeWrapper.isAPIProduct() && !StringUtils.isEmpty(userOrgInfo.getOrganizationId())) {
+                org.wso2.carbon.apimgt.rest.api.store.v1.utils.APIUtils
+                        .updateAvailableTiersByOrganization(apiTypeWrapper.getApi(), userOrgInfo.getOrganizationId());
+            }
 
             apiTypeWrapper.setTier(body.getThrottlingPolicy());
 
@@ -350,6 +387,9 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
             RestApiUtil.handleResourceAlreadyExistsError(
                     "Specified subscription already exists for API " + body.getApiId() + ", for application "
                             + body.getApplicationId(), e, log);
+        } catch (SubscriptionBlockedException e) {
+            RestApiUtil.handleOperationBlockedError("Subscription blocked. " + e.getMessage()
+                    + ". Please contact the API publisher.", e, log);
         } catch (APIManagementException | URISyntaxException e) {
             if (RestApiUtil.isDueToResourceNotFound(e)) {
                 //this happens when the specified API identifier does not exist
@@ -405,6 +445,12 @@ public class SubscriptionsApiServiceImpl implements SubscriptionsApiService {
                 ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(subscriptionDTO.getApiId(),
                         organization);
 
+                OrganizationInfo userOrgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+                userOrgInfo.setSuperOrganization(organization);
+                if (!apiTypeWrapper.isAPIProduct() && !StringUtils.isEmpty(userOrgInfo.getOrganizationId())) {
+                    org.wso2.carbon.apimgt.rest.api.store.v1.utils.APIUtils.updateAvailableTiersByOrganization(
+                            apiTypeWrapper.getApi(), userOrgInfo.getOrganizationId());
+                }
                 apiTypeWrapper.setTier(subscriptionDTO.getThrottlingPolicy());
                 SubscriptionResponse subscriptionResponse = apiConsumer
                         .addSubscription(apiTypeWrapper, username, application);

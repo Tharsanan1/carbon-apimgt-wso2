@@ -18,6 +18,8 @@ package org.wso2.carbon.apimgt.gateway.handlers.security.oauth;
 
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import org.apache.axiom.om.OMElement;
+import org.apache.axis2.AxisFault;
 import org.apache.axis2.Constants;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -27,7 +29,9 @@ import org.apache.synapse.MessageContext;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.RESTConstants;
+import org.wso2.carbon.apimgt.api.APIConsumer;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.common.gateway.constants.GraphQLConstants;
 import org.wso2.carbon.apimgt.common.gateway.dto.JWTConfigurationDto;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
@@ -56,6 +60,7 @@ import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.cache.Cache;
 
 /**
@@ -83,8 +88,16 @@ public class OAuthAuthenticator implements Authenticator {
     private boolean removeDefaultAPIHeaderFromOutMessage = true;
     private String requestOrigin;
     private boolean isMandatory;
+    private Set<String> audiences;
+    private ThreadLocal<String> remainingAuthHeader = new ThreadLocal<String>();
 
     public OAuthAuthenticator() {
+    }
+
+    public OAuthAuthenticator(String authorizationHeader, boolean isMandatory, boolean removeOAuthHeader,
+                              Set<String> audiences) {
+        this(authorizationHeader, isMandatory, removeOAuthHeader);
+        this.setAudiences(audiences);
     }
 
     public OAuthAuthenticator(String authorizationHeader, boolean isMandatory, boolean removeOAuthHeader) {
@@ -106,7 +119,7 @@ public class OAuthAuthenticator implements Authenticator {
     public AuthenticationResponse authenticate(MessageContext synCtx) throws APIManagementException {
         boolean isJwtToken = false;
         String accessToken = null;
-        String remainingAuthHeader = "";
+        remainingAuthHeader.set("");
         boolean defaultVersionInvoked = false;
         Map headers = (Map) ((Axis2MessageContext) synCtx).getAxis2MessageContext().
                 getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
@@ -117,13 +130,14 @@ public class OAuthAuthenticator implements Authenticator {
         }
 
         if (jwtValidator == null) {
-            this.jwtValidator = new JWTValidator(this.keyValidator, tenantDomain);
+            this.jwtValidator = new JWTValidator(this.keyValidator, tenantDomain, this.getAudiences());
         }
 
         config = getApiManagerConfiguration();
         removeOAuthHeadersFromOutMessage = isRemoveOAuthHeadersFromOutMessage();
         securityContextHeader = getSecurityContextHeader();
-
+        boolean includeTokenInfoInMsgCtx = Boolean.parseBoolean(
+                System.getProperty(APIMgtGatewayConstants.INCLUDE_TOKEN_INFO_IN_MSG_CTX));
         if (headers != null) {
             requestOrigin = (String) headers.get("Origin");
 
@@ -149,10 +163,13 @@ public class OAuthAuthenticator implements Authenticator {
                             boolean isConsumerKeyHeaderAvailable = false;
                             for (String element : elements) {
                                 if (!"".equals(element.trim())) {
-                                    if (consumerKeyHeaderSegment.equals(elements[j].trim())) {
+                                    if (consumerKeyHeaderSegment.equalsIgnoreCase(elements[j].trim())) {
                                         isConsumerKeyHeaderAvailable = true;
                                     } else if (isConsumerKeyHeaderAvailable) {
                                         accessToken = removeLeadingAndTrailing(elements[j].trim());
+                                        if (includeTokenInfoInMsgCtx) {
+                                            synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN, accessToken);
+                                        }
                                         consumerkeyFound = true;
                                     }
                                 }
@@ -166,7 +183,7 @@ public class OAuthAuthenticator implements Authenticator {
                         }
                     }
                 }
-                remainingAuthHeader = String.join(oauthHeaderSplitter, remainingAuthHeaders);
+                remainingAuthHeader.set(String.join(oauthHeaderSplitter, remainingAuthHeaders));
             }
 
             if (log.isDebugEnabled()) {
@@ -180,13 +197,14 @@ public class OAuthAuthenticator implements Authenticator {
             log.debug("Default Version API invoked");
         }
 
-        if (removeOAuthHeadersFromOutMessage) {
+        String apiType = (String) synCtx.getProperty(APIMgtGatewayConstants.API_TYPE);
+        if (removeOAuthHeadersFromOutMessage && !APIConstants.API_TYPE_MCP.equals(apiType)) {
             //Remove authorization headers sent for authentication at the gateway and pass others to the backend
-            if (StringUtils.isNotBlank(remainingAuthHeader)) {
+            if (StringUtils.isNotBlank(remainingAuthHeader.get())) {
                 if (log.isDebugEnabled()) {
                     log.debug("Removing OAuth key from Authorization header");
                 }
-                headers.put(getSecurityHeader(), remainingAuthHeader);
+                headers.put(getSecurityHeader(), remainingAuthHeader.get());
             } else {
                 if (log.isDebugEnabled()) {
                     log.debug("Removing Authorization header from headers");
@@ -204,6 +222,11 @@ public class OAuthAuthenticator implements Authenticator {
         String httpMethod = (String)((Axis2MessageContext) synCtx).getAxis2MessageContext().
                 getProperty(Constants.Configuration.HTTP_METHOD);
         String matchingResource = (String) synCtx.getProperty(APIConstants.API_ELECTED_RESOURCE);
+
+        if (StringUtils.equals(APIConstants.API_TYPE_MCP, apiType)) {
+            httpMethod = synCtx.getProperty(APIMgtGatewayConstants.MCP_HTTP_METHOD_KEY).toString();
+            matchingResource = (String) synCtx.getProperty(APIMgtGatewayConstants.MCP_API_ELECTED_RESOURCE_KEY);
+        }
         SignedJWTInfo signedJWTInfo = null;
 
         //If the matching resource does not require authentication
@@ -219,49 +242,46 @@ public class OAuthAuthenticator implements Authenticator {
             if (StringUtils.isNotEmpty(accessToken) && accessToken.contains(APIConstants.DOT)) {
                 try {
                     String[] JWTElements = accessToken.split("\\.");
-                    if (JWTElements.length != 3){
-                        log.debug("Invalid JWT token. The expected token format is <header.payload.signature>");
-                        throw new APISecurityException(APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
-                                "Invalid JWT token");
-                    }
 
-                    signedJWTInfo = getSignedJwt(accessToken);
-                    if (GatewayUtils.isInternalKey(signedJWTInfo.getJwtClaimsSet())
-                            || GatewayUtils.isAPIKey(signedJWTInfo.getJwtClaimsSet())) {
-                        log.debug("Invalid Token Provided");
-                        return new AuthenticationResponse(false, isMandatory, true,
-                                APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
-                                APISecurityConstants.API_AUTH_INVALID_CREDENTIALS_MESSAGE);
-                    }
-                    String keyManager = ServiceReferenceHolder.getInstance().getJwtValidationService()
-                            .getKeyManagerNameIfJwtValidatorExist(signedJWTInfo);
-                    if (StringUtils.isNotEmpty(keyManager)) {
-                        if (log.isDebugEnabled()){
-                            log.debug("KeyManager " + keyManager + "found for authenticate token " + GatewayUtils.getMaskedToken(accessToken));
-                        }
-                        if (keyManagerList.contains(APIConstants.KeyManager.API_LEVEL_ALL_KEY_MANAGERS) ||
-                                keyManagerList.contains(keyManager)) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Elected KeyManager " + keyManager + "found in API level list " + String.join(",", keyManagerList));
-                            }
-                            isJwtToken = true;
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Elected KeyManager " + keyManager + " not found in API level list " + String.join(",", keyManagerList));
-                            }
+                    if (JWTElements.length == 3) {
+                        signedJWTInfo = getSignedJwt(accessToken);
+                        if (GatewayUtils.isInternalKey(signedJWTInfo.getJwtClaimsSet())
+                                || GatewayUtils.isAPIKey(signedJWTInfo.getJwtClaimsSet())) {
+                            log.debug("Invalid Token Provided");
                             return new AuthenticationResponse(false, isMandatory, true,
                                     APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
                                     APISecurityConstants.API_AUTH_INVALID_CREDENTIALS_MESSAGE);
                         }
-                    }else{
-                        if (log.isDebugEnabled()) {
-                            log.debug("KeyManager not found for accessToken " + GatewayUtils.getMaskedToken(accessToken));
+                        String keyManager = ServiceReferenceHolder.getInstance().getJwtValidationService()
+                                .getKeyManagerNameIfJwtValidatorExist(signedJWTInfo);
+                        if (StringUtils.isNotEmpty(keyManager)) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("KeyManager " + keyManager + " found for authenticate token " + GatewayUtils.getMaskedToken(accessToken));
+                            }
+                            if (keyManagerList.contains(APIConstants.KeyManager.API_LEVEL_ALL_KEY_MANAGERS) ||
+                                    keyManagerList.contains(keyManager)) {
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Elected KeyManager " + keyManager + "found in API level list " + String.join(",", keyManagerList));
+                                }
+                                isJwtToken = true;
+                            } else {
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Elected KeyManager " + keyManager + " not found in API level list " + String.join(",", keyManagerList));
+                                }
+                                return new AuthenticationResponse(false, isMandatory, true,
+                                        APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
+                                        APISecurityConstants.API_AUTH_INVALID_CREDENTIALS_MESSAGE);
+                            }
+                        } else {
+                            if (log.isDebugEnabled()) {
+                                log.debug("KeyManager not found for accessToken " + GatewayUtils.getMaskedToken(accessToken));
+                            }
                         }
                     }
-                } catch ( ParseException | IllegalArgumentException e) {
+                } catch (ParseException | IllegalArgumentException e) {
                     log.debug("Not a JWT token. Failed to decode the token header.", e);
                 } catch (APIManagementException e) {
-                    log.error("error while check validation of JWt", e);
+                    log.error("Error while validating JWT token. ", e);
                     return new AuthenticationResponse(false, isMandatory, true,
                             APISecurityConstants.API_AUTH_INVALID_CREDENTIALS,
                             APISecurityConstants.API_AUTH_INVALID_CREDENTIALS_MESSAGE);
@@ -287,6 +307,9 @@ public class OAuthAuthenticator implements Authenticator {
                 } else {
                     log.debug("Could not find api version");
                 }
+            }
+            if (includeTokenInfoInMsgCtx) {
+                synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN_INVALID_REASON, "Access token invalid");
             }
             return new AuthenticationResponse(false, isMandatory, true,
                     APISecurityConstants.API_AUTH_MISSING_CREDENTIALS, "Required OAuth credentials not provided");
@@ -318,6 +341,9 @@ public class OAuthAuthenticator implements Authenticator {
                 info = getAPIKeyValidator().getKeyValidationInfo(apiContext, accessToken, apiVersion, authenticationScheme,
                         matchingResource, httpMethod, defaultVersionInvoked,keyManagerList);
             } catch (APISecurityException ex) {
+                if (includeTokenInfoInMsgCtx) {
+                    synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN_INVALID_REASON, "Access token invalid");
+                }
                 return new AuthenticationResponse(false, isMandatory, true, ex.getErrorCode(), ex.getMessage());
             }
             context.stop();
@@ -351,6 +377,8 @@ public class OAuthAuthenticator implements Authenticator {
             authContext.setSubscriberTenantDomain(info.getSubscriberTenantDomain());
             authContext.setSpikeArrestLimit(info.getSpikeArrestLimit());
             authContext.setSpikeArrestUnit(info.getSpikeArrestUnit());
+            authContext.setApplicationSpikesArrestLimit(info.getApplicationSpikeArrestLimit());
+            authContext.setApplicationSpikesArrestUnit(info.getApplicationSpikeArrestUnit());
             authContext.setStopOnQuotaReach(info.isStopOnQuotaReach());
             authContext.setIsContentAware(info.isContentAware());
             APISecurityUtils.setAuthenticationContext(synCtx, authContext, securityContextHeader);
@@ -376,6 +404,13 @@ public class OAuthAuthenticator implements Authenticator {
         } else {
             if(log.isDebugEnabled()){
                 log.debug("User is NOT authorized to access the Resource");
+            }
+            if (includeTokenInfoInMsgCtx) {
+                if (info.isExpired()) {
+                    synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN_INVALID_REASON, "Access token expired");
+                } else {
+                    synCtx.setProperty(APIMgtGatewayConstants.ACCESS_TOKEN_INVALID_REASON, "Access token invalid");
+                }
             }
             return new AuthenticationResponse(false, isMandatory, true, info.getValidationStatus(),
                     "Access failure for API: " + apiContext +
@@ -466,6 +501,14 @@ public class OAuthAuthenticator implements Authenticator {
 
     private void setSecurityContextHeader(String securityContextHeader) {
         this.securityContextHeader = securityContextHeader;
+    }
+
+    public void setAudiences(Set<String> audiences) {
+        this.audiences = audiences;
+    }
+
+    public Set<String> getAudiences() {
+        return audiences;
     }
 
     private boolean isRemoveOAuthHeadersFromOutMessage() {

@@ -33,6 +33,7 @@ import org.apache.synapse.api.Resource;
 import org.apache.synapse.api.dispatch.RESTDispatcher;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.MethodStats;
+import org.wso2.carbon.apimgt.gateway.handlers.LogsHandler;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.APIConstants;
@@ -69,6 +70,7 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
     private List<String> allowedMethodList;
     private boolean allowCredentialsEnabled;
     private String authorizationHeader;
+    private String apiKeyHeader;
 
     public void init(SynapseEnvironment synapseEnvironment) {
         if (log.isDebugEnabled()) {
@@ -94,6 +96,9 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
         }
         if (authorizationHeader != null) {
             allowHeaders += APIConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT + authorizationHeader;
+        }
+        if (apiKeyHeader != null) {
+            allowHeaders += APIConstants.MULTI_ATTRIBUTE_SEPARATOR_DEFAULT + apiKeyHeader;
         }
         if (allowedOrigins == null) {
             String allowedOriginsList = APIUtil.getAllowedOrigins();
@@ -154,8 +159,8 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
             }
             String apiContext = (String) messageContext.getProperty(RESTConstants.REST_API_CONTEXT);
             String apiVersion = (String) messageContext.getProperty(RESTConstants.SYNAPSE_REST_API_VERSION);
-            String httpMethod = (String) ((Axis2MessageContext) messageContext).getAxis2MessageContext().
-                    getProperty(Constants.Configuration.HTTP_METHOD);
+            String httpMethod = (String) ((Axis2MessageContext) messageContext).getAxis2MessageContext()
+                    .getProperty(Constants.Configuration.HTTP_METHOD);
             API selectedApi = Utils.getSelectedAPI(messageContext);
             org.apache.axis2.context.MessageContext axis2MC = ((Axis2MessageContext) messageContext)
                     .getAxis2MessageContext();
@@ -166,38 +171,43 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
             Utils.setSubRequestPath(selectedApi, messageContext);
 
             if (selectedApi != null) {
-                Resource[] allAPIResources = selectedApi.getResources();
-                Set<Resource> acceptableResources = new LinkedHashSet<>();
-
-                for (Resource resource : allAPIResources) {
-                    //If the requesting method is OPTIONS or if the Resource contains the requesting method
-                    if ((RESTConstants.METHOD_OPTIONS.equals(httpMethod) && resource.getMethods() != null &&
-                            Arrays.asList(resource.getMethods()).contains(corsRequestMethod)) ||
-                            (resource.getMethods() != null && Arrays.asList(resource.getMethods()).contains(httpMethod))) {
-                        acceptableResources.add(resource);
+                if ((messageContext.getProperty(RESTConstants.SELECTED_RESOURCE) != null)) {
+                    selectedResource = Utils.getSelectedResource(messageContext, httpMethod, corsRequestMethod);
+                } else {
+                    Resource[] allAPIResources = selectedApi.getResources();
+                    Set<Resource> acceptableResources
+                            = Utils.getAcceptableResources(allAPIResources, httpMethod, corsRequestMethod,
+                            messageContext);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Found " + acceptableResources.size()
+                                + " acceptable resources for HTTP method: " + httpMethod);
                     }
-                }
-
-                if (!acceptableResources.isEmpty()) {
-                    for (RESTDispatcher dispatcher : RESTUtils.getDispatchers()) {
-                        Resource resource = dispatcher.findResource(messageContext, acceptableResources);
-                        if (resource != null) {
-                            selectedResource = resource;
-                            break;
+                    messageContext.setProperty("ACCEPTABLE_RESOURCES", acceptableResources);
+                    if (!acceptableResources.isEmpty()) {
+                        for (RESTDispatcher dispatcher : RESTUtils.getDispatchers()) {
+                            Resource resource = dispatcher.findResource(messageContext, acceptableResources);
+                            if (resource != null) {
+                                selectedResource = resource;
+                                if (selectedResource.getDispatcherHelper()
+                                        .getString() != null && !selectedResource.getDispatcherHelper().getString()
+                                        .contains("/*")) {
+                                    break;
+                                }
+                            }
+                        }
+                        if (selectedResource == null) {
+                            handleResourceNotFound(messageContext, Arrays.asList(allAPIResources));
+                            return false;
                         }
                     }
-                    if (selectedResource == null) {
+                    //If no acceptable resources are found
+                    else {
+                        //We're going to send a 405 or a 404. Run the following logic to determine which.
                         handleResourceNotFound(messageContext, Arrays.asList(allAPIResources));
                         return false;
                     }
-                }
-                //If no acceptable resources are found
-                else {
-                    //We're going to send a 405 or a 404. Run the following logic to determine which.
-                    handleResourceNotFound(messageContext, Arrays.asList(allAPIResources));
-                    return false;
-                }
 
+                }
                 //No matching resource found
                 if (selectedResource == null) {
                     //Respond with a 404
@@ -227,7 +237,14 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
                 if (corsSequence != null) {
                     corsSequence.mediate(messageContext);
                 }
-                Utils.send(messageContext, HttpStatus.SC_OK);
+                if (Boolean.parseBoolean(
+                        System.getProperty(APIMgtGatewayConstants.CORS_SET_STATUS_CODE_FROM_MSG_CONTEXT))
+                        && messageContext.getProperty(APIMgtGatewayConstants.HTTP_SC) != null) {
+                    Utils.send(messageContext,
+                               Integer.parseInt(messageContext.getProperty(APIMgtGatewayConstants.HTTP_SC).toString()));
+                } else {
+                    Utils.send(messageContext, HttpStatus.SC_OK);
+                }
                 return false;
             } else if (APIConstants.IMPLEMENTATION_TYPE_INLINE.equalsIgnoreCase(apiImplementationType)) {
                 setCORSHeaders(messageContext, selectedResource);
@@ -328,6 +345,11 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
         }
 
         messageContext.setProperty(APIConstants.CORSHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, allowedOrigin);
+        //If the request origin is not allowed, set the HTTP status code to 403
+        if (Boolean.parseBoolean(System.getProperty(APIMgtGatewayConstants.CORS_FORBID_BLOCKED_REQUESTS))
+                && allowedOrigin == null) {
+            messageContext.setProperty(APIMgtGatewayConstants.HTTP_SC, HttpStatus.SC_FORBIDDEN);
+        }
         String allowedMethods;
         StringBuffer allowedMethodsBuffer = new StringBuffer(20);
         if (selectedResource != null) {
@@ -434,5 +456,13 @@ public class CORSRequestHandler extends AbstractHandler implements ManagedLifecy
 
     public void setAuthorizationHeader(String authorizationHeader) {
         this.authorizationHeader = authorizationHeader;
+    }
+
+    public String getApiKeyHeader() {
+        return apiKeyHeader;
+    }
+
+    public void setApiKeyHeader(String apiKeyHeader) {
+        this.apiKeyHeader = apiKeyHeader;
     }
 }

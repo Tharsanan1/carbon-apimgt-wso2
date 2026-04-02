@@ -32,6 +32,7 @@ public class APIDTO   {
   
     private String id = null;
     private String name = null;
+    private String displayName = null;
     private String description = null;
     private String context = null;
     private String version = null;
@@ -44,6 +45,7 @@ public class APIDTO   {
     private List<String> transport = new ArrayList<String>();
     private List<APIOperationsDTO> operations = new ArrayList<APIOperationsDTO>();
     private String authorizationHeader = null;
+    private String apiKeyHeader = null;
     private List<String> securityScheme = new ArrayList<String>();
     private List<String> tags = new ArrayList<String>();
     private List<APITiersDTO> tiers = new ArrayList<APITiersDTO>();
@@ -55,14 +57,19 @@ public class APIDTO   {
     private List<String> environmentList = new ArrayList<String>();
     private List<ScopeInfoDTO> scopes = new ArrayList<ScopeInfoDTO>();
     private String avgRating = null;
+    private Long subscriptions = null;
     private AdvertiseInfoDTO advertiseInfo = null;
     private Boolean isSubscriptionAvailable = null;
+    private Boolean initiatedFromGateway = null;
     private List<String> categories = new ArrayList<String>();
     private Object keyManagers = null;
     private String createdTime = null;
     private String lastUpdatedTime = null;
+    private String gatewayType = null;
     private String gatewayVendor = null;
     private List<String> asyncTransportProtocols = new ArrayList<String>();
+    private Boolean egress = false;
+    private String subtype = "DEFAULT";
 
   /**
    * UUID of the api 
@@ -99,6 +106,24 @@ public class APIDTO   {
   }
   public void setName(String name) {
     this.name = name;
+  }
+
+  /**
+   * Human-friendly name shown in UI. Length limited to DB column size.
+   **/
+  public APIDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Pizza Shack API", value = "Human-friendly name shown in UI. Length limited to DB column size.")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
   }
 
   /**
@@ -257,7 +282,7 @@ public class APIDTO   {
   }
 
   
-  @ApiModelProperty(example = "WS", value = "This describes the transport type of the API")
+  @ApiModelProperty(example = "HTTP", value = "This describes the transport type of the API")
   @JsonProperty("type")
   public String getType() {
     return type;
@@ -317,6 +342,24 @@ public class APIDTO   {
   }
   public void setAuthorizationHeader(String authorizationHeader) {
     this.authorizationHeader = authorizationHeader;
+  }
+
+  /**
+   * Name of the API key header used for invoking the API. If it is not set, default value &#x60;apiKey&#x60; will be used. 
+   **/
+  public APIDTO apiKeyHeader(String apiKeyHeader) {
+    this.apiKeyHeader = apiKeyHeader;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "ApiKey", value = "Name of the API key header used for invoking the API. If it is not set, default value `apiKey` will be used. ")
+  @JsonProperty("apiKeyHeader")
+  public String getApiKeyHeader() {
+    return apiKeyHeader;
+  }
+  public void setApiKeyHeader(String apiKeyHeader) {
+    this.apiKeyHeader = apiKeyHeader;
   }
 
   /**
@@ -519,6 +562,24 @@ public class APIDTO   {
   }
 
   /**
+   * The number of subscriptions for the API
+   **/
+  public APIDTO subscriptions(Long subscriptions) {
+    this.subscriptions = subscriptions;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "10", value = "The number of subscriptions for the API")
+  @JsonProperty("subscriptions")
+  public Long getSubscriptions() {
+    return subscriptions;
+  }
+  public void setSubscriptions(Long subscriptions) {
+    this.subscriptions = subscriptions;
+  }
+
+  /**
    **/
   public APIDTO advertiseInfo(AdvertiseInfoDTO advertiseInfo) {
     this.advertiseInfo = advertiseInfo;
@@ -554,6 +615,24 @@ public class APIDTO   {
   }
 
   /**
+   * Flag indicating this API was discovered/initiated via the gateway (federated discovery) rather than created in the Control Plane.
+   **/
+  public APIDTO initiatedFromGateway(Boolean initiatedFromGateway) {
+    this.initiatedFromGateway = initiatedFromGateway;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "Flag indicating this API was discovered/initiated via the gateway (federated discovery) rather than created in the Control Plane.")
+  @JsonProperty("initiatedFromGateway")
+  public Boolean isInitiatedFromGateway() {
+    return initiatedFromGateway;
+  }
+  public void setInitiatedFromGateway(Boolean initiatedFromGateway) {
+    this.initiatedFromGateway = initiatedFromGateway;
+  }
+
+  /**
    * API categories 
    **/
   public APIDTO categories(List<String> categories) {
@@ -580,7 +659,7 @@ public class APIDTO   {
   }
 
   
-  @ApiModelProperty(value = "API Key Managers ")
+  @ApiModelProperty(example = "[\"all\"]", value = "API Key Managers ")
       @Valid
   @JsonProperty("keyManagers")
   public Object getKeyManagers() {
@@ -626,6 +705,23 @@ public class APIDTO   {
 
   /**
    **/
+  public APIDTO gatewayType(String gatewayType) {
+    this.gatewayType = gatewayType;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "solace", value = "")
+  @JsonProperty("gatewayType")
+  public String getGatewayType() {
+    return gatewayType;
+  }
+  public void setGatewayType(String gatewayType) {
+    this.gatewayType = gatewayType;
+  }
+
+  /**
+   **/
   public APIDTO gatewayVendor(String gatewayVendor) {
     this.gatewayVendor = gatewayVendor;
     return this;
@@ -659,6 +755,42 @@ public class APIDTO   {
     this.asyncTransportProtocols = asyncTransportProtocols;
   }
 
+  /**
+   * Whether the API is egress or not
+   **/
+  public APIDTO egress(Boolean egress) {
+    this.egress = egress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Whether the API is egress or not")
+  @JsonProperty("egress")
+  public Boolean isEgress() {
+    return egress;
+  }
+  public void setEgress(Boolean egress) {
+    this.egress = egress;
+  }
+
+  /**
+   * Subtype of the API.
+   **/
+  public APIDTO subtype(String subtype) {
+    this.subtype = subtype;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "AIAPI", value = "Subtype of the API.")
+  @JsonProperty("subtype")
+  public String getSubtype() {
+    return subtype;
+  }
+  public void setSubtype(String subtype) {
+    this.subtype = subtype;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -671,6 +803,7 @@ public class APIDTO   {
     APIDTO API = (APIDTO) o;
     return Objects.equals(id, API.id) &&
         Objects.equals(name, API.name) &&
+        Objects.equals(displayName, API.displayName) &&
         Objects.equals(description, API.description) &&
         Objects.equals(context, API.context) &&
         Objects.equals(version, API.version) &&
@@ -683,6 +816,7 @@ public class APIDTO   {
         Objects.equals(transport, API.transport) &&
         Objects.equals(operations, API.operations) &&
         Objects.equals(authorizationHeader, API.authorizationHeader) &&
+        Objects.equals(apiKeyHeader, API.apiKeyHeader) &&
         Objects.equals(securityScheme, API.securityScheme) &&
         Objects.equals(tags, API.tags) &&
         Objects.equals(tiers, API.tiers) &&
@@ -694,19 +828,24 @@ public class APIDTO   {
         Objects.equals(environmentList, API.environmentList) &&
         Objects.equals(scopes, API.scopes) &&
         Objects.equals(avgRating, API.avgRating) &&
+        Objects.equals(subscriptions, API.subscriptions) &&
         Objects.equals(advertiseInfo, API.advertiseInfo) &&
         Objects.equals(isSubscriptionAvailable, API.isSubscriptionAvailable) &&
+        Objects.equals(initiatedFromGateway, API.initiatedFromGateway) &&
         Objects.equals(categories, API.categories) &&
         Objects.equals(keyManagers, API.keyManagers) &&
         Objects.equals(createdTime, API.createdTime) &&
         Objects.equals(lastUpdatedTime, API.lastUpdatedTime) &&
+        Objects.equals(gatewayType, API.gatewayType) &&
         Objects.equals(gatewayVendor, API.gatewayVendor) &&
-        Objects.equals(asyncTransportProtocols, API.asyncTransportProtocols);
+        Objects.equals(asyncTransportProtocols, API.asyncTransportProtocols) &&
+        Objects.equals(egress, API.egress) &&
+        Objects.equals(subtype, API.subtype);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, description, context, version, provider, apiDefinition, wsdlUri, lifeCycleStatus, isDefaultVersion, type, transport, operations, authorizationHeader, securityScheme, tags, tiers, hasThumbnail, additionalProperties, monetization, endpointURLs, businessInformation, environmentList, scopes, avgRating, advertiseInfo, isSubscriptionAvailable, categories, keyManagers, createdTime, lastUpdatedTime, gatewayVendor, asyncTransportProtocols);
+    return Objects.hash(id, name, displayName, description, context, version, provider, apiDefinition, wsdlUri, lifeCycleStatus, isDefaultVersion, type, transport, operations, authorizationHeader, apiKeyHeader, securityScheme, tags, tiers, hasThumbnail, additionalProperties, monetization, endpointURLs, businessInformation, environmentList, scopes, avgRating, subscriptions, advertiseInfo, isSubscriptionAvailable, initiatedFromGateway, categories, keyManagers, createdTime, lastUpdatedTime, gatewayType, gatewayVendor, asyncTransportProtocols, egress, subtype);
   }
 
   @Override
@@ -716,6 +855,7 @@ public class APIDTO   {
     
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
@@ -728,6 +868,7 @@ public class APIDTO   {
     sb.append("    transport: ").append(toIndentedString(transport)).append("\n");
     sb.append("    operations: ").append(toIndentedString(operations)).append("\n");
     sb.append("    authorizationHeader: ").append(toIndentedString(authorizationHeader)).append("\n");
+    sb.append("    apiKeyHeader: ").append(toIndentedString(apiKeyHeader)).append("\n");
     sb.append("    securityScheme: ").append(toIndentedString(securityScheme)).append("\n");
     sb.append("    tags: ").append(toIndentedString(tags)).append("\n");
     sb.append("    tiers: ").append(toIndentedString(tiers)).append("\n");
@@ -739,14 +880,19 @@ public class APIDTO   {
     sb.append("    environmentList: ").append(toIndentedString(environmentList)).append("\n");
     sb.append("    scopes: ").append(toIndentedString(scopes)).append("\n");
     sb.append("    avgRating: ").append(toIndentedString(avgRating)).append("\n");
+    sb.append("    subscriptions: ").append(toIndentedString(subscriptions)).append("\n");
     sb.append("    advertiseInfo: ").append(toIndentedString(advertiseInfo)).append("\n");
     sb.append("    isSubscriptionAvailable: ").append(toIndentedString(isSubscriptionAvailable)).append("\n");
+    sb.append("    initiatedFromGateway: ").append(toIndentedString(initiatedFromGateway)).append("\n");
     sb.append("    categories: ").append(toIndentedString(categories)).append("\n");
     sb.append("    keyManagers: ").append(toIndentedString(keyManagers)).append("\n");
     sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
     sb.append("    lastUpdatedTime: ").append(toIndentedString(lastUpdatedTime)).append("\n");
+    sb.append("    gatewayType: ").append(toIndentedString(gatewayType)).append("\n");
     sb.append("    gatewayVendor: ").append(toIndentedString(gatewayVendor)).append("\n");
     sb.append("    asyncTransportProtocols: ").append(toIndentedString(asyncTransportProtocols)).append("\n");
+    sb.append("    egress: ").append(toIndentedString(egress)).append("\n");
+    sb.append("    subtype: ").append(toIndentedString(subtype)).append("\n");
     sb.append("}");
     return sb.toString();
   }

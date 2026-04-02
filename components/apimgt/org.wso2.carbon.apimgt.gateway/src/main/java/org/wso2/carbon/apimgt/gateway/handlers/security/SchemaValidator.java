@@ -19,6 +19,8 @@ package org.wso2.carbon.apimgt.gateway.handlers.security;
 import com.atlassian.oai.validator.OpenApiInteractionValidator;
 import com.atlassian.oai.validator.report.LevelResolver;
 import com.atlassian.oai.validator.report.ValidationReport;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.swagger.util.Json;
 import io.swagger.v3.oas.models.OpenAPI;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -37,6 +39,7 @@ public class SchemaValidator extends AbstractHandler {
     private static final String INTERNAL_ERROR_CODE = "500";
     private static final Log logger = LogFactory.getLog(SchemaValidator.class);
     private static final String HTTP_SC_CODE = "400";
+    public static final String REG_TIME_MODULE = "register.timeModule";
 
     /**
      * Method to generate OpenApiInteractionValidator when the openAPI is provided.
@@ -52,6 +55,7 @@ public class SchemaValidator extends AbstractHandler {
                         LevelResolver.create()
                                 .withLevel("validation.schema.required", ValidationReport.Level.INFO)
                                 .withLevel("validation.response.body.missing", ValidationReport.Level.INFO)
+                                .withLevel("validation.schema.additionalProperties", ValidationReport.Level.IGNORE)
                                 .build())
                 .build();
     }
@@ -59,6 +63,10 @@ public class SchemaValidator extends AbstractHandler {
     @Override
     public boolean handleRequest(MessageContext messageContext) {
 
+        boolean timeModuleRegisterEnabled = Boolean.parseBoolean(System.getProperty(REG_TIME_MODULE, "false"));
+        if (timeModuleRegisterEnabled) {
+            Json.mapper().registerModule(new JavaTimeModule());
+        }
         logger.debug("Validating the API request Body content..");
         OpenAPI openAPI = (OpenAPI) messageContext.getProperty(APIMgtGatewayConstants.OPEN_API_OBJECT);
         if (openAPI != null) {
@@ -66,10 +74,15 @@ public class SchemaValidator extends AbstractHandler {
             OpenAPIRequest request = new OpenAPIRequest(messageContext);
 
             ValidationReport validationReport = validator.validateRequest(request);
+            messageContext.setProperty(APIMgtGatewayConstants.SCHEMA_VALIDATION_REPORT, validationReport);
             if (validationReport.hasErrors()) {
                 StringBuilder finalMessage = new StringBuilder();
                 for (ValidationReport.Message message : validationReport.getMessages()) {
-                    finalMessage.append(message.getMessage()).append(", ");
+                    finalMessage.append(getErrorMessage(message)).append(", ");
+                }
+                // Remove the last comma and space, if present
+                if (finalMessage.length() > 0) {
+                    finalMessage.setLength(finalMessage.length() - 2);
                 }
                 String errMessage = "Schema validation failed in the Request: ";
                 logger.error(errMessage);
@@ -92,7 +105,11 @@ public class SchemaValidator extends AbstractHandler {
             if (validationReport.hasErrors()) {
                 StringBuilder finalMessage = new StringBuilder();
                 for (ValidationReport.Message message : validationReport.getMessages()) {
-                    finalMessage.append(message.getMessage()).append(", ");
+                    finalMessage.append(getErrorMessage(message)).append(", ");
+                }
+                // Remove the last comma and space, if present
+                if (finalMessage.length() > 0) {
+                    finalMessage.setLength(finalMessage.length() - 2);
                 }
                 String errMessage = "Schema validation failed in the Response: ";
                 logger.error(errMessage);
@@ -100,5 +117,17 @@ public class SchemaValidator extends AbstractHandler {
             }
         }
         return true;
+    }
+
+    private String getErrorMessage(ValidationReport.Message message) {
+        if (message.getNestedMessages().isEmpty()) {
+            return message.getMessage();
+        }
+        StringBuilder combinedMessages = new StringBuilder();
+        combinedMessages.append(message.getMessage());
+        for (ValidationReport.Message nestedMessage : message.getNestedMessages()) {
+            combinedMessages.append(", ").append(getErrorMessage(nestedMessage));
+        }
+        return combinedMessages.toString().trim();
     }
 }

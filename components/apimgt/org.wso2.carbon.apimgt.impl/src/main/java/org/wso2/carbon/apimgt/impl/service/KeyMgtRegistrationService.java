@@ -29,6 +29,8 @@ import org.wso2.carbon.apimgt.impl.APIManagerConfigurationService;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.dto.TokenHandlingDto;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.impl.keymgt.KeyMgtNotificationSender;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 import java.util.Arrays;
 import java.util.UUID;
@@ -47,13 +49,14 @@ public final class KeyMgtRegistrationService {
 
     public static void registerDefaultKeyManager(String organization) throws APIManagementException {
 
+        APIManagerConfigurationService apiManagerConfigurationService =
+                ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService();
+        boolean skipCreateResidentKm = Boolean.parseBoolean(apiManagerConfigurationService.getAPIManagerConfiguration()
+                .getFirstProperty(APIConstants.SKIP_CREATE_RESIDENT_KEY_MANAGER));
         synchronized (KeyMgtRegistrationService.class.getName().concat(organization)) {
             ApiMgtDAO instance = ApiMgtDAO.getInstance();
             if (instance.getKeyManagerConfigurationByName(organization, APIConstants.KeyManager.DEFAULT_KEY_MANAGER) ==
-                    null) {
-                APIManagerConfigurationService apiManagerConfigurationService =
-                        ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService();
-
+                    null && !skipCreateResidentKm) {
                 KeyManagerConfigurationDTO keyManagerConfigurationDTO = new KeyManagerConfigurationDTO();
                 keyManagerConfigurationDTO.setName(APIConstants.KeyManager.DEFAULT_KEY_MANAGER);
                 keyManagerConfigurationDTO.setEnabled(true);
@@ -79,6 +82,11 @@ public final class KeyMgtRegistrationService {
                 keyManagerConfigurationDTO.addProperty(APIConstants.KeyManager.TOKEN_FORMAT_STRING,
                         new Gson().toJson(Arrays.asList(tokenHandlingDto)));
                 instance.addKeyManagerConfiguration(keyManagerConfigurationDTO);
+                // Populate the Resident Key Manager details and send the KM creation event
+                KeyManagerConfigurationDTO populatedKMConfigurationDTO = APIUtil.getAndSetDefaultKeyManagerConfiguration(
+                        keyManagerConfigurationDTO);
+                new KeyMgtNotificationSender()
+                        .notify(populatedKMConfigurationDTO, APIConstants.KeyManager.KeyManagerEvent.ACTION_ADD);
             }
         }
     }

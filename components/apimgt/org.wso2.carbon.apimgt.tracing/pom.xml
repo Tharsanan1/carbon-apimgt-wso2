@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -57,12 +57,12 @@
         </dependency>
 
         <dependency>
-            <groupId>io.zipkin.reporter2</groupId>
+            <groupId>org.wso2.orbit.io.zipkin.reporter2</groupId>
             <artifactId>zipkin-sender-okhttp3</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.orbit.io.jaeger</groupId>
-            <artifactId>jaeger-client</artifactId>
+            <artifactId>jaeger-client-jdk21</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.felix</groupId>
@@ -76,6 +76,10 @@
         <dependency>
             <groupId>org.wso2.orbit.io.opentelemetry</groupId>
             <artifactId>opentelemetry-all</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
         </dependency>
     </dependencies>
 
@@ -134,8 +138,8 @@
                             io.opentracing.*; version="${jaeger.client.version}",
                             io.opentracing.*; version="${jaeger.client.version}",
                             io.opentelemetry.*; version="${opentelemetry.all.version}",
-                            zipkin2.reporter.*; version="${zipkin.reporter.version}",
-                            zipkin2.reporter.okhttp3.*; version="${zipkin.sender.okhttp3.version}",
+                            zipkin2.reporter.*; version="${zipkin.reporter.version.range}",
+                            zipkin2.reporter.okhttp3.*; version="${zipkin.reporter.version.range}",
                             org.apache.commons.logging.*; version="${import.package.version.commons.logging}",
                             org.wso2.carbon.apimgt.impl.*; version="${carbon.apimgt.imp.pkg.version}",
                             org.wso2.carbon.utils.*,
@@ -145,9 +149,14 @@
                             *;resolution:=optional
                         </Import-Package>
                         <Export-Package>
+                            zipkin2.reporter.*; version="${zipkin.reporter.version}",
                             !org.wso2.carbon.apimgt.tracing.internal.*,
                             org.wso2.carbon.apimgt.tracing.*;version="${carbon.apimgt.version}"
                         </Export-Package>
+                        <Provide-Capability>
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.tracing.TracingService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.tracing.telemetry.TelemetryService
+                        </Provide-Capability>
                         <DynamicImport-Package>*</DynamicImport-Package>
                     </instructions>
                 </configuration>

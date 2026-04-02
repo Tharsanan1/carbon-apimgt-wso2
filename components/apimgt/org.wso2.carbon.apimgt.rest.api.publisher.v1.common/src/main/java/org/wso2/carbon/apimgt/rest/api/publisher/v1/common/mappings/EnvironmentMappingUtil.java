@@ -20,6 +20,7 @@
 
 package org.wso2.carbon.apimgt.rest.api.publisher.v1.common.mappings;
 
+import org.wso2.carbon.apimgt.api.dto.GatewayVisibilityPermissionConfigurationDTO;
 import org.wso2.carbon.apimgt.api.model.AsyncProtocolEndpoint;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.VHost;
@@ -28,6 +29,7 @@ import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.AdditionalPropertyDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.EnvironmentDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.EnvironmentListDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.EnvironmentPermissionsDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.GatewayEnvironmentProtocolURIDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.VHostDTO;
 
@@ -55,9 +57,23 @@ public class EnvironmentMappingUtil {
         environmentDTO.setName(environment.getName());
         environmentDTO.setDisplayName(environment.getDisplayName());
         environmentDTO.setType(environment.getType());
+        environmentDTO.setGatewayType(environment.getGatewayType());
         environmentDTO.setServerUrl(environment.getServerURL());
+        environmentDTO.setMode(EnvironmentDTO.ModeEnum.valueOf(environment.getMode()));
+        EnvironmentDTO.ModeEnum modeEnum = EnvironmentDTO.ModeEnum.fromValue(environment.getMode());
+        if (modeEnum != null) {
+            environmentDTO.setMode(modeEnum);
+        }
         environmentDTO.setShowInApiConsole(environment.isShowInConsole());
         environmentDTO.setProvider(environment.getProvider());
+        GatewayVisibilityPermissionConfigurationDTO permissions = environment.getPermissions();
+        if (permissions != null) {
+            EnvironmentPermissionsDTO environmentPermissionsDTO = new EnvironmentPermissionsDTO();
+            environmentPermissionsDTO.setPermissionType(EnvironmentPermissionsDTO.PermissionTypeEnum
+                    .fromValue(permissions.getPermissionType()));
+            environmentPermissionsDTO.setRoles(permissions.getRoles());
+            environmentDTO.setPermissions(environmentPermissionsDTO);
+        }
         environmentDTO.setVhosts(environment.getVhosts().stream().map(EnvironmentMappingUtil::fromVHostToVHostDTO)
                 .collect(Collectors.toList()));
         environmentDTO.setAdditionalProperties(fromAdditionalPropertiesToAdditionalPropertiesDTO
@@ -117,7 +133,9 @@ public class EnvironmentMappingUtil {
         vHostDTO.setHttpPort(vHost.getHttpPort());
         vHostDTO.setHttpsPort(vHost.getHttpsPort());
         vHostDTO.setWsPort(vHost.getWsPort());
+        vHostDTO.setWsHost(vHost.getWsHost());
         vHostDTO.setWssPort(vHost.getWssPort());
+        vHostDTO.setWssHost(vHost.getWssHost());
         vHostDTO.setWebsubHttpPort(vHost.getWebsubHttpPort());
         vHostDTO.setWebsubHttpsPort(vHost.getWebsubHttpsPort());
         return vHostDTO;

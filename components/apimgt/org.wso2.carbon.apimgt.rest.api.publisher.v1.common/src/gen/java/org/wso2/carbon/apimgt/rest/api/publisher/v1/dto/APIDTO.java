@@ -14,12 +14,16 @@ import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIInfoAdditionalPropert
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIInfoAdditionalPropertiesMapDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIMaxTpsDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIMonetizationInfoDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIOperationPoliciesDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIOperationsDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIScopeDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIServiceInfoDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIThreatProtectionPoliciesDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.AdvertiseInfoDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MediationPolicyDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.OperationPolicyDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.OrganizationPoliciesDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.SubtypeConfigurationDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.WSDLInfoDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.WebsubSubscriptionConfigurationDTO;
 import javax.validation.constraints.*;
@@ -35,14 +39,15 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import javax.validation.Valid;
 
 
-
 @Scope(name = "apim:api_create", description="", value ="")
 @Scope(name = "apim:api_import_export", description="", value ="")
 @Scope(name = "apim:api_manage", description="", value ="")
+
 public class APIDTO   {
   
     private String id = null;
     private String name = null;
+    private String displayName = null;
     private String description = null;
     private String context = null;
     private String version = null;
@@ -132,6 +137,7 @@ return null;
         }
     }
     private AudienceEnum audience = null;
+    private List<String> audiences = new ArrayList<String>();
     private List<String> transport = new ArrayList<String>();
     @Scope(name = "apim:api_publish", description="", value ="")
     @Scope(name = "apim:api_manage", description="", value ="")
@@ -141,8 +147,12 @@ return null;
     private List<String> policies = new ArrayList<String>();
     @Scope(name = "apim:api_publish", description="", value ="")
     @Scope(name = "apim:api_manage", description="", value ="")
+    private List<OrganizationPoliciesDTO> organizationPolicies = new ArrayList<OrganizationPoliciesDTO>();
+    @Scope(name = "apim:api_publish", description="", value ="")
+    @Scope(name = "apim:api_manage", description="", value ="")
     private String apiThrottlingPolicy = null;
     private String authorizationHeader = null;
+    private String apiKeyHeader = null;
     private List<String> securityScheme = new ArrayList<String>();
     private APIMaxTpsDTO maxTps = null;
 
@@ -184,7 +194,12 @@ return null;
     @Scope(name = "apim:api_manage", description="", value ="")
     private List<String> visibleRoles = new ArrayList<String>();
     private List<String> visibleTenants = new ArrayList<String>();
+    @Scope(name = "apim:api_publish", description="", value ="")
+    @Scope(name = "apim:api_manage", description="", value ="")
+    private List<String> visibleOrganizations = new ArrayList<String>();
     private List<MediationPolicyDTO> mediationPolicies = new ArrayList<MediationPolicyDTO>();
+    private APIOperationPoliciesDTO apiPolicies = null;
+    private List<OperationPolicyDTO> apiHubPolicies = new ArrayList<OperationPolicyDTO>();
 
     @XmlType(name="SubscriptionAvailabilityEnum")
     @XmlEnum(String.class)
@@ -268,10 +283,13 @@ return null;
     private WebsubSubscriptionConfigurationDTO websubSubscriptionConfiguration = null;
     private String workflowStatus = null;
     private String createdTime = null;
+    private String lastUpdatedTimestamp = null;
     @Scope(name = "apim:api_publish", description="", value ="")
     @Scope(name = "apim:api_manage", description="", value ="")
     private String lastUpdatedTime = null;
     private Object endpointConfig = null;
+    private String primaryProductionEndpointId = null;
+    private String primarySandboxEndpointId = null;
 
     @XmlType(name="EndpointImplementationTypeEnum")
     @XmlEnum(String.class)
@@ -305,6 +323,7 @@ return null;
         }
     }
     private EndpointImplementationTypeEnum endpointImplementationType = EndpointImplementationTypeEnum.ENDPOINT;
+    private SubtypeConfigurationDTO subtypeConfiguration = null;
     private List<APIScopeDTO> scopes = new ArrayList<APIScopeDTO>();
     private List<APIOperationsDTO> operations = new ArrayList<APIOperationsDTO>();
     private APIThreatProtectionPoliciesDTO threatProtectionPolicies = null;
@@ -314,8 +333,10 @@ return null;
     private APIServiceInfoDTO serviceInfo = null;
     private AdvertiseInfoDTO advertiseInfo = null;
     private String gatewayVendor = null;
-    private String gatewayType = null;
+    private String gatewayType = "wso2/synapse";
+    private Boolean initiatedFromGateway = false;
     private List<String> asyncTransportProtocols = new ArrayList<String>();
+    private Boolean egress = false;
 
   /**
    * UUID of the api registry artifact 
@@ -346,11 +367,29 @@ return null;
   @ApiModelProperty(example = "PizzaShackAPI", required = true, value = "")
   @JsonProperty("name")
   @NotNull
- @Pattern(regexp="(^[^~!@#;:%^*()+={}|\\\\<>\"',&$\\[\\]/]*$)") @Size(min=1,max=60)  public String getName() {
+ @Pattern(regexp="(^[^~!@#;:%^*()+={}|\\\\<>\"',&$\\[\\]/]*$)") @Size(min=1)  public String getName() {
     return name;
   }
   public void setName(String name) {
     this.name = name;
+  }
+
+  /**
+   * Human-friendly name shown in UI. Length limited to DB column size.
+   **/
+  public APIDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Pizza Shack API", value = "Human-friendly name shown in UI. Length limited to DB column size.")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
   }
 
   /**
@@ -417,7 +456,7 @@ return null;
   
   @ApiModelProperty(example = "admin", value = "If the provider value is not given user invoking the api will be used as the provider. ")
   @JsonProperty("provider")
- @Size(max=50)  public String getProvider() {
+ @Size(max=200)  public String getProvider() {
     return provider;
   }
   public void setProvider(String provider) {
@@ -613,22 +652,22 @@ return null;
     this.enableSchemaValidation = enableSchemaValidation;
   }
 
-    /**
-     **/
-    public APIDTO enableSubscriberVerification(Boolean enableSubscriberVerification) {
-        this.enableSubscriberVerification = enableSubscriberVerification;
-        return this;
-    }
+  /**
+   **/
+  public APIDTO enableSubscriberVerification(Boolean enableSubscriberVerification) {
+    this.enableSubscriberVerification = enableSubscriberVerification;
+    return this;
+  }
 
-    @ApiModelProperty(example = "false", value = "")
-    @JsonProperty("enableSubscriberVerification")
-    public Boolean isEnableSubscriberVerification() {
-        return enableSubscriberVerification;
-    }
-
-    public void setEnableSubscriberVerification(Boolean enableSubscriberVerification) {
-        this.enableSubscriberVerification = enableSubscriberVerification;
-    }
+  
+  @ApiModelProperty(example = "false", value = "")
+  @JsonProperty("enableSubscriberVerification")
+  public Boolean isEnableSubscriberVerification() {
+    return enableSubscriberVerification;
+  }
+  public void setEnableSubscriberVerification(Boolean enableSubscriberVerification) {
+    this.enableSubscriberVerification = enableSubscriberVerification;
+  }
 
   /**
    * The api creation type to be used. Accepted values are HTTP, WS, SOAPTOREST, GRAPHQL, WEBSUB, SSE, WEBHOOK, ASYNC
@@ -664,6 +703,24 @@ return null;
   }
   public void setAudience(AudienceEnum audience) {
     this.audience = audience;
+  }
+
+  /**
+   * The audiences of the API for jwt validation. Accepted values are any String values
+   **/
+  public APIDTO audiences(List<String> audiences) {
+    this.audiences = audiences;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "The audiences of the API for jwt validation. Accepted values are any String values")
+  @JsonProperty("audiences")
+  public List<String> getAudiences() {
+    return audiences;
+  }
+  public void setAudiences(List<String> audiences) {
+    this.audiences = audiences;
   }
 
   /**
@@ -719,6 +776,24 @@ return null;
   }
 
   /**
+   **/
+  public APIDTO organizationPolicies(List<OrganizationPoliciesDTO> organizationPolicies) {
+    this.organizationPolicies = organizationPolicies;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("organizationPolicies")
+  public List<OrganizationPoliciesDTO> getOrganizationPolicies() {
+    return organizationPolicies;
+  }
+  public void setOrganizationPolicies(List<OrganizationPoliciesDTO> organizationPolicies) {
+    this.organizationPolicies = organizationPolicies;
+  }
+
+  /**
    * The API level throttling policy selected for the particular API
    **/
   public APIDTO apiThrottlingPolicy(String apiThrottlingPolicy) {
@@ -752,6 +827,24 @@ return null;
   }
   public void setAuthorizationHeader(String authorizationHeader) {
     this.authorizationHeader = authorizationHeader;
+  }
+
+  /**
+   * Name of the API key header used for invoking the API. If it is not set, default value &#x60;apiKey&#x60; will be used. 
+   **/
+  public APIDTO apiKeyHeader(String apiKeyHeader) {
+    this.apiKeyHeader = apiKeyHeader;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "apiKey", value = "Name of the API key header used for invoking the API. If it is not set, default value `apiKey` will be used. ")
+  @JsonProperty("apiKeyHeader")
+ @Pattern(regexp="(^[^~!@#;:%^*()+={}|\\\\<>\"',&$\\s+]*$)")  public String getApiKeyHeader() {
+    return apiKeyHeader;
+  }
+  public void setApiKeyHeader(String apiKeyHeader) {
+    this.apiKeyHeader = apiKeyHeader;
   }
 
   /**
@@ -844,6 +937,24 @@ return null;
   }
 
   /**
+   * The organizations that are able to access the API in Developer Portal
+   **/
+  public APIDTO visibleOrganizations(List<String> visibleOrganizations) {
+    this.visibleOrganizations = visibleOrganizations;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "[]", value = "The organizations that are able to access the API in Developer Portal")
+  @JsonProperty("visibleOrganizations")
+  public List<String> getVisibleOrganizations() {
+    return visibleOrganizations;
+  }
+  public void setVisibleOrganizations(List<String> visibleOrganizations) {
+    this.visibleOrganizations = visibleOrganizations;
+  }
+
+  /**
    **/
   public APIDTO mediationPolicies(List<MediationPolicyDTO> mediationPolicies) {
     this.mediationPolicies = mediationPolicies;
@@ -859,6 +970,43 @@ return null;
   }
   public void setMediationPolicies(List<MediationPolicyDTO> mediationPolicies) {
     this.mediationPolicies = mediationPolicies;
+  }
+
+  /**
+   **/
+  public APIDTO apiPolicies(APIOperationPoliciesDTO apiPolicies) {
+    this.apiPolicies = apiPolicies;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("apiPolicies")
+  public APIOperationPoliciesDTO getApiPolicies() {
+    return apiPolicies;
+  }
+  public void setApiPolicies(APIOperationPoliciesDTO apiPolicies) {
+    this.apiPolicies = apiPolicies;
+  }
+
+  /**
+   * Policy Hub policies at API level (sibling to apiPolicies; not persisted to operation policy mapping).
+   **/
+  public APIDTO apiHubPolicies(List<OperationPolicyDTO> apiHubPolicies) {
+    this.apiHubPolicies = apiHubPolicies;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Policy Hub policies at API level (sibling to apiPolicies; not persisted to operation policy mapping).")
+      @Valid
+  @JsonProperty("apiHubPolicies")
+  public List<OperationPolicyDTO> getApiHubPolicies() {
+    return apiHubPolicies;
+  }
+  public void setApiHubPolicies(List<OperationPolicyDTO> apiHubPolicies) {
+    this.apiHubPolicies = apiHubPolicies;
   }
 
   /**
@@ -1077,6 +1225,23 @@ return null;
 
   /**
    **/
+  public APIDTO lastUpdatedTimestamp(String lastUpdatedTimestamp) {
+    this.lastUpdatedTimestamp = lastUpdatedTimestamp;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("lastUpdatedTimestamp")
+  public String getLastUpdatedTimestamp() {
+    return lastUpdatedTimestamp;
+  }
+  public void setLastUpdatedTimestamp(String lastUpdatedTimestamp) {
+    this.lastUpdatedTimestamp = lastUpdatedTimestamp;
+  }
+
+  /**
+   **/
   public APIDTO lastUpdatedTime(String lastUpdatedTime) {
     this.lastUpdatedTime = lastUpdatedTime;
     return this;
@@ -1093,7 +1258,7 @@ return null;
   }
 
   /**
-   * Endpoint configuration of the API. This can be used to provide different types of endpoints including Simple REST Endpoints, Loadbalanced and Failover.  &#x60;Simple REST Endpoint&#x60;   {     \&quot;endpoint_type\&quot;: \&quot;http\&quot;,     \&quot;sandbox_endpoints\&quot;:       {        \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v1/api/\&quot;     },     \&quot;production_endpoints\&quot;:       {        \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v1/api/\&quot;     }   }  &#x60;Loadbalanced Endpoint&#x60;    {     \&quot;endpoint_type\&quot;: \&quot;load_balance\&quot;,     \&quot;algoCombo\&quot;: \&quot;org.apache.synapse.endpoints.algorithms.RoundRobin\&quot;,     \&quot;sessionManagement\&quot;: \&quot;\&quot;,     \&quot;sandbox_endpoints\&quot;:       [                 {           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v1/api/1\&quot;        },                 {           \&quot;endpoint_type\&quot;: \&quot;http\&quot;,           \&quot;template_not_supported\&quot;: false,           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v1/api/2\&quot;        }     ],     \&quot;production_endpoints\&quot;:       [                 {           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v1/api/3\&quot;        },                 {           \&quot;endpoint_type\&quot;: \&quot;http\&quot;,           \&quot;template_not_supported\&quot;: false,           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v1/api/4\&quot;        }     ],     \&quot;sessionTimeOut\&quot;: \&quot;\&quot;,     \&quot;algoClassName\&quot;: \&quot;org.apache.synapse.endpoints.algorithms.RoundRobin\&quot;   }  &#x60;Failover Endpoint&#x60;    {     \&quot;production_failovers\&quot;:[        {           \&quot;endpoint_type\&quot;:\&quot;http\&quot;,           \&quot;template_not_supported\&quot;:false,           \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v1/api/1\&quot;        }     ],     \&quot;endpoint_type\&quot;:\&quot;failover\&quot;,     \&quot;sandbox_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v1/api/2\&quot;     },     \&quot;production_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v1/api/3\&quot;     },     \&quot;sandbox_failovers\&quot;:[        {           \&quot;endpoint_type\&quot;:\&quot;http\&quot;,           \&quot;template_not_supported\&quot;:false,           \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v1/api/4\&quot;        }     ]   }  &#x60;Default Endpoint&#x60;    {     \&quot;endpoint_type\&quot;:\&quot;default\&quot;,     \&quot;sandbox_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;default\&quot;     },     \&quot;production_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;default\&quot;     }   }  &#x60;Endpoint from Endpoint Registry&#x60;   {     \&quot;endpoint_type\&quot;: \&quot;Registry\&quot;,     \&quot;endpoint_id\&quot;: \&quot;{registry-name:entry-name:version}\&quot;,   } 
+   * Endpoint configuration of the API. This can be used to provide different types of endpoints including Simple REST Endpoints, Loadbalanced and Failover.  &#x60;Simple REST Endpoint&#x60;    {     \&quot;endpoint_type\&quot;: \&quot;http\&quot;,     \&quot;sandbox_endpoints\&quot;:       {        \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v3/api/\&quot;     },     \&quot;production_endpoints\&quot;:       {        \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v3/api/\&quot;     }   }  &#x60;Loadbalanced Endpoint&#x60;    {     \&quot;endpoint_type\&quot;: \&quot;load_balance\&quot;,     \&quot;algoCombo\&quot;: \&quot;org.apache.synapse.endpoints.algorithms.RoundRobin\&quot;,     \&quot;sessionManagement\&quot;: \&quot;\&quot;,     \&quot;sandbox_endpoints\&quot;:       [                 {           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v3/api/1\&quot;        },                 {           \&quot;endpoint_type\&quot;: \&quot;http\&quot;,           \&quot;template_not_supported\&quot;: false,           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v3/api/2\&quot;        }     ],     \&quot;production_endpoints\&quot;:       [                 {           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v3/api/3\&quot;        },                 {           \&quot;endpoint_type\&quot;: \&quot;http\&quot;,           \&quot;template_not_supported\&quot;: false,           \&quot;url\&quot;: \&quot;https://localhost:9443/am/sample/pizzashack/v3/api/4\&quot;        }     ],     \&quot;sessionTimeOut\&quot;: \&quot;\&quot;,     \&quot;algoClassName\&quot;: \&quot;org.apache.synapse.endpoints.algorithms.RoundRobin\&quot;   }  &#x60;Failover Endpoint&#x60;    {     \&quot;production_failovers\&quot;:[        {           \&quot;endpoint_type\&quot;:\&quot;http\&quot;,           \&quot;template_not_supported\&quot;:false,           \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v3/api/1\&quot;        }     ],     \&quot;endpoint_type\&quot;:\&quot;failover\&quot;,     \&quot;sandbox_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v3/api/2\&quot;     },     \&quot;production_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v3/api/3\&quot;     },     \&quot;sandbox_failovers\&quot;:[        {           \&quot;endpoint_type\&quot;:\&quot;http\&quot;,           \&quot;template_not_supported\&quot;:false,           \&quot;url\&quot;:\&quot;https://localhost:9443/am/sample/pizzashack/v3/api/4\&quot;        }     ]   }  &#x60;Default Endpoint&#x60;    {     \&quot;endpoint_type\&quot;:\&quot;default\&quot;,     \&quot;sandbox_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;default\&quot;     },     \&quot;production_endpoints\&quot;:{        \&quot;url\&quot;:\&quot;default\&quot;     }   }  &#x60;Endpoint from Endpoint Registry&#x60;    {     \&quot;endpoint_type\&quot;: \&quot;Registry\&quot;,     \&quot;endpoint_id\&quot;: \&quot;{registry-name:entry-name:version}\&quot;,   }  &#x60;AWS Lambda as Endpoint&#x60;    {     \&quot;endpoint_type\&quot;:\&quot;awslambda\&quot;,     \&quot;access_method\&quot;:\&quot;role-supplied|stored\&quot;,     \&quot;assume_role\&quot;:true|false,     \&quot;amznAccessKey\&quot;:\&quot;access_method&#x3D;&#x3D;stored?&lt;accessKey&gt;:&lt;empty&gt;\&quot;,     \&quot;amznSecretKey\&quot;:\&quot;access_method&#x3D;&#x3D;stored?&lt;secretKey&gt;:&lt;empty&gt;\&quot;,     \&quot;amznRegion\&quot;:\&quot;access_method&#x3D;&#x3D;stored?&lt;region&gt;:&lt;empty&gt;\&quot;,     \&quot;amznRoleArn\&quot;:\&quot;assume_role&#x3D;&#x3D;true?&lt;roleArn&gt;:&lt;empty&gt;\&quot;,     \&quot;amznRoleSessionName\&quot;:\&quot;assume_role&#x3D;&#x3D;true?&lt;roleSessionName&gt;:&lt;empty&gt;\&quot;,     \&quot;amznRoleRegion\&quot;:\&quot;assume_role&#x3D;&#x3D;true?&lt;roleRegion&gt;:&lt;empty&gt;\&quot;   } 
    **/
   public APIDTO endpointConfig(Object endpointConfig) {
     this.endpointConfig = endpointConfig;
@@ -1101,7 +1266,7 @@ return null;
   }
 
   
-  @ApiModelProperty(example = "{\"endpoint_type\":\"http\",\"sandbox_endpoints\":{\"url\":\"https://localhost:9443/am/sample/pizzashack/v1/api/\"},\"production_endpoints\":{\"url\":\"https://localhost:9443/am/sample/pizzashack/v1/api/\"}}", value = "Endpoint configuration of the API. This can be used to provide different types of endpoints including Simple REST Endpoints, Loadbalanced and Failover.  `Simple REST Endpoint`   {     \"endpoint_type\": \"http\",     \"sandbox_endpoints\":       {        \"url\": \"https://localhost:9443/am/sample/pizzashack/v1/api/\"     },     \"production_endpoints\":       {        \"url\": \"https://localhost:9443/am/sample/pizzashack/v1/api/\"     }   }  `Loadbalanced Endpoint`    {     \"endpoint_type\": \"load_balance\",     \"algoCombo\": \"org.apache.synapse.endpoints.algorithms.RoundRobin\",     \"sessionManagement\": \"\",     \"sandbox_endpoints\":       [                 {           \"url\": \"https://localhost:9443/am/sample/pizzashack/v1/api/1\"        },                 {           \"endpoint_type\": \"http\",           \"template_not_supported\": false,           \"url\": \"https://localhost:9443/am/sample/pizzashack/v1/api/2\"        }     ],     \"production_endpoints\":       [                 {           \"url\": \"https://localhost:9443/am/sample/pizzashack/v1/api/3\"        },                 {           \"endpoint_type\": \"http\",           \"template_not_supported\": false,           \"url\": \"https://localhost:9443/am/sample/pizzashack/v1/api/4\"        }     ],     \"sessionTimeOut\": \"\",     \"algoClassName\": \"org.apache.synapse.endpoints.algorithms.RoundRobin\"   }  `Failover Endpoint`    {     \"production_failovers\":[        {           \"endpoint_type\":\"http\",           \"template_not_supported\":false,           \"url\":\"https://localhost:9443/am/sample/pizzashack/v1/api/1\"        }     ],     \"endpoint_type\":\"failover\",     \"sandbox_endpoints\":{        \"url\":\"https://localhost:9443/am/sample/pizzashack/v1/api/2\"     },     \"production_endpoints\":{        \"url\":\"https://localhost:9443/am/sample/pizzashack/v1/api/3\"     },     \"sandbox_failovers\":[        {           \"endpoint_type\":\"http\",           \"template_not_supported\":false,           \"url\":\"https://localhost:9443/am/sample/pizzashack/v1/api/4\"        }     ]   }  `Default Endpoint`    {     \"endpoint_type\":\"default\",     \"sandbox_endpoints\":{        \"url\":\"default\"     },     \"production_endpoints\":{        \"url\":\"default\"     }   }  `Endpoint from Endpoint Registry`   {     \"endpoint_type\": \"Registry\",     \"endpoint_id\": \"{registry-name:entry-name:version}\",   } ")
+  @ApiModelProperty(example = "{\"endpoint_type\":\"http\",\"sandbox_endpoints\":{\"url\":\"https://localhost:9443/am/sample/pizzashack/v3/api/\"},\"production_endpoints\":{\"url\":\"https://localhost:9443/am/sample/pizzashack/v3/api/\"}}", value = "Endpoint configuration of the API. This can be used to provide different types of endpoints including Simple REST Endpoints, Loadbalanced and Failover.  `Simple REST Endpoint`    {     \"endpoint_type\": \"http\",     \"sandbox_endpoints\":       {        \"url\": \"https://localhost:9443/am/sample/pizzashack/v3/api/\"     },     \"production_endpoints\":       {        \"url\": \"https://localhost:9443/am/sample/pizzashack/v3/api/\"     }   }  `Loadbalanced Endpoint`    {     \"endpoint_type\": \"load_balance\",     \"algoCombo\": \"org.apache.synapse.endpoints.algorithms.RoundRobin\",     \"sessionManagement\": \"\",     \"sandbox_endpoints\":       [                 {           \"url\": \"https://localhost:9443/am/sample/pizzashack/v3/api/1\"        },                 {           \"endpoint_type\": \"http\",           \"template_not_supported\": false,           \"url\": \"https://localhost:9443/am/sample/pizzashack/v3/api/2\"        }     ],     \"production_endpoints\":       [                 {           \"url\": \"https://localhost:9443/am/sample/pizzashack/v3/api/3\"        },                 {           \"endpoint_type\": \"http\",           \"template_not_supported\": false,           \"url\": \"https://localhost:9443/am/sample/pizzashack/v3/api/4\"        }     ],     \"sessionTimeOut\": \"\",     \"algoClassName\": \"org.apache.synapse.endpoints.algorithms.RoundRobin\"   }  `Failover Endpoint`    {     \"production_failovers\":[        {           \"endpoint_type\":\"http\",           \"template_not_supported\":false,           \"url\":\"https://localhost:9443/am/sample/pizzashack/v3/api/1\"        }     ],     \"endpoint_type\":\"failover\",     \"sandbox_endpoints\":{        \"url\":\"https://localhost:9443/am/sample/pizzashack/v3/api/2\"     },     \"production_endpoints\":{        \"url\":\"https://localhost:9443/am/sample/pizzashack/v3/api/3\"     },     \"sandbox_failovers\":[        {           \"endpoint_type\":\"http\",           \"template_not_supported\":false,           \"url\":\"https://localhost:9443/am/sample/pizzashack/v3/api/4\"        }     ]   }  `Default Endpoint`    {     \"endpoint_type\":\"default\",     \"sandbox_endpoints\":{        \"url\":\"default\"     },     \"production_endpoints\":{        \"url\":\"default\"     }   }  `Endpoint from Endpoint Registry`    {     \"endpoint_type\": \"Registry\",     \"endpoint_id\": \"{registry-name:entry-name:version}\",   }  `AWS Lambda as Endpoint`    {     \"endpoint_type\":\"awslambda\",     \"access_method\":\"role-supplied|stored\",     \"assume_role\":true|false,     \"amznAccessKey\":\"access_method==stored?<accessKey>:<empty>\",     \"amznSecretKey\":\"access_method==stored?<secretKey>:<empty>\",     \"amznRegion\":\"access_method==stored?<region>:<empty>\",     \"amznRoleArn\":\"assume_role==true?<roleArn>:<empty>\",     \"amznRoleSessionName\":\"assume_role==true?<roleSessionName>:<empty>\",     \"amznRoleRegion\":\"assume_role==true?<roleRegion>:<empty>\"   } ")
       @Valid
   @JsonProperty("endpointConfig")
   public Object getEndpointConfig() {
@@ -1109,6 +1274,40 @@ return null;
   }
   public void setEndpointConfig(Object endpointConfig) {
     this.endpointConfig = endpointConfig;
+  }
+
+  /**
+   **/
+  public APIDTO primaryProductionEndpointId(String primaryProductionEndpointId) {
+    this.primaryProductionEndpointId = primaryProductionEndpointId;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "13092607-ed01-4fa1-bc64-5da0e2abe92c", value = "")
+  @JsonProperty("primaryProductionEndpointId")
+  public String getPrimaryProductionEndpointId() {
+    return primaryProductionEndpointId;
+  }
+  public void setPrimaryProductionEndpointId(String primaryProductionEndpointId) {
+    this.primaryProductionEndpointId = primaryProductionEndpointId;
+  }
+
+  /**
+   **/
+  public APIDTO primarySandboxEndpointId(String primarySandboxEndpointId) {
+    this.primarySandboxEndpointId = primarySandboxEndpointId;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "13092607-ed01-4fa1-bc64-5da0e2abe92c", value = "")
+  @JsonProperty("primarySandboxEndpointId")
+  public String getPrimarySandboxEndpointId() {
+    return primarySandboxEndpointId;
+  }
+  public void setPrimarySandboxEndpointId(String primarySandboxEndpointId) {
+    this.primarySandboxEndpointId = primarySandboxEndpointId;
   }
 
   /**
@@ -1126,6 +1325,24 @@ return null;
   }
   public void setEndpointImplementationType(EndpointImplementationTypeEnum endpointImplementationType) {
     this.endpointImplementationType = endpointImplementationType;
+  }
+
+  /**
+   **/
+  public APIDTO subtypeConfiguration(SubtypeConfigurationDTO subtypeConfiguration) {
+    this.subtypeConfiguration = subtypeConfiguration;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("subtypeConfiguration")
+  public SubtypeConfigurationDTO getSubtypeConfiguration() {
+    return subtypeConfiguration;
+  }
+  public void setSubtypeConfiguration(SubtypeConfigurationDTO subtypeConfiguration) {
+    this.subtypeConfiguration = subtypeConfiguration;
   }
 
   /**
@@ -1263,7 +1480,7 @@ return null;
   }
 
   
-  @ApiModelProperty(example = "wso2", value = "")
+  @ApiModelProperty(example = "wso2 external", value = "")
   @JsonProperty("gatewayVendor")
   public String getGatewayVendor() {
     return gatewayVendor;
@@ -1273,7 +1490,7 @@ return null;
   }
 
   /**
-   * The gateway type selected for the API policies. Accepts one of the following. wso2/synapse, wso2/choreo-connect.
+   * The gateway type selected for the API policies. Accepts one of the following. wso2/synapse, wso2/apk.
    **/
   public APIDTO gatewayType(String gatewayType) {
     this.gatewayType = gatewayType;
@@ -1281,13 +1498,31 @@ return null;
   }
 
   
-  @ApiModelProperty(example = "wso2/synapse", value = "The gateway type selected for the API policies. Accepts one of the following. wso2/synapse, wso2/choreo-connect.")
+  @ApiModelProperty(example = "wso2/synapse wso2/apk AWS", value = "The gateway type selected for the API policies. Accepts one of the following. wso2/synapse, wso2/apk.")
   @JsonProperty("gatewayType")
   public String getGatewayType() {
     return gatewayType;
   }
   public void setGatewayType(String gatewayType) {
     this.gatewayType = gatewayType;
+  }
+
+  /**
+   * Whether the API is initiated from the gateway or not. This is used to identify whether the API is created from the publisher or discovered from the gateway. 
+   **/
+  public APIDTO initiatedFromGateway(Boolean initiatedFromGateway) {
+    this.initiatedFromGateway = initiatedFromGateway;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "Whether the API is initiated from the gateway or not. This is used to identify whether the API is created from the publisher or discovered from the gateway. ")
+  @JsonProperty("initiatedFromGateway")
+  public Boolean isInitiatedFromGateway() {
+    return initiatedFromGateway;
+  }
+  public void setInitiatedFromGateway(Boolean initiatedFromGateway) {
+    this.initiatedFromGateway = initiatedFromGateway;
   }
 
   /**
@@ -1308,6 +1543,24 @@ return null;
     this.asyncTransportProtocols = asyncTransportProtocols;
   }
 
+  /**
+   * Whether the API is EGRESS or not
+   **/
+  public APIDTO egress(Boolean egress) {
+    this.egress = egress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Whether the API is EGRESS or not")
+  @JsonProperty("egress")
+  public Boolean isEgress() {
+    return egress;
+  }
+  public void setEgress(Boolean egress) {
+    this.egress = egress;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -1320,6 +1573,7 @@ return null;
     APIDTO API = (APIDTO) o;
     return Objects.equals(id, API.id) &&
         Objects.equals(name, API.name) &&
+        Objects.equals(displayName, API.displayName) &&
         Objects.equals(description, API.description) &&
         Objects.equals(context, API.context) &&
         Objects.equals(version, API.version) &&
@@ -1338,17 +1592,23 @@ return null;
         Objects.equals(enableSubscriberVerification, API.enableSubscriberVerification) &&
         Objects.equals(type, API.type) &&
         Objects.equals(audience, API.audience) &&
+        Objects.equals(audiences, API.audiences) &&
         Objects.equals(transport, API.transport) &&
         Objects.equals(tags, API.tags) &&
         Objects.equals(policies, API.policies) &&
+        Objects.equals(organizationPolicies, API.organizationPolicies) &&
         Objects.equals(apiThrottlingPolicy, API.apiThrottlingPolicy) &&
         Objects.equals(authorizationHeader, API.authorizationHeader) &&
+        Objects.equals(apiKeyHeader, API.apiKeyHeader) &&
         Objects.equals(securityScheme, API.securityScheme) &&
         Objects.equals(maxTps, API.maxTps) &&
         Objects.equals(visibility, API.visibility) &&
         Objects.equals(visibleRoles, API.visibleRoles) &&
         Objects.equals(visibleTenants, API.visibleTenants) &&
+        Objects.equals(visibleOrganizations, API.visibleOrganizations) &&
         Objects.equals(mediationPolicies, API.mediationPolicies) &&
+        Objects.equals(apiPolicies, API.apiPolicies) &&
+        Objects.equals(apiHubPolicies, API.apiHubPolicies) &&
         Objects.equals(subscriptionAvailability, API.subscriptionAvailability) &&
         Objects.equals(subscriptionAvailableTenants, API.subscriptionAvailableTenants) &&
         Objects.equals(additionalProperties, API.additionalProperties) &&
@@ -1361,9 +1621,13 @@ return null;
         Objects.equals(websubSubscriptionConfiguration, API.websubSubscriptionConfiguration) &&
         Objects.equals(workflowStatus, API.workflowStatus) &&
         Objects.equals(createdTime, API.createdTime) &&
+        Objects.equals(lastUpdatedTimestamp, API.lastUpdatedTimestamp) &&
         Objects.equals(lastUpdatedTime, API.lastUpdatedTime) &&
         Objects.equals(endpointConfig, API.endpointConfig) &&
+        Objects.equals(primaryProductionEndpointId, API.primaryProductionEndpointId) &&
+        Objects.equals(primarySandboxEndpointId, API.primarySandboxEndpointId) &&
         Objects.equals(endpointImplementationType, API.endpointImplementationType) &&
+        Objects.equals(subtypeConfiguration, API.subtypeConfiguration) &&
         Objects.equals(scopes, API.scopes) &&
         Objects.equals(operations, API.operations) &&
         Objects.equals(threatProtectionPolicies, API.threatProtectionPolicies) &&
@@ -1373,12 +1637,14 @@ return null;
         Objects.equals(advertiseInfo, API.advertiseInfo) &&
         Objects.equals(gatewayVendor, API.gatewayVendor) &&
         Objects.equals(gatewayType, API.gatewayType) &&
-        Objects.equals(asyncTransportProtocols, API.asyncTransportProtocols);
+        Objects.equals(initiatedFromGateway, API.initiatedFromGateway) &&
+        Objects.equals(asyncTransportProtocols, API.asyncTransportProtocols) &&
+        Objects.equals(egress, API.egress);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, description, context, version, provider, lifeCycleStatus, wsdlInfo, wsdlUrl, responseCachingEnabled, cacheTimeout, hasThumbnail, isDefaultVersion, isRevision, revisionedApiId, revisionId, enableSchemaValidation, enableSubscriberVerification, type, audience, transport, tags, policies, apiThrottlingPolicy, authorizationHeader, securityScheme, maxTps, visibility, visibleRoles, visibleTenants, mediationPolicies, subscriptionAvailability, subscriptionAvailableTenants, additionalProperties, additionalPropertiesMap, monetization, accessControl, accessControlRoles, businessInformation, corsConfiguration, websubSubscriptionConfiguration, workflowStatus, createdTime, lastUpdatedTime, endpointConfig, endpointImplementationType, scopes, operations, threatProtectionPolicies, categories, keyManagers, serviceInfo, advertiseInfo, gatewayVendor, gatewayType, asyncTransportProtocols);
+    return Objects.hash(id, name, displayName, description, context, version, provider, lifeCycleStatus, wsdlInfo, wsdlUrl, responseCachingEnabled, cacheTimeout, hasThumbnail, isDefaultVersion, isRevision, revisionedApiId, revisionId, enableSchemaValidation, enableSubscriberVerification, type, audience, audiences, transport, tags, policies, organizationPolicies, apiThrottlingPolicy, authorizationHeader, apiKeyHeader, securityScheme, maxTps, visibility, visibleRoles, visibleTenants, visibleOrganizations, mediationPolicies, apiPolicies, apiHubPolicies, subscriptionAvailability, subscriptionAvailableTenants, additionalProperties, additionalPropertiesMap, monetization, accessControl, accessControlRoles, businessInformation, corsConfiguration, websubSubscriptionConfiguration, workflowStatus, createdTime, lastUpdatedTimestamp, lastUpdatedTime, endpointConfig, primaryProductionEndpointId, primarySandboxEndpointId, endpointImplementationType, subtypeConfiguration, scopes, operations, threatProtectionPolicies, categories, keyManagers, serviceInfo, advertiseInfo, gatewayVendor, gatewayType, initiatedFromGateway, asyncTransportProtocols, egress);
   }
 
   @Override
@@ -1388,6 +1654,7 @@ return null;
     
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
@@ -1406,17 +1673,23 @@ return null;
     sb.append("    enableSubscriberVerification: ").append(toIndentedString(enableSubscriberVerification)).append("\n");
     sb.append("    type: ").append(toIndentedString(type)).append("\n");
     sb.append("    audience: ").append(toIndentedString(audience)).append("\n");
+    sb.append("    audiences: ").append(toIndentedString(audiences)).append("\n");
     sb.append("    transport: ").append(toIndentedString(transport)).append("\n");
     sb.append("    tags: ").append(toIndentedString(tags)).append("\n");
     sb.append("    policies: ").append(toIndentedString(policies)).append("\n");
+    sb.append("    organizationPolicies: ").append(toIndentedString(organizationPolicies)).append("\n");
     sb.append("    apiThrottlingPolicy: ").append(toIndentedString(apiThrottlingPolicy)).append("\n");
     sb.append("    authorizationHeader: ").append(toIndentedString(authorizationHeader)).append("\n");
+    sb.append("    apiKeyHeader: ").append(toIndentedString(apiKeyHeader)).append("\n");
     sb.append("    securityScheme: ").append(toIndentedString(securityScheme)).append("\n");
     sb.append("    maxTps: ").append(toIndentedString(maxTps)).append("\n");
     sb.append("    visibility: ").append(toIndentedString(visibility)).append("\n");
     sb.append("    visibleRoles: ").append(toIndentedString(visibleRoles)).append("\n");
     sb.append("    visibleTenants: ").append(toIndentedString(visibleTenants)).append("\n");
+    sb.append("    visibleOrganizations: ").append(toIndentedString(visibleOrganizations)).append("\n");
     sb.append("    mediationPolicies: ").append(toIndentedString(mediationPolicies)).append("\n");
+    sb.append("    apiPolicies: ").append(toIndentedString(apiPolicies)).append("\n");
+    sb.append("    apiHubPolicies: ").append(toIndentedString(apiHubPolicies)).append("\n");
     sb.append("    subscriptionAvailability: ").append(toIndentedString(subscriptionAvailability)).append("\n");
     sb.append("    subscriptionAvailableTenants: ").append(toIndentedString(subscriptionAvailableTenants)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
@@ -1429,9 +1702,13 @@ return null;
     sb.append("    websubSubscriptionConfiguration: ").append(toIndentedString(websubSubscriptionConfiguration)).append("\n");
     sb.append("    workflowStatus: ").append(toIndentedString(workflowStatus)).append("\n");
     sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
+    sb.append("    lastUpdatedTimestamp: ").append(toIndentedString(lastUpdatedTimestamp)).append("\n");
     sb.append("    lastUpdatedTime: ").append(toIndentedString(lastUpdatedTime)).append("\n");
     sb.append("    endpointConfig: ").append(toIndentedString(endpointConfig)).append("\n");
+    sb.append("    primaryProductionEndpointId: ").append(toIndentedString(primaryProductionEndpointId)).append("\n");
+    sb.append("    primarySandboxEndpointId: ").append(toIndentedString(primarySandboxEndpointId)).append("\n");
     sb.append("    endpointImplementationType: ").append(toIndentedString(endpointImplementationType)).append("\n");
+    sb.append("    subtypeConfiguration: ").append(toIndentedString(subtypeConfiguration)).append("\n");
     sb.append("    scopes: ").append(toIndentedString(scopes)).append("\n");
     sb.append("    operations: ").append(toIndentedString(operations)).append("\n");
     sb.append("    threatProtectionPolicies: ").append(toIndentedString(threatProtectionPolicies)).append("\n");
@@ -1441,7 +1718,9 @@ return null;
     sb.append("    advertiseInfo: ").append(toIndentedString(advertiseInfo)).append("\n");
     sb.append("    gatewayVendor: ").append(toIndentedString(gatewayVendor)).append("\n");
     sb.append("    gatewayType: ").append(toIndentedString(gatewayType)).append("\n");
+    sb.append("    initiatedFromGateway: ").append(toIndentedString(initiatedFromGateway)).append("\n");
     sb.append("    asyncTransportProtocols: ").append(toIndentedString(asyncTransportProtocols)).append("\n");
+    sb.append("    egress: ").append(toIndentedString(egress)).append("\n");
     sb.append("}");
     return sb.toString();
   }
@@ -1457,3 +1736,4 @@ return null;
     return o.toString().replace("\n", "\n    ");
   }
 }
+

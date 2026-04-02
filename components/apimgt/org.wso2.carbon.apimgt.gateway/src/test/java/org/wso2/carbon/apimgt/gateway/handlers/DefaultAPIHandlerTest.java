@@ -29,8 +29,11 @@ import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
+import org.wso2.carbon.apimgt.impl.dto.ExtendedJWTConfigurationDto;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
 import org.wso2.carbon.inbound.endpoint.protocol.websocket.InboundWebsocketConstants;
 
@@ -38,14 +41,27 @@ import java.util.Set;
 import java.util.TreeMap;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ApiUtils.class, Utils.class, GatewayUtils.class})
+@PrepareForTest({ApiUtils.class, Utils.class, GatewayUtils.class, ServiceReferenceHolder.class, APIManagerConfiguration.class, ExtendedJWTConfigurationDto.class})
 public class DefaultAPIHandlerTest {
+
+    private ServiceReferenceHolder serviceReferenceHolder;
+    private APIManagerConfiguration apiManagerConfiguration;
+    private ExtendedJWTConfigurationDto extendedJWTConfigurationDto;
 
     @Before
     public void init() {
         PowerMockito.mockStatic(ApiUtils.class);
         PowerMockito.mockStatic(Utils.class);
         PowerMockito.mockStatic(GatewayUtils.class);
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
+        apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
+        extendedJWTConfigurationDto = Mockito.mock(ExtendedJWTConfigurationDto.class);
+        Mockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
+        Mockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
+        Mockito.when(apiManagerConfiguration.getJwtConfigurationDto()).thenReturn(extendedJWTConfigurationDto);
+        Mockito.when(extendedJWTConfigurationDto.isJWKSApiEnabled()).thenReturn(true);
+
     }
 
     @Test
@@ -56,10 +72,11 @@ public class DefaultAPIHandlerTest {
         Mockito.when(((Axis2MessageContext) messageContext).getAxis2MessageContext()).thenReturn(axis2MsgCntxt);
         Mockito.when(axis2MsgCntxt.getProperty(APIConstants.TRANSPORT_URL_IN)).thenReturn("/api1/abc/cde?c=a");
         PowerMockito.when(GatewayUtils.getTenantDomain()).thenReturn("carbon.super");
+        PowerMockito.when(GatewayUtils.isOnDemandLoading()).thenReturn(false);
         PowerMockito.when(ApiUtils.getFullRequestPath(messageContext)).thenReturn("/api1/abc/cde?c=a");
         TreeMap<String, API> apiTreeMap = new TreeMap<>();
         apiTreeMap.put("/api1/abc", new API("1234566", 1, "admin", "API1", "1.0.0", "/api1/abc/1.0.0", null,
-                "HTTP", "PUBLISHED", true));
+                "HTTP", "PUBLISHED", true,true));
         PowerMockito.when(Utils.getSelectedAPIList("/api1/abc/cde?c=a", "carbon.super")).thenReturn(apiTreeMap);
         Mockito.doNothing().when(axis2MsgCntxt).setProperty(APIConstants.TRANSPORT_URL_IN, "/api1/abc/1.0.0/cde?c=a");
         Set<String> properties = Mockito.mock(Set.class);
@@ -80,6 +97,7 @@ public class DefaultAPIHandlerTest {
         Mockito.when(((Axis2MessageContext) messageContext).getAxis2MessageContext()).thenReturn(axis2MsgCntxt);
         Mockito.when(axis2MsgCntxt.getProperty(APIConstants.TRANSPORT_URL_IN)).thenReturn("/api1/abc/cde?c=a");
         PowerMockito.when(GatewayUtils.getTenantDomain()).thenReturn("carbon.super");
+        PowerMockito.when(GatewayUtils.isOnDemandLoading()).thenReturn(false);
         PowerMockito.when(ApiUtils.getFullRequestPath(messageContext)).thenReturn("/api1/abc/cde?c=a");
         TreeMap<String, API> apiTreeMap = new TreeMap<>();
         PowerMockito.when(Utils.getSelectedAPIList("/api1/abc/cde?c=a", "carbon.super")).thenReturn(apiTreeMap);
@@ -97,6 +115,7 @@ public class DefaultAPIHandlerTest {
         Mockito.when(((Axis2MessageContext) messageContext).getAxis2MessageContext()).thenReturn(axis2MsgCntxt);
         Mockito.when(axis2MsgCntxt.getProperty(APIConstants.TRANSPORT_URL_IN)).thenReturn("/api1/abc/cde?c=a");
         PowerMockito.when(GatewayUtils.getTenantDomain()).thenReturn("carbon.super");
+        PowerMockito.when(GatewayUtils.isOnDemandLoading()).thenReturn(false);
         PowerMockito.when(ApiUtils.getFullRequestPath(messageContext)).thenReturn("/api1/abc/cde?c=a");
         TreeMap<String, API> apiTreeMap = new TreeMap<>();
         apiTreeMap.put("/api1/abc", new API("1234566", 1, "admin", "API1", "1.0.0", "/api1/abc/1.0.0", null,

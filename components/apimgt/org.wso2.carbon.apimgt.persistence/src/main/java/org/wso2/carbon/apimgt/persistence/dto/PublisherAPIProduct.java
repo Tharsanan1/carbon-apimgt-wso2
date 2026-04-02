@@ -46,7 +46,8 @@ public class PublisherAPIProduct extends PublisherAPIProductInfo {
     private Set<String> environments;    
     private String transports;    
     private CORSConfiguration corsConfiguration;    
-    private String authorizationHeader;  
+    private String authorizationHeader;
+    private String apiKeyHeader;
     private String contextTemplate;
     private boolean enableSchemaValidation;
     private boolean isMonetizationEnabled;
@@ -55,8 +56,6 @@ public class PublisherAPIProduct extends PublisherAPIProductInfo {
     private String definition;
     private boolean enableStore;
     private String thumbnail;
-    private String createdTime;
-    private String lastUpdated;
     private Set<String> tags = new LinkedHashSet<>();
     private String accessControl; // publisher accessControl : 'restricted', 'all'
     private Set<String> accessControlRoles; // reg has a just String
@@ -64,7 +63,14 @@ public class PublisherAPIProduct extends PublisherAPIProductInfo {
     private String gatewayVendor;
 
     private String versionTimestamp;
+    private Set<String> audiences;
 
+    public Set<String> getAudiences() {
+        return audiences;
+    }
+    public void setAudiences(Set<String> audiences) {
+        this.audiences = audiences;
+    }
     public String getDescription() {
         return description;
     }
@@ -161,6 +167,15 @@ public class PublisherAPIProduct extends PublisherAPIProductInfo {
     public void setAuthorizationHeader(String authorizationHeader) {
         this.authorizationHeader = authorizationHeader;
     }
+
+    public String getApiKeyHeader() {
+        return apiKeyHeader;
+    }
+
+    public void setApiKeyHeader(String apiKeyHeader) {
+        this.apiKeyHeader = apiKeyHeader;
+    }
+
     public String getContextTemplate() {
         return contextTemplate;
     }
@@ -208,18 +223,6 @@ public class PublisherAPIProduct extends PublisherAPIProductInfo {
     }
     public void setThumbnail(String thumbnail) {
         this.thumbnail = thumbnail;
-    }
-    public String getCreatedTime() {
-        return createdTime;
-    }
-    public void setCreatedTime(String createdTime) {
-        this.createdTime = createdTime;
-    }
-    public String getLastUpdated() {
-        return lastUpdated;
-    }
-    public void setLastUpdated(String lastUpdated) {
-        this.lastUpdated = lastUpdated;
     }
     public Set<String> getTags() {
         return tags;

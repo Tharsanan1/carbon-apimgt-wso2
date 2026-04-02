@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.apimgt.persistence.dto;
 
+import java.util.Set;
+
 /**
  * A subset of org.wso2.carbon.apimgt.persistence.models.PublisherAPIProduct. Minimal API information required only for
  * listing API Products in publisher which are stored in the
@@ -26,6 +28,7 @@ package org.wso2.carbon.apimgt.persistence.dto;
 public class PublisherAPIProductInfo {
     private String id;
     private String apiProductName;
+    private String displayName;
     private String version;
     private String providerName;
     private String context;
@@ -33,6 +36,22 @@ public class PublisherAPIProductInfo {
     private String type;
     private String apiSecurity;
     private String thumbnail;
+    private String businessOwner;
+    private String businessOwnerEmail;
+    private String technicalOwner;
+    private String technicalOwnerEmail;
+    private Boolean isMonetizationEnabled;
+    private Set<String> audiences;
+    private String createdTime;
+    private String updatedTime;
+    private String description;
+
+    public Set<String> getAudiences() {
+        return audiences;
+    }
+    public void setAudiences(Set<String> audiences) {
+        this.audiences = audiences;
+    }
     public String getThumbnail() {
         return thumbnail;
     }
@@ -81,6 +100,12 @@ public class PublisherAPIProductInfo {
     public void setState(String state) {
         this.state = state;
     }
+    public String getDisplayName() {
+        return displayName;
+    }
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
     public String getApiSecurity() {
         return apiSecurity;
     }
@@ -88,5 +113,55 @@ public class PublisherAPIProductInfo {
         this.apiSecurity = apiSecurity;
     }
     private String gatewayVendor;
-    
+    public String getBusinessOwner() {
+        return businessOwner;
+    }
+    public void setBusinessOwner(String businessOwner) {
+        this.businessOwner = businessOwner;
+    }
+    public String getBusinessOwnerEmail() {
+        return businessOwnerEmail;
+    }
+    public void setBusinessOwnerEmail(String businessOwnerEmail) {
+        this.businessOwnerEmail = businessOwnerEmail;
+    }
+    public String getTechnicalOwner() {
+        return technicalOwner;
+    }
+    public void setTechnicalOwner(String technicalOwner) {
+        this.technicalOwner = technicalOwner;
+    }
+    public String getTechnicalOwnerEmail() {
+        return technicalOwnerEmail;
+    }
+    public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+        this.technicalOwnerEmail = technicalOwnerEmail;
+    }
+    public Boolean getMonetizationStatus() {
+        return isMonetizationEnabled;
+    }
+    public void setMonetizationStatus(Boolean isMonetizationEnabled) {
+        this.isMonetizationEnabled = isMonetizationEnabled;
+    }
+    public String getCreatedTime() {
+        return createdTime;
+    }
+    public void setCreatedTime(String createdTime) {
+        this.createdTime = createdTime;
+    }
+    public String getUpdatedTime() {
+        return updatedTime;
+    }
+
+    public void setUpdatedTime(String updatedTime) {
+        this.updatedTime = updatedTime;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getDescription() {
+        return description;
+    }
 }

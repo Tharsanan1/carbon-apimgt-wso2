@@ -16,25 +16,18 @@
 
 package org.wso2.carbon.apimgt.gateway.handlers.security;
 
-import io.swagger.v3.oas.models.OpenAPI;
-import org.apache.axis2.AxisFault;
 import org.apache.axis2.Constants;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpHeaders;
-import org.apache.http.HttpStatus;
 import org.apache.synapse.ManagedLifecycle;
-import org.apache.synapse.Mediator;
 import org.apache.synapse.MessageContext;
-import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.AbstractHandler;
 import org.apache.synapse.rest.RESTConstants;
-import org.apache.synapse.transport.passthru.PassThroughConstants;
-import org.apache.synapse.transport.passthru.util.RelayUtils;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.common.gateway.dto.JWTConfigurationDto;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
@@ -52,7 +45,11 @@ import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.APIManagerConfigurationService;
+import org.wso2.carbon.apimgt.impl.dto.KeyManagerDto;
+import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.api.model.KeyManager;
+import org.wso2.carbon.apimgt.api.model.KeyManagerConfiguration;
 import org.wso2.carbon.apimgt.tracing.TracingSpan;
 import org.wso2.carbon.apimgt.tracing.TracingTracer;
 import org.wso2.carbon.apimgt.tracing.Util;
@@ -63,11 +60,13 @@ import org.wso2.carbon.metrics.manager.MetricManager;
 import org.wso2.carbon.metrics.manager.Timer;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -94,12 +93,14 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
     private SynapseEnvironment synapseEnvironment;
 
     private String authorizationHeader;
+    private Set<String> audiences = new HashSet<>();
+    private String apiKeyHeader;
     private String apiSecurity;
     private String apiLevelPolicy;
     private String certificateInformation;
     private String apiUUID;
     private String apiType = String.valueOf(APIConstants.ApiTypes.API); // Default API Type
-    private OpenAPI openAPI;
+    private String subType;
     private String keyManagers;
     private final String type = ExtensionType.AUTHENTICATION.toString();
     private String securityContextHeader;
@@ -163,11 +164,28 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
      * @param apiType API Type
      */
     public void setApiType(String apiType) {
-        // Since we currently support only Product APIs as the alternative, set the value to "PRODUCT_API" only if
-        // the same value is provided as the type. Else the default value will remain as "API".
-        if (APIConstants.ApiTypes.PRODUCT_API.name().equalsIgnoreCase(apiType)) {
+        // Since we currently support Product APIs and MCP Servers as alternatives, set the value to "PRODUCT_API" only
+        // if the same value is provided as the type. Else the default value will remain as "API".
+        if (APIConstants.ApiTypes.PRODUCT_API.name().equalsIgnoreCase(apiType) ||
+                APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)){
             this.apiType = apiType;
         }
+    }
+
+    /**
+     * Get subtype of the API
+     * @return API Subtype
+     */
+    public String getSubType() {
+        return subType;
+    }
+
+    /**
+     * Set subtype of the API
+     * @param subType API Subtype
+     */
+    public void setSubType(String subType) {
+        this.subType = subType;
     }
 
     private boolean removeOAuthHeadersFromOutMessage = true;
@@ -199,6 +217,44 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
      */
     public void setAuthorizationHeader(String authorizationHeader) {
         this.authorizationHeader = authorizationHeader;
+    }
+
+    /**
+     * To set the audiences for api.
+     *
+     * @param audiences the audiences of the API request.
+     */
+    public void setAudiences(String audiences) {
+        if (!StringUtils.isEmpty(audiences)) {
+            this.audiences = new HashSet<>(Arrays.asList(audiences.split(",")));
+        }
+    }
+
+    /**
+     * To get the audiences of an api.
+     *
+     * @return API level audiences for JWT validation.
+     */
+    public Set<String> getAudiences() {
+        return audiences;
+    }
+
+    /**
+     * To get the Api Key Header.
+     *
+     * @return Relevant the Api Key Header of the API request
+     */
+    public String getApiKeyHeader() {
+        return apiKeyHeader;
+    }
+
+    /**
+     * To set the Api Key Header.
+     *
+     * @param apiKeyHeader the Api Key Header of the API request.
+     */
+    public void setApiKeyHeader(String apiKeyHeader) {
+        this.apiKeyHeader = apiKeyHeader;
     }
 
     /**
@@ -324,7 +380,7 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         }
         if (isOAuthProtected) {
             Authenticator authenticator = new OAuthAuthenticator(authorizationHeader, isOAuthBasicAuthMandatory,
-                    removeOAuthHeadersFromOutMessage);
+                    removeOAuthHeadersFromOutMessage, this.getAudiences());
             authenticator.init(synapseEnvironment);
             authenticators.add(authenticator);
         }
@@ -335,7 +391,7 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             authenticators.add(authenticator);
         }
         if (isApiKeyProtected) {
-            Authenticator authenticator = new ApiKeyAuthenticator(APIConstants.API_KEY_HEADER_QUERY_PARAM, apiLevelPolicy, isOAuthBasicAuthMandatory);
+            Authenticator authenticator = new ApiKeyAuthenticator(apiKeyHeader, apiLevelPolicy, isOAuthBasicAuthMandatory);
             authenticator.init(synapseEnvironment);
             authenticators.add(authenticator);
         }
@@ -396,19 +452,52 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             }
 
             messageContext.setProperty(APIMgtGatewayConstants.API_TYPE, apiType);
+            messageContext.setProperty(APIMgtGatewayConstants.SUB_TYPE, subType);
+            if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Setting API type for MCP internal key authentication: " + apiType);
+                }
+                messageContext.setProperty(APIConstants.API_TYPE, apiType); // for MCP internal key auth
+            }
+            boolean isMCPNoAuthRequest = false;
+            if (messageContext.getProperty(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST) != null) {
+                isMCPNoAuthRequest = (boolean) messageContext.getProperty(APIMgtGatewayConstants.MCP_NO_AUTH_REQUEST);
+            }
+
+            if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType) && isMCPNoAuthRequest) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping authentication for MCP request"
+                            + ", method: " + messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD));
+                }
+                handleNoAuthentication(messageContext);
+                setAPIParametersToMessageContext(messageContext);
+                return ExtensionListenerUtil.postProcessRequest(messageContext, type);
+            }
+
             if (ExtensionListenerUtil.preProcessRequest(messageContext, type)) {
                 if (!isAuthenticatorsInitialized) {
                     initializeAuthenticators();
                 }
+                messageContext.setProperty(APIMgtGatewayConstants.AUTHENTICATORS_CHALLENGE_STRING, getAuthenticatorsChallengeString());
                 if (!isOauthParamsInitialized) {
                     initOAuthParams();
                 }
-                String authenticationScheme = getAPIKeyValidator().getResourceAuthenticationScheme(messageContext);
+
+                String authenticationScheme;
+                String mcpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.MCP_METHOD);
+                if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(apiType) &&
+                        ((APIConstants.MCP.METHOD_TOOL_LIST.equals(mcpMethod)) || isMCPGetRequest(messageContext))) {
+                    authenticationScheme = APIConstants.AUTH_NO_AUTHENTICATION;
+                } else {
+                    authenticationScheme = getAPIKeyValidator().getResourceAuthenticationScheme(messageContext);
+                }
+
                 if(APIConstants.AUTH_NO_AUTHENTICATION.equals(authenticationScheme)) {
                     if(log.isDebugEnabled()){
                         log.debug("Found Authentication Scheme: ".concat(authenticationScheme));
                     }
                     handleNoAuthentication(messageContext);
+                    setAPIParametersToMessageContext(messageContext);
                     return ExtensionListenerUtil.postProcessRequest(messageContext, type);
                 }
                 try {
@@ -445,8 +534,14 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
                     log.error("API authentication failure due to "
                             + APISecurityConstants.API_AUTH_GENERAL_ERROR_MESSAGE, e);
                 } else {
+                    String warnDetails = getWarnDetails(messageContext);
                     // We do not need to log known authentication failures as errors since these are not product errors.
-                    log.warn("API authentication failure due to " + errorMessage);
+                    // Sample Warn String (JWT): APIAuthenticationHandler API authentication failure due to The access
+                    // token does not allow you to access the requested resource for requestURI=/pizzashack/1.0.0/order
+                    // Sample Warn String (default): APIAuthenticationHandler API authentication failure due to The
+                    // access token does not allow you to access the requested resource for appName=test
+                    // userName=admin@carbon.super for requestURI=/pizzashack/1.0.0/order
+                    log.warn("API authentication failure due to " + errorMessage + warnDetails);
 
                     if (log.isDebugEnabled()) {
                         log.debug("API authentication failed with error " + e.getErrorCode(), e);
@@ -534,11 +629,23 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         boolean authenticated = false;
         AuthenticationResponse authenticationResponse;
         List<AuthenticationResponse> authResponses = new ArrayList<>();
+        AuthenticationResponse optionalAuthentication = null;
+        boolean mandatoryAuthFailed = false;
 
         for (Authenticator authenticator : authenticators) {
             authenticationResponse = authenticator.authenticate(messageContext);
+            if (optionalAuthentication == null &&
+                    (authenticationResponse.getErrorCode() != APISecurityConstants.API_AUTH_MISSING_CREDENTIALS
+                            || authenticationResponse.isAuthenticated())) {
+                optionalAuthentication = authenticationResponse;
+            }
             if (authenticationResponse.isMandatoryAuthentication()) {
                 // Update authentication status only if the authentication is a mandatory one
+                authenticated = authenticationResponse.isAuthenticated();
+                mandatoryAuthFailed = !(authenticationResponse.isAuthenticated());
+            } else if (!authenticated && !mandatoryAuthFailed) {
+                // Update authentication status if the authentication is optional and
+                // the request hasn't been authenticated yet
                 authenticated = authenticationResponse.isAuthenticated();
             }
             if (!authenticationResponse.isAuthenticated()) {
@@ -549,8 +656,13 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             }
         }
         if (!authenticated) {
-            Pair<Integer, String> error = getError(authResponses);
-            throw new APISecurityException(error.getKey(), error.getValue());
+            if (mandatoryAuthFailed || optionalAuthentication == null) {
+                Pair<Integer, String> error = getError(authResponses);
+                throw new APISecurityException(error.getKey(), error.getValue());
+            } else if (!(optionalAuthentication.isAuthenticated())) {
+                throw new APISecurityException(optionalAuthentication.getErrorCode()
+                        , optionalAuthentication.getErrorMessage());
+            }
         }
         return true;
     }
@@ -589,6 +701,9 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
         StringBuilder challengeString = new StringBuilder();
         if (authenticators != null) {
             for (Authenticator authenticator : authenticators) {
+                if (Boolean.parseBoolean(System.getProperty("removeInternalAPIKeyRealm")) && authenticator instanceof InternalAPIKeyAuthenticator) {
+                    continue;
+                }
                 challengeString.append(authenticator.getChallengeString()).append(", ");
             }
         }
@@ -610,67 +725,58 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
     }
 
     private void handleAuthFailure(MessageContext messageContext, APISecurityException e) {
-        messageContext.setProperty(SynapseConstants.ERROR_CODE, e.getErrorCode());
-        messageContext.setProperty(SynapseConstants.ERROR_MESSAGE,
-                APISecurityConstants.getAuthenticationFailureMessage(e.getErrorCode()));
-        messageContext.setProperty(SynapseConstants.ERROR_EXCEPTION, e);
-
-        Mediator sequence = messageContext.getSequence(APISecurityConstants.API_AUTH_FAILURE_HANDLER);
-
-        //Setting error description which will be available to the handler
-        String errorDetail = APISecurityConstants.getFailureMessageDetailDescription(e.getErrorCode(), e.getMessage());
-        // if custom auth header is configured, the error message should specify its name instead of default value
-        if (e.getErrorCode() == APISecurityConstants.API_AUTH_MISSING_CREDENTIALS) {
-            errorDetail =
-                    APISecurityConstants.getFailureMessageDetailDescription(e.getErrorCode(), e.getMessage()) + "'"
-                            + authorizationHeader + " : Bearer ACCESS_TOKEN' or '" + authorizationHeader +
-                            " : Basic ACCESS_TOKEN' or 'apikey: API_KEY'" ;
-        }
-        messageContext.setProperty(SynapseConstants.ERROR_DETAIL, errorDetail);
-
-        // By default we send a 401 response back
-        org.apache.axis2.context.MessageContext axis2MC = ((Axis2MessageContext) messageContext).
-                getAxis2MessageContext();
-        // This property need to be set to avoid sending the content in pass-through pipe (request message)
-        // as the response.
-        axis2MC.setProperty(PassThroughConstants.MESSAGE_BUILDER_INVOKED, Boolean.TRUE);
+        GatewayUtils.handleAuthFailure(messageContext, e, this.authorizationHeader, this.apiKeyHeader,
+                getAuthenticatorsChallengeString(), apiType);
         try {
-            RelayUtils.consumeAndDiscardMessage(axis2MC);
-        } catch (AxisFault axisFault) {
-            //In case of an error it is logged and the process is continued because we're setting a fault message in the payload.
-            log.error("Error occurred while consuming and discarding the message", axisFault);
-        }
-        axis2MC.setProperty(Constants.Configuration.MESSAGE_TYPE, "application/soap+xml");
-        int status;
-        if (e.getErrorCode() == APISecurityConstants.API_AUTH_GENERAL_ERROR ||
-                e.getErrorCode() == APISecurityConstants.API_AUTH_MISSING_OPEN_API_DEF) {
-            status = HttpStatus.SC_INTERNAL_SERVER_ERROR;
-        } else if (e.getErrorCode() == APISecurityConstants.API_AUTH_INCORRECT_API_RESOURCE ||
-                e.getErrorCode() == APISecurityConstants.API_AUTH_FORBIDDEN ||
-                e.getErrorCode() == APISecurityConstants.INVALID_SCOPE) {
-            status = HttpStatus.SC_FORBIDDEN;
-        } else {
-            status = HttpStatus.SC_UNAUTHORIZED;
-            Map<String, String> headers =
-                    (Map) axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
-            if (headers != null) {
-                headers.put(HttpHeaders.WWW_AUTHENTICATE, getAuthenticatorsChallengeString() +
-                        " error=\"invalid_token\"" +
-                        ", error_description=\"The provided token is invalid\"");
-                axis2MC.setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, headers);
+            // If this is an MCP API, try to add DCR resource metadata to WWW-Authenticate header
+            if (APIConstants.API_TYPE_MCP.equalsIgnoreCase(this.apiType) && this.apiUUID != null) {
+                if(log.isDebugEnabled()) {
+                    log.debug("Adding DCR resource metadata to WWW-Authenticate header for MCP API: " + this.apiUUID);
+                }
+                org.apache.axis2.context.MessageContext axis2MC =
+                        ((Axis2MessageContext) messageContext).getAxis2MessageContext();
+                @SuppressWarnings("unchecked")
+                Map<String, String> transportHeaders = (Map<String, String>)
+                        axis2MC.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
+
+                if (transportHeaders == null) {
+                    transportHeaders = new java.util.TreeMap<>();
+                    axis2MC.setProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS, transportHeaders);
+                }
+
+                java.util.List<String> keyManagers = org.wso2.carbon.apimgt.gateway.internal.DataHolder.getInstance()
+                        .getKeyManagersFromUUID(this.apiUUID);
+                if (keyManagers != null && !keyManagers.isEmpty()) {
+                    String existing = transportHeaders.get("WWW-Authenticate");
+                    StringBuilder sb = new StringBuilder();
+                    if (existing != null) {
+                        sb.append(existing);
+                    }
+                    for (String kmName : keyManagers) {
+                        // pass an empty tenant domain string to match mocks that use Mockito.anyString()
+                        KeyManagerDto kmDto = KeyManagerHolder.getKeyManagerByName("", kmName);
+                        KeyManager keyManager = kmDto != null ? kmDto.getKeyManager() : null;
+                        KeyManagerConfiguration kmConfig = keyManager != null ? keyManager.getKeyManagerConfiguration() : null;
+                        if (kmConfig == null) continue;
+
+                        Object dcrEndpointParam = kmConfig.getParameter(
+                                APIConstants.KeyManager.CLIENT_REGISTRATION_ENDPOINT);
+                        String dcrEndpoint = dcrEndpointParam != null ? dcrEndpointParam.toString() : null;
+                        if (dcrEndpoint != null) {
+                            if (sb.length() > 0) {
+                                sb.append(", ");
+                            }
+                            sb.append("resource_metadata=").append(dcrEndpoint);
+                        }
+                    }
+                    if (sb.length() > 0) {
+                        transportHeaders.put(HttpHeaders.WWW_AUTHENTICATE, sb.toString());
+                    }
+                }
             }
+        } catch (Exception ex) {
+            log.info("Error while adding DCR metadata to WWW-Authenticate header", ex);
         }
-
-        messageContext.setProperty(APIMgtGatewayConstants.HTTP_RESPONSE_STATUS_CODE, status);
-
-        // Invoke the custom error handler specified by the user
-        if (sequence != null && !sequence.mediate(messageContext)) {
-            // If needed user should be able to prevent the rest of the fault handling
-            // logic from getting executed
-            return;
-        }
-
-        sendFault(messageContext, status);
     }
 
     protected void sendFault(MessageContext messageContext, int status) {
@@ -721,6 +827,24 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
             logMessage = logMessage + " from clientIP=" + remoteIP;
         }
         return logMessage;
+    }
+
+    private String getWarnDetails(MessageContext messageContext) {
+        // Get application information to be logged in API authentication failure (only requestURI for JWT tokens)
+        String applicationName = (String) messageContext.getProperty(APIMgtGatewayConstants.APPLICATION_NAME);
+        String endUserName = (String) messageContext.getProperty(APIMgtGatewayConstants.END_USER_NAME);
+        String requestURI = (String) messageContext.getProperty(RESTConstants.REST_FULL_REQUEST_PATH);
+        String warnDetails = "";
+        if (applicationName != null) {
+            warnDetails = " for appName=" + applicationName;
+        }
+        if (endUserName != null) {
+            warnDetails = warnDetails + " userName=" + endUserName;
+        }
+        if (requestURI != null) {
+            warnDetails = warnDetails + " for requestURI=" + requestURI;
+        }
+        return warnDetails;
     }
 
     protected void setAPIParametersToMessageContext(MessageContext messageContext) {
@@ -790,5 +914,11 @@ public class APIAuthenticationHandler extends AbstractHandler implements Managed
 
     public void setKeyManagers(String keyManagers) {
         this.keyManagers = keyManagers;
+    }
+
+    public boolean isMCPGetRequest(MessageContext messageContext) {
+        String path = (String) messageContext.getProperty(APIMgtGatewayConstants.API_ELECTED_RESOURCE);
+        String httpMethod = (String) messageContext.getProperty(APIMgtGatewayConstants.HTTP_METHOD);
+        return (APIConstants.MCP.MCP_RESOURCES_MCP.equals(path) && APIConstants.HTTP_GET.equalsIgnoreCase(httpMethod));
     }
 }

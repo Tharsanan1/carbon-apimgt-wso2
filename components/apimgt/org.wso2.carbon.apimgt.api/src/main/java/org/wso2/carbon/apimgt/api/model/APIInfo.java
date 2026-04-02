@@ -30,14 +30,18 @@ public class APIInfo {
     private String contextTemplate;
     private String apiTier;
     private String apiType;
+    private String apiSubtype;
     private String createdTime;
     private String createdBy;
     private String updatedTime;
     private String updatedBy;
-    private APIStatus status;
+    private String status;
     private int revisionsCreated;
     private boolean isRevision;
     private String organization;
+    private int isEgress;
+    private String displayName;
+    private boolean initiatedFromGateway;
 
     private APIInfo() {
 
@@ -127,6 +131,16 @@ public class APIInfo {
         this.apiType = apiType;
     }
 
+    public String getApiSubtype() {
+
+        return apiSubtype;
+    }
+
+    public void setApiSubtype(String apiSubtype) {
+
+        this.apiSubtype = apiSubtype;
+    }
+
     public String getCreatedTime() {
 
         return createdTime;
@@ -167,12 +181,12 @@ public class APIInfo {
         this.updatedBy = updatedBy;
     }
 
-    public APIStatus getStatus() {
+    public String getStatus() {
 
         return status;
     }
 
-    public void setStatus(APIStatus status) {
+    public void setStatus(String status) {
 
         this.status = status;
     }
@@ -207,6 +221,27 @@ public class APIInfo {
         isRevision = revision;
     }
 
+    public int isEgress() {
+        return isEgress;
+    }
+
+    public void setEgress(int egress) {
+        isEgress = egress;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+    public boolean isInitiatedFromGateway() {
+        return initiatedFromGateway;
+    }
+    public void setIsInitiatedFromGateway(boolean initiatedFromGateway) {
+        this.initiatedFromGateway = initiatedFromGateway;
+    }
+
     public static class Builder {
 
         private String id;
@@ -217,14 +252,18 @@ public class APIInfo {
         private String contextTemplate;
         private String apiTier;
         private String apiType;
+        private String apiSubtype;
         private String createdTime;
         private String createdBy;
         private String updatedTime;
         private String updatedBy;
-        private APIStatus status;
+        private String status;
         private int revisionsCreated;
         private boolean isRevision;
         private String organization;
+        private int isEgress;
+        private String displayName;
+        private boolean initiatedFromGateway;
 
         public Builder id(String id) {
 
@@ -274,6 +313,12 @@ public class APIInfo {
             return this;
         }
 
+        public Builder apiSubtype(String apiSubtype) {
+
+            this.apiSubtype = apiSubtype;
+            return this;
+        }
+
         public Builder createdTime(String createdTime) {
 
             this.createdTime = createdTime;
@@ -298,7 +343,7 @@ public class APIInfo {
             return this;
         }
 
-        public Builder status(APIStatus status) {
+        public Builder status(String status) {
 
             this.status = status;
             return this;
@@ -316,6 +361,16 @@ public class APIInfo {
             return this;
         }
 
+        public Builder displayName(String displayName) {
+            this.displayName = displayName;
+            return this;
+        }
+
+        public Builder isInitiatedFromGateway(int initiatedFromGateway) {
+            this.initiatedFromGateway = initiatedFromGateway == 1;
+            return this;
+        }
+
         public APIInfo build() {
 
             APIInfo apiInfo = new APIInfo();
@@ -327,6 +382,7 @@ public class APIInfo {
             apiInfo.contextTemplate = contextTemplate;
             apiInfo.apiTier = apiTier;
             apiInfo.apiType = apiType;
+            apiInfo.apiSubtype = apiSubtype;
             apiInfo.createdTime = createdTime;
             apiInfo.createdBy = createdBy;
             apiInfo.updatedTime = updatedTime;
@@ -335,11 +391,19 @@ public class APIInfo {
             apiInfo.revisionsCreated = revisionsCreated;
             apiInfo.isRevision = isRevision;
             apiInfo.organization = organization;
+            apiInfo.isEgress = isEgress;
+            apiInfo.displayName = displayName;
+            apiInfo.initiatedFromGateway = initiatedFromGateway;
             return apiInfo;
         }
 
         public Builder organization(String organization) {
             this.organization = organization;
+            return this;
+        }
+
+        public Builder isEgress(int isEgress) {
+            this.isEgress = isEgress;
             return this;
         }
     }

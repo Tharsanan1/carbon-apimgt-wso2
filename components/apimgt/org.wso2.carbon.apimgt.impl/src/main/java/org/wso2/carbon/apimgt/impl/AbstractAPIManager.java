@@ -19,6 +19,8 @@
 package org.wso2.carbon.apimgt.impl;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -43,18 +45,19 @@ import org.wso2.carbon.apimgt.api.model.*;
 import org.wso2.carbon.apimgt.api.model.graphql.queryanalysis.GraphqlComplexityInfo;
 import org.wso2.carbon.apimgt.api.model.policy.Policy;
 import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
+import org.wso2.carbon.apimgt.impl.dao.ApiKeyMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.EnvironmentSpecificAPIPropertyDAO;
+import org.wso2.carbon.apimgt.impl.dao.LabelsDAO;
 import org.wso2.carbon.apimgt.impl.dao.ScopesDAO;
+import org.wso2.carbon.apimgt.impl.dto.KeyManagerDto;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
 import org.wso2.carbon.apimgt.impl.dto.WorkflowDTO;
 import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
 import org.wso2.carbon.apimgt.impl.factory.PersistenceFactory;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.notifier.events.ApplicationEvent;
-import org.wso2.carbon.apimgt.impl.utils.APINameComparator;
-import org.wso2.carbon.apimgt.impl.utils.APIUtil;
-import org.wso2.carbon.apimgt.impl.utils.TierNameComparator;
+import org.wso2.carbon.apimgt.impl.utils.*;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowStatus;
 import org.wso2.carbon.apimgt.persistence.APIPersistence;
 import org.wso2.carbon.apimgt.persistence.dto.*;
@@ -64,6 +67,7 @@ import org.wso2.carbon.apimgt.persistence.mapper.DocumentMapper;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.user.api.TenantManager;
+import org.wso2.carbon.user.core.UserStoreException;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
@@ -81,6 +85,8 @@ public abstract class AbstractAPIManager implements APIManager {
     // API definitions from swagger v2.0
     protected Log log = LogFactory.getLog(getClass());
     protected ApiMgtDAO apiMgtDAO;
+    protected ApiKeyMgtDAO apiKeyMgtDAO;
+    protected LabelsDAO labelsDAO;
     protected EnvironmentSpecificAPIPropertyDAO environmentSpecificAPIPropertyDAO;
     protected ScopesDAO scopesDAO;
     protected int tenantId = MultitenantConstants.INVALID_TENANT_ID; //-1 the issue does not occur.;
@@ -90,6 +96,7 @@ public abstract class AbstractAPIManager implements APIManager {
     // Property to indicate whether access control restriction feature is enabled.
     protected boolean isAccessControlRestrictionEnabled = false;
     APIPersistence apiPersistenceInstance;
+    String migrationEnabled = System.getProperty(APIConstants.MIGRATE);
 
     public AbstractAPIManager() throws APIManagementException {
 
@@ -103,8 +110,10 @@ public abstract class AbstractAPIManager implements APIManager {
     public AbstractAPIManager(String username, String organization) throws APIManagementException {
 
         apiMgtDAO = ApiMgtDAO.getInstance();
+        apiKeyMgtDAO = ApiKeyMgtDAO.getInstance();
         scopesDAO = ScopesDAO.getInstance();
         environmentSpecificAPIPropertyDAO = EnvironmentSpecificAPIPropertyDAO.getInstance();
+        labelsDAO = LabelsDAO.getInstance();
 
         try {
             if (username == null) {
@@ -140,7 +149,7 @@ public abstract class AbstractAPIManager implements APIManager {
         UserContext userCtx = new UserContext(username, org, properties, roles);
         try {
             PublisherAPISearchResult searchAPIs = apiPersistenceInstance.searchAPIsForPublisher(org, "", 0,
-                    Integer.MAX_VALUE, userCtx, null, null);
+                    Integer.MAX_VALUE, userCtx);
 
             if (searchAPIs != null) {
                 List<PublisherAPIInfo> list = searchAPIs.getPublisherAPIInfoList();
@@ -169,10 +178,33 @@ public abstract class AbstractAPIManager implements APIManager {
     }
 
     protected void populateDefaultVersion(API api) throws APIManagementException {
-
         apiMgtDAO.setDefaultVersion(api);
     }
+    protected void populateGatewayVendor(API api) throws APIManagementException {
+        if (api.getGatewayVendor() == null || "null".equals(api.getGatewayVendor())) {
+            String gatewayVendor = apiMgtDAO.getGatewayVendorByAPIUUID(api.getUuid());
+            if (gatewayVendor == null) {
+                gatewayVendor = APIConstants.WSO2_GATEWAY_ENVIRONMENT;
+            }
+            api.setGatewayVendor(APIUtil.handleGatewayVendorRetrieval(gatewayVendor));
+            api.setGatewayType(APIUtil.getGatewayType(gatewayVendor));
+        } else {
+            String gatewayVendor = api.getGatewayVendor();
+            api.setGatewayVendor(APIUtil.handleGatewayVendorRetrieval(gatewayVendor));
+            api.setGatewayType(APIUtil.getGatewayType(gatewayVendor));
+        }
+    }
+    protected void populateDefaultVersion(APIProduct apiProduct) throws APIManagementException {
+        apiMgtDAO.setDefaultVersion(apiProduct);
+    }
 
+    private boolean isTenantDomainNotMatching(String tenantDomain) {
+
+        if (this.tenantDomain != null) {
+            return !(this.tenantDomain.equals(tenantDomain));
+        }
+        return true;
+    }
 
 
     /**
@@ -185,6 +217,10 @@ public abstract class AbstractAPIManager implements APIManager {
      */
     public APIInfo getAPIInfoByUUID(String id) throws APIManagementException {
         return apiMgtDAO.getAPIInfoByUUID(id);
+    }
+
+    public APIInfo getAPIInfoByUUID(String id, String apiType) throws APIManagementException {
+        return apiMgtDAO.getAPIInfoByUUID(id, apiType);
     }
 
 
@@ -291,29 +327,87 @@ public abstract class AbstractAPIManager implements APIManager {
     public List<Documentation> getAllDocumentation(String uuid, String organization) throws APIManagementException {
 
         String username = CarbonContext.getThreadLocalCarbonContext().getUsername();
-
         Organization org = new Organization(organization);
         UserContext ctx = new UserContext(username, org, null, null);
         List<Documentation> convertedList = null;
+        boolean isDocVisibilityEnabled = Boolean.parseBoolean(
+                ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService().getAPIManagerConfiguration()
+                        .getFirstProperty(APIConstants.API_PUBLISHER_ENABLE_API_DOC_VISIBILITY_LEVELS));
         try {
             DocumentSearchResult list =
                     apiPersistenceInstance.searchDocumentation(org, uuid, 0, 0, null, ctx);
             if (list != null) {
                 convertedList = new ArrayList<Documentation>();
+                List<Documentation> privateDocs = new ArrayList<Documentation>();
                 List<org.wso2.carbon.apimgt.persistence.dto.Documentation> docList = list.getDocumentationList();
                 if (docList != null) {
                     for (int i = 0; i < docList.size(); i++) {
-                        convertedList.add(DocumentMapper.INSTANCE.toDocumentation(docList.get(i)));
+                        if (!isDocVisibilityEnabled) {
+                            convertedList.add(DocumentMapper.INSTANCE.toDocumentation(docList.get(i)));
+                        } else {
+                            org.wso2.carbon.apimgt.persistence.dto.Documentation doc = docList.get(i);
+                            if (APIConstants.DOC_API_BASED_VISIBILITY.equals(String.valueOf(doc.getVisibility()))) {
+                                convertedList.add(DocumentMapper.INSTANCE.toDocumentation(docList.get(i)));
+                            }
+                            if (APIConstants.DOC_OWNER_VISIBILITY.equals(String.valueOf(doc.getVisibility()))) {
+                                if (!APIConstants.WSO2_ANONYMOUS_USER.equals(username)
+                                        && !isTenantDomainNotMatching(organization)) {
+                                    convertedList.add(DocumentMapper.INSTANCE.toDocumentation(docList.get(i)));
+                                }
+                            }
+                            if (APIConstants.DOC_SHARED_VISIBILITY.equals(String.valueOf(doc.getVisibility()))) {
+                                if (!APIConstants.WSO2_ANONYMOUS_USER.equals(username)
+                                        && !isTenantDomainNotMatching(organization)){
+                                    privateDocs.add(DocumentMapper.INSTANCE.toDocumentation(docList.get(i)));
+                                }
+                            }
+
+                        }
+                    }
+                    if (isDocVisibilityEnabled && privateDocs.size() > 0) {
+                        String loggedInTenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext()
+                                .getTenantDomain();
+                        if (validatePrivateScopes(username, loggedInTenantDomain)) {
+                            convertedList.addAll(privateDocs);
+                        }
                     }
                 }
             } else {
                 convertedList = new ArrayList<Documentation>();
             }
-        } catch (DocumentationPersistenceException e) {
+        } catch (DocumentationPersistenceException | org.wso2.carbon.user.api.UserStoreException e) {
             String msg = "Failed to get documentations for api/product " + uuid;
             throw new APIManagementException(msg, e);
         }
         return convertedList;
+    }
+
+    /**
+     * Validates whether the user has creator or publisher scopes for the documentation visibility control.
+     *
+     * @param username              Username
+     * @param loggedInTenantDomain  Logged in Tenant domain
+     * @return true if user has creator or publisher scopes
+     * @throws UserStoreException if user store is not found.
+     */
+    private boolean validatePrivateScopes(String username, String loggedInTenantDomain)
+            throws org.wso2.carbon.user.api.UserStoreException {
+        int tenantId = APIUtil.getTenantIdFromTenantDomain(loggedInTenantDomain);
+
+        String[] roleList = ServiceReferenceHolder.getInstance().getRealmService().getTenantUserRealm(tenantId)
+                .getUserStoreManager().getRoleListOfUser(MultitenantUtils.getTenantAwareUsername(username));
+        Map<String, String> restAPIScopes = APIUtil.getRESTAPIScopesForTenant(loggedInTenantDomain);
+
+        Set<String> roles = new HashSet();
+        roles.addAll(Arrays.asList(restAPIScopes.get(APIConstants.APIM_CREATOR_SCOPE).split(",")));
+        roles.addAll(Arrays.asList(restAPIScopes.get(APIConstants.APIM_PUBLISHER_SCOPE).split(",")));
+
+        for (String userRole : roleList) {
+            if (roles.contains(userRole)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -332,7 +426,7 @@ public abstract class AbstractAPIManager implements APIManager {
         try {
             org.wso2.carbon.apimgt.persistence.dto.Documentation doc = apiPersistenceInstance
                     .getDocumentation(new Organization(organization), apiId, docId);
-            if (doc != null) {
+            if (doc != null && isDocVisible(doc, organization)) {
                 if (log.isDebugEnabled()) {
                     log.debug("Retrieved doc: " + doc);
                 }
@@ -342,12 +436,59 @@ public abstract class AbstractAPIManager implements APIManager {
                         + " does not exist";
                 throw new APIMgtResourceNotFoundException(msg);
             }
-        } catch (DocumentationPersistenceException e) {
+        } catch (DocumentationPersistenceException  | APIManagementException e) {
             throw new APIManagementException("Error while retrieving document for id " + docId, e);
         }
         return documentation;
     }
 
+/**
+     * Validate the document for doc visibility
+     *
+     * @param doc         Document ID
+     * @return False      if user is not authorized to view the document
+     */
+    public boolean isDocVisible(org.wso2.carbon.apimgt.persistence.dto.Documentation doc,
+                             String requestedTenantDomain) throws APIManagementException {
+        boolean isDocVisibilityEnabled = Boolean.parseBoolean(
+                ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService().
+                        getAPIManagerConfiguration().getFirstProperty(
+                                APIConstants.API_PUBLISHER_ENABLE_API_DOC_VISIBILITY_LEVELS));
+
+        if (!isDocVisibilityEnabled) {
+            return true;
+        }
+
+        String username = CarbonContext.getThreadLocalCarbonContext().getUsername();
+        String loggedInTenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+
+        boolean validDoc = false;
+        if (APIConstants.DOC_API_BASED_VISIBILITY.equals(String.valueOf(doc.getVisibility()))) {
+            validDoc = true;
+        } else if (APIConstants.DOC_OWNER_VISIBILITY.equals(String.valueOf(doc.getVisibility()))) {
+            if (!APIConstants.WSO2_ANONYMOUS_USER.equals(username) && !isTenantDomainNotMatching(requestedTenantDomain)) {
+                validDoc = true;
+            }
+        } else if (APIConstants.DOC_SHARED_VISIBILITY.equals(String.valueOf(doc.getVisibility()))) {
+            if (!APIConstants.WSO2_ANONYMOUS_USER.equals(username) && !isTenantDomainNotMatching(requestedTenantDomain)) {
+                try {
+                    if (validatePrivateScopes(username, loggedInTenantDomain)) {
+                        validDoc = true;
+                    }
+                } catch (org.wso2.carbon.user.api.UserStoreException e) {
+                    throw new APIManagementException(e);
+                }
+            }
+        }
+
+        if(!validDoc) {
+            if (log.isDebugEnabled()) {
+                log.debug("User " + username + " cannot view the requested document " + doc.getId());
+            }
+        }
+        return validDoc;
+    }
+    
     @Override
     public DocumentationContent getDocumentationContent(String apiId, String docId, String organization)
             throws APIManagementException {
@@ -358,10 +499,6 @@ public abstract class AbstractAPIManager implements APIManager {
             DocumentationContent docContent = null;
             if (content != null) {
                 docContent = DocumentMapper.INSTANCE.toDocumentationContent(content);
-            } else {
-                String msg = "Failed to get the document content. Artifact corresponding to document id " + docId
-                        + " does not exist";
-                throw new APIMgtResourceNotFoundException(msg);
             }
             return docContent;
         } catch (DocumentationPersistenceException e) {
@@ -394,6 +531,12 @@ public abstract class AbstractAPIManager implements APIManager {
         return apiMgtDAO.isContextExist(context, organization);
     }
 
+    public boolean isContextExistForAPIProducts(String context, String contextWithVersion, String organization)
+            throws APIManagementException {
+
+        return apiMgtDAO.isContextExistForAPIProducts(context, contextWithVersion, organization);
+    }
+
     protected String getTenantDomainFromUrl(String url) {
 
         return MultitenantUtils.getTenantDomainFromUrl(url);
@@ -411,6 +554,57 @@ public abstract class AbstractAPIManager implements APIManager {
     public boolean isScopeKeyExist(String scopeKey, int tenantid) throws APIManagementException {
 
         return scopesDAO.isScopeExist(scopeKey, tenantid);
+    }
+
+    /**
+     * Check whether the given scope key is already available in any of the Key Managers
+     *
+     * @param scopeKey candidate scope key
+     * @param tenantDomain tenant domain
+     * @return true if the scope key is already available
+     */
+    @Override
+    public boolean isScopeKeyExistInKeyManager(String scopeKey, String tenantDomain) {
+        if (log.isDebugEnabled()) {
+            log.debug("Checking if scope key '" + scopeKey + "' exists in any Key Manager for tenant: " + tenantDomain);
+        }
+        Map<String, KeyManagerDto> tenantKeyManagers = KeyManagerHolder.getGlobalAndTenantKeyManagers(tenantDomain);
+        for (Map.Entry<String, KeyManagerDto> keyManagerDtoEntry : tenantKeyManagers.entrySet()) {
+            KeyManager keyManager = keyManagerDtoEntry.getValue().getKeyManager();
+            if (keyManager == null) {
+                log.warn("Key Manager instance is null for: " + keyManagerDtoEntry.getKey());
+                continue;
+            }
+            boolean scopeExistsInKeyManager = false;
+
+            try {
+                scopeExistsInKeyManager = keyManager.isScopeExists(scopeKey);
+            } catch (APIManagementException e) {
+                log.error("Error while checking for scope key in Key Manager: "
+                        + keyManagerDtoEntry.getKey(), e);
+            }
+
+            if (!scopeExistsInKeyManager) {
+                try {
+                    Map<String, Scope> allScopes = keyManager.getAllScopes();
+                    scopeExistsInKeyManager = allScopes != null && allScopes.containsKey(scopeKey);
+                } catch (APIManagementException e) {
+                    log.warn("Error while listing scopes from Key Manager: " + keyManagerDtoEntry.getKey(), e);
+                }
+            }
+            if (scopeExistsInKeyManager) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Scope key '" + scopeKey + "' is already defined in Key Manager: "
+                            + keyManagerDtoEntry.getKey());
+                }
+                return true;
+
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Scope key '" + scopeKey + "' does not exist in any Key Manager for tenant: " + tenantDomain);
+            }
+        }
+        return false;
     }
 
     /**
@@ -470,8 +664,11 @@ public abstract class AbstractAPIManager implements APIManager {
         return apiMgtDAO.isApiNameWithDifferentCaseExist(apiName, tenantName, organization);
     }
 
-    public void addSubscriber(String username, String groupingId)
-            throws APIManagementException {
+    public void addSubscriber(String username, String groupingId) throws APIManagementException {
+        addSubscriber(username, groupingId, null);
+    }
+
+    public void addSubscriber(String username, String groupingId, String organization) throws APIManagementException {
 
         Subscriber subscriber = new Subscriber(username);
         subscriber.setSubscribedDate(new Date());
@@ -484,8 +681,28 @@ public abstract class AbstractAPIManager implements APIManager {
             if (APIUtil.isDefaultApplicationCreationEnabled() &&
                     !APIUtil.isDefaultApplicationCreationDisabledForTenant(getTenantDomain(username))) {
                 // Add a default application once subscriber is added
-                addDefaultApplicationForSubscriber(subscriber);
+                addDefaultApplicationForSubscriber(subscriber, organization);
             }
+        } catch (APIManagementException e) {
+            String msg = "Error while adding the subscriber " + subscriber.getName();
+            throw new APIManagementException(msg, e);
+        } catch (org.wso2.carbon.user.api.UserStoreException e) {
+            String msg = "Error while adding the subscriber " + subscriber.getName();
+            throw new APIManagementException(msg, e);
+        }
+    }
+
+    public void addSubscriberOnly(String username, String groupingId)
+            throws APIManagementException {
+
+        Subscriber subscriber = new Subscriber(username);
+        subscriber.setSubscribedDate(new Date());
+        try {
+            int tenantId = getTenantManager()
+                    .getTenantId(getTenantDomain(username));
+            subscriber.setEmail(StringUtils.EMPTY);
+            subscriber.setTenantId(tenantId);
+            apiMgtDAO.addSubscriber(subscriber, groupingId);
         } catch (APIManagementException e) {
             String msg = "Error while adding the subscriber " + subscriber.getName();
             throw new APIManagementException(msg, e);
@@ -506,23 +723,19 @@ public abstract class AbstractAPIManager implements APIManager {
      * @param subscriber Subscriber
      * @throws APIManagementException if an error occurs while adding default application
      */
-    private void addDefaultApplicationForSubscriber(Subscriber subscriber) throws APIManagementException {
+    private void addDefaultApplicationForSubscriber(Subscriber subscriber, String organization)
+            throws APIManagementException {
 
         Application defaultApp = new Application(APIConstants.DEFAULT_APPLICATION_NAME, subscriber);
-        if (APIUtil.isEnabledUnlimitedTier()) {
-            defaultApp.setTier(APIConstants.UNLIMITED_TIER);
-        } else {
-            Map<String, Tier> throttlingTiers = APIUtil.getTiers(APIConstants.TIER_APPLICATION_TYPE,
-                    getTenantDomain(subscriber.getName()));
-            Set<Tier> tierValueList = new HashSet<Tier>(throttlingTiers.values());
-            List<Tier> sortedTierList = APIUtil.sortTiers(tierValueList);
-            defaultApp.setTier(sortedTierList.get(0).getName());
-        }
+        defaultApp.setTier(APIUtil.getDefaultApplicationLevelPolicy(subscriber.getTenantId()));
         //application will not be shared within the group
         defaultApp.setGroupId("");
         defaultApp.setTokenType(APIConstants.TOKEN_TYPE_JWT);
         defaultApp.setUUID(UUID.randomUUID().toString());
         defaultApp.setDescription(APIConstants.DEFAULT_APPLICATION_DESCRIPTION);
+        if (organization != null) {
+            defaultApp.setSubOrganization(organization);
+        }
         int applicationId = apiMgtDAO.addApplication(defaultApp, subscriber.getName(), tenantDomain);
 
         ApplicationEvent applicationEvent = new ApplicationEvent(UUID.randomUUID().toString(),
@@ -786,6 +999,13 @@ public abstract class AbstractAPIManager implements APIManager {
         return apiMgtDAO.isDuplicateContextTemplateMatchesOrganization(contextTemplate, organization);
     }
 
+    public boolean isDuplicateContextTemplateMatchingOrganizationAndGatewayVendor(String contextTemplate, String orgId,
+                                                                                  String gatewayVendor)
+            throws APIManagementException {
+        return apiMgtDAO.isDuplicateContextTemplateMatchesOrganizationAndGatewayVendor(contextTemplate, orgId,
+                gatewayVendor);
+    }
+
     @Override
     public List<String> getApiNamesMatchingContext(String contextTemplate) throws APIManagementException {
 
@@ -863,6 +1083,12 @@ public abstract class AbstractAPIManager implements APIManager {
         return apiMgtDAO.getAPIVersionsMatchingApiNameAndOrganization(apiName, username, organization);
     }
 
+    @Override
+    public String getAPIProviderByNameAndOrganization(String apiName, String organization)
+            throws APIManagementException {
+        return apiMgtDAO.getAPIProviderByNameAndOrganization(apiName, organization);
+    }
+
     /**
      * Returns API manager configurations.
      *
@@ -933,8 +1159,9 @@ public abstract class AbstractAPIManager implements APIManager {
                     continue;
                 }
             }
-            if (tenantDomain != null && !tenantDomain.equalsIgnoreCase(
-                    keyManagerConfigurationDTO.getOrganization())) {
+            String kmTenantDomain = keyManagerConfigurationDTO.getOrganization();
+            if (tenantDomain != null && !tenantDomain.equalsIgnoreCase(kmTenantDomain)
+                    && !APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN.equals(kmTenantDomain)) {
                 continue;
             }
             KeyManager keyManager = null;
@@ -1062,13 +1289,19 @@ public abstract class AbstractAPIManager implements APIManager {
         return apiMgtDAO.getAPIProductResourceMappings(productIdentifier);
     }
 
-    protected void populateAPIInformation(String uuid, String organization, API api)
+    protected void  populateAPIInformation(String uuid, String organization, API api)
             throws APIManagementException, OASPersistenceException, ParseException, AsyncSpecPersistenceException {
-        Organization org = new Organization(organization);
+        String username = CarbonContext.getThreadLocalCarbonContext().getUsername();
         //UUID
         if (api.getUuid() == null) {
             api.setUuid(uuid);
         }
+        if (organization == null) {
+            APIIdentifier identifier = api.getId();
+            String tenantDomain = getTenantDomain(identifier);
+            organization = tenantDomain;
+        }
+        Organization org = new Organization(organization);
         api.setOrganization(organization);
         // environment
         String environmentString = null;
@@ -1092,6 +1325,15 @@ public abstract class AbstractAPIManager implements APIManager {
         int internalId = apiMgtDAO.getAPIID(currentApiUuid);
         apiId.setId(internalId);
         apiMgtDAO.setServiceStatusInfoToAPI(api, internalId);
+        if (api.getGatewayVendor() == null || "null".equals(api.getGatewayVendor())) {
+            String gatewayVendor = apiMgtDAO.getGatewayVendorByAPIUUID(uuid);
+            if (gatewayVendor == null) {
+                gatewayVendor = APIConstants.WSO2_GATEWAY_ENVIRONMENT;
+            }
+            api.setGatewayVendor(APIUtil.handleGatewayVendorRetrieval(gatewayVendor));
+            api.setGatewayType(APIUtil.getGatewayType(gatewayVendor));
+        }
+
         // api level tier
         String apiLevelTier;
         if (api.isRevision()) {
@@ -1140,12 +1382,10 @@ public abstract class AbstractAPIManager implements APIManager {
         if (api.getType() != null && APIConstants.APITransportType.GRAPHQL.toString().equals(api.getType())) {
             api.setGraphQLSchema(getGraphqlSchemaDefinition(uuid, organization));
         }
-
-        JSONParser jsonParser = new JSONParser();
-        JSONObject paths = null;
+        JsonElement paths = null;
         if (resourceConfigsString != null) {
-            JSONObject resourceConfigsJSON = (JSONObject) jsonParser.parse(resourceConfigsString);
-            paths = (JSONObject) resourceConfigsJSON.get(APIConstants.SWAGGER_PATHS);
+            JsonObject resourceConfigsJSON = new Gson().fromJson(resourceConfigsString, JsonObject.class);
+            paths = resourceConfigsJSON.get(APIConstants.SWAGGER_PATHS);
         }
         Set<URITemplate> uriTemplates = apiMgtDAO.getURITemplatesOfAPI(api.getUuid());
         for (URITemplate uriTemplate : uriTemplates) {
@@ -1164,23 +1404,28 @@ public abstract class AbstractAPIManager implements APIManager {
             uriTemplate.setResourceSandboxURI(api.getSandboxUrl());
             // AWS Lambda: set arn & timeout to URI template
             if (paths != null) {
-                JSONObject path = (JSONObject) paths.get(uTemplate);
+                JsonElement path = paths.getAsJsonObject().get(uTemplate);
                 if (path != null) {
-                    JSONObject operation = (JSONObject) path.get(method.toLowerCase());
+                    JsonElement operation = path.getAsJsonObject().get(method.toLowerCase());
                     if (operation != null) {
-                        if (operation.containsKey(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME)) {
-                            uriTemplate.setAmznResourceName((String)
-                                    operation.get(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME));
+                        if (operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME) != null) {
+                            uriTemplate.setAmznResourceName(
+                                    operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME)
+                                            .toString());
                         }
-                        if (operation.containsKey(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT)) {
-                            uriTemplate.setAmznResourceTimeout(((Long)
-                                    operation.get(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT)).intValue());
+                        if (operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT) != null) {
+                            uriTemplate.setAmznResourceTimeout(
+                                    operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT)
+                                            .getAsInt());
+                        }
+                        if (operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_CONTNET_ENCODED) != null) {
+                            uriTemplate.setAmznResourceContentEncoded(operation.getAsJsonObject().
+                                    get(APIConstants.SWAGGER_X_AMZN_RESOURCE_CONTNET_ENCODED).getAsBoolean());
                         }
                     }
                 }
             }
         }
-
         if (APIConstants.IMPLEMENTATION_TYPE_INLINE.equalsIgnoreCase(api.getImplementation())) {
             for (URITemplate template : uriTemplates) {
                 template.setMediationScript(template.getAggregatedMediationScript());
@@ -1205,8 +1450,10 @@ public abstract class AbstractAPIManager implements APIManager {
                 // category array retrieved from artifact has only the category name, therefore we need to fetch
                 // categories
                 // and fill out missing attributes before attaching the list to the api
-                List<APICategory> allCategories = APIUtil.getAllAPICategoriesOfOrganization(organization);
-
+                List<APICategory> allCategories = new ArrayList<>();
+                if (migrationEnabled == null) {
+                    allCategories = APIUtil.getAllAPICategoriesOfOrganization(organization);
+                }
                 // todo-category: optimize this loop with breaks
                 for (String categoryName : categoriesOfAPI) {
                     for (APICategory category : allCategories) {
@@ -1224,17 +1471,18 @@ public abstract class AbstractAPIManager implements APIManager {
     protected void populateDevPortalAPIInformation(String uuid, String organization, API api)
             throws APIManagementException, OASPersistenceException, ParseException {
         Organization org = new Organization(organization);
+        String username = CarbonContext.getThreadLocalCarbonContext().getUsername();
         //UUID
         if (api.getUuid() == null) {
             api.setUuid(uuid);
         }
         api.setOrganization(organization);
         // environment
-        String environmentString = null;
+        List<Environment> environments = null;
         if (api.getEnvironments() != null) {
-            environmentString = String.join(",", api.getEnvironments());
+            environments = APIUtil.getEnvironmentsOfAPI(api);
         }
-        api.setEnvironments(APIUtil.extractEnvironmentsForAPI(environmentString, organization));
+        api.setEnvironments(APIUtil.extractEnvironmentsForAPI(environments, organization, username));
         // workflow status
         APIIdentifier apiId = api.getId();
         String currentApiUuid = uuid;
@@ -1281,11 +1529,10 @@ public abstract class AbstractAPIManager implements APIManager {
             api.setGraphQLSchema(getGraphqlSchemaDefinition(uuid, organization));
         }
 
-        JSONParser jsonParser = new JSONParser();
-        JSONObject paths = null;
+        JsonElement paths = null;
         if (resourceConfigsString != null) {
-            JSONObject resourceConfigsJSON = (JSONObject) jsonParser.parse(resourceConfigsString);
-            paths = (JSONObject) resourceConfigsJSON.get(APIConstants.SWAGGER_PATHS);
+            JsonObject resourceConfigsJSON = new Gson().fromJson(resourceConfigsString, JsonObject.class);
+            paths = resourceConfigsJSON.get(APIConstants.SWAGGER_PATHS);
         }
         Set<URITemplate> uriTemplates = apiMgtDAO.getURITemplatesOfAPI(api.getUuid());
         for (URITemplate uriTemplate : uriTemplates) {
@@ -1304,17 +1551,23 @@ public abstract class AbstractAPIManager implements APIManager {
             uriTemplate.setResourceSandboxURI(api.getSandboxUrl());
             // AWS Lambda: set arn & timeout to URI template
             if (paths != null) {
-                JSONObject path = (JSONObject) paths.get(uTemplate);
+                JsonElement path = paths.getAsJsonObject().get(uTemplate);
                 if (path != null) {
-                    JSONObject operation = (JSONObject) path.get(method.toLowerCase());
+                    JsonElement operation = path.getAsJsonObject().get(method.toLowerCase());
                     if (operation != null) {
-                        if (operation.containsKey(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME)) {
-                            uriTemplate.setAmznResourceName((String)
-                                    operation.get(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME));
+                        if (operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME) != null) {
+                            uriTemplate.setAmznResourceName(
+                                    operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_NAME)
+                                            .toString());
                         }
-                        if (operation.containsKey(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT)) {
-                            uriTemplate.setAmznResourceTimeout(((Long)
-                                    operation.get(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT)).intValue());
+                        if (operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT) != null) {
+                            uriTemplate.setAmznResourceTimeout(
+                                    operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_TIMEOUT)
+                                            .getAsInt());
+                        }
+                        if (operation.getAsJsonObject().get(APIConstants.SWAGGER_X_AMZN_RESOURCE_CONTNET_ENCODED) != null) {
+                            uriTemplate.setAmznResourceContentEncoded(operation.getAsJsonObject().
+                                    get(APIConstants.SWAGGER_X_AMZN_RESOURCE_CONTNET_ENCODED).getAsBoolean());
                         }
                     }
                 }
@@ -1341,7 +1594,7 @@ public abstract class AbstractAPIManager implements APIManager {
             }
             List<APICategory> categoryList = new ArrayList<>();
 
-            if (!categoriesOfAPI.isEmpty()) {
+            if (!categoriesOfAPI.isEmpty() && migrationEnabled == null) {
                 // category array retrieved from artifact has only the category name, therefore we need to fetch
                 // categories
                 // and fill out missing attributes before attaching the list to the api
@@ -1363,6 +1616,7 @@ public abstract class AbstractAPIManager implements APIManager {
     protected void populateAPIProductInformation(String uuid, String organization, APIProduct apiProduct)
             throws APIManagementException, OASPersistenceException, ParseException {
         Organization org = new Organization(organization);
+        String username = CarbonContext.getThreadLocalCarbonContext().getUsername();
         apiProduct.setOrganization(organization);
         ApiMgtDAO.getInstance().setAPIProductFromDB(apiProduct);
         apiProduct.setRating(Float.toString(APIUtil.getAverageRating(apiProduct.getProductId())));
@@ -1411,11 +1665,11 @@ public abstract class AbstractAPIManager implements APIManager {
             apiProduct.setUuid(uuid);
         }
         // environment
-        String environmentString = null;
+        List<Environment> environments = null;
         if (apiProduct.getEnvironments() != null) {
-            environmentString = String.join(",", apiProduct.getEnvironments());
+            environments = APIUtil.getEnvironmentsOfAPIProduct(apiProduct);
         }
-        apiProduct.setEnvironments(APIUtil.extractEnvironmentsForAPI(environmentString, organization));
+        apiProduct.setEnvironments(APIUtil.extractEnvironmentsForAPI(environments, organization, username));
 
         // workflow status
         APIProductIdentifier productIdentifier = apiProduct.getId();

@@ -17,6 +17,36 @@
     "DefaultRoles"
   ],
   "properties": {
+    "DefaultApplicationLevelTier": {
+      "$id": "#/properties/DefaultApplicationLevelTier",
+      "type": "string",
+      "title": "The DefaultApplicationLevelTier schema",
+      "description": "An explanation about the purpose of this instance.",
+      "default": "Unlimited",
+      "examples": [
+        "10PerMin", "20PerMin", "50PerMin", "Unlimited"
+      ]
+    },
+    "DefaultAPILevelTier": {
+      "$id": "#/properties/DefaultAPILevelTier",
+      "type": "string",
+      "title": "The DefaultAPILevelTier schema",
+      "description": "An explanation about the purpose of this instance.",
+      "default": "Unlimited",
+      "examples": [
+        "10KPerMin", "20KPerMin", "50KPerMin", "Unlimited"
+      ]
+    },
+    "DefaultSubscriptionLevelTier": {
+      "$id": "#/properties/DefaultSubscriptionLevelTier",
+      "type": "string",
+      "title": "The DefaultSubscriptionLevelTier schema",
+      "description": "An explanation about the purpose of this instance.",
+      "default": "Unlimited",
+      "examples": [
+        "Bronze", "Gold", "Silver", "Unlimited"
+      ]
+    },
     "EnableMonetization": {
       "$id": "#/properties/EnableMonetization",
       "type": "boolean",
@@ -349,6 +379,10 @@
             {
               "Name": "apim:comment_write",
               "Roles": "admin,Internal/creator,Internal/publisher"
+            },
+            {
+              "Name": "apim:mcp_server_generate_key",
+              "Roles": "admin,Internal/creator,Internal/publisher"
             }
           ]
         }
@@ -498,7 +532,7 @@
                 "Class": "org.wso2.carbon.apimgt.impl.notification.NewAPIVersionEmailNotifier",
                 "ClaimsRetrieverImplClass": "org.wso2.carbon.apimgt.impl.token.DefaultClaimsRetriever",
                 "Title": "Version $2 of $1 Released",
-                "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/store\">Click here to Visit WSO2 API Store</a></body></html>"
+                "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/devportal\">Click here to Visit WSO2 API Store</a></body></html>"
               }
             ]
           }
@@ -522,7 +556,7 @@
                     "Class": "org.wso2.carbon.apimgt.impl.notification.NewAPIVersionEmailNotifier",
                     "ClaimsRetrieverImplClass": "org.wso2.carbon.apimgt.impl.token.DefaultClaimsRetriever",
                     "Title": "Version $2 of $1 Released",
-                    "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/store\">Click here to Visit WSO2 API Store</a></body></html>"
+                    "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/devportal\">Click here to Visit WSO2 API Store</a></body></html>"
                   }
                 ]
               }
@@ -554,7 +588,7 @@
                       "Class": "org.wso2.carbon.apimgt.impl.notification.NewAPIVersionEmailNotifier",
                       "ClaimsRetrieverImplClass": "org.wso2.carbon.apimgt.impl.token.DefaultClaimsRetriever",
                       "Title": "Version $2 of $1 Released",
-                      "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/store\">Click here to Visit WSO2 API Store</a></body></html>"
+                      "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/devportal\">Click here to Visit WSO2 API Store</a></body></html>"
                     }
                   ]
                 ],
@@ -573,7 +607,7 @@
                           "Class": "org.wso2.carbon.apimgt.impl.notification.NewAPIVersionEmailNotifier",
                           "ClaimsRetrieverImplClass": "org.wso2.carbon.apimgt.impl.token.DefaultClaimsRetriever",
                           "Title": "Version $2 of $1 Released",
-                          "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/store\">Click here to Visit WSO2 API Store</a></body></html>"
+                          "Template": " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/devportal\">Click here to Visit WSO2 API Store</a></body></html>"
                         }
                       ],
                       "required": [
@@ -620,7 +654,7 @@
                           "description": "An explanation about the purpose of this instance.",
                           "default": "",
                           "examples": [
-                            " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/store\">Click here to Visit WSO2 API Store</a></body></html>"
+                            " <html> <body> <h3 style=\"color:Black;\">We’re happy to announce the arrival of the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\"https://localhost:9443/devportal\">Click here to Visit WSO2 API Store</a></body></html>"
                           ]
                         }
                       },
@@ -1311,6 +1345,16 @@
     },
     "LinterCustomRules": {
       "required": ["rules"]
+    },
+    "AllowSubscriptionValidationDisabling": {
+      "$id": "#/properties/AllowSubscriptionValidationDisabling",
+      "type": "boolean",
+      "title": "AllowSubscriptionValidationDisabling schema",
+      "description": "This property is used to specify whether to allow subscription validation disabling or not.",
+      "default": false,
+      "examples": [
+        true, false
+      ]
     }
   },
   "additionalProperties": true

@@ -16,7 +16,11 @@
 
 package org.wso2.carbon.apimgt.impl.dto;
 
+import org.wso2.carbon.apimgt.api.UsedByMigrationClient;
+
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -47,7 +51,9 @@ public class ThrottleProperties {
     private boolean enableJwtConditions = false;
     private boolean enableQueryParamConditions =false;
     private String[] skipRedeployingPolicies = new String[]{};
+    private List<String> skipDeployingPolicies = new ArrayList<>();
     private Map<String, Long> defaultThrottleTierLimits = new HashMap<String, Long>();
+    private boolean enablePolicyRecreate;
     private TrafficManager trafficManager;
     public boolean isEnabledSubscriptionLevelSpikeArrest() {
         return enabledSubscriptionLevelSpikeArrest;
@@ -81,6 +87,7 @@ public class ThrottleProperties {
         this.policyDeployer = policyDeployer;
     }
 
+    @UsedByMigrationClient
     public boolean isEnableUnlimitedTier() {
         return enableUnlimitedTier;
     }
@@ -168,6 +175,14 @@ public class ThrottleProperties {
 
     public void setDefaultThrottleTierLimits(Map<String, Long> defaultThrottleTierLimits) {
         this.defaultThrottleTierLimits = defaultThrottleTierLimits;
+    }
+
+    public boolean isEnablePolicyRecreate() {
+        return enablePolicyRecreate;
+    }
+
+    public void setEnablePolicyRecreate(boolean enablePolicyRecreate) {
+        this.enablePolicyRecreate = enablePolicyRecreate;
     }
 
     public static class DataPublisher {
@@ -465,7 +480,17 @@ public class ThrottleProperties {
         private String serviceUrl;
         private String username;
         private String password;
+        private boolean tenantLoading  = true;
+        private LoadingTenants loadingTenants;
 
+        public boolean isTenantLoading() {
+            return tenantLoading;
+        }
+
+        public void setTenantLoading(boolean tenantLoading) {
+            this.tenantLoading = tenantLoading;
+        }
+        
         public boolean isEnabled() {
             return enabled;
         }
@@ -496,6 +521,14 @@ public class ThrottleProperties {
 
         public void setPassword(String password) {
             this.password = password;
+        }
+
+        public void setLoadingTenants(LoadingTenants loadingTenants) {
+            this.loadingTenants = loadingTenants;
+        }
+
+        public LoadingTenants getLoadingTenants() {
+            return loadingTenants;
         }
     }
 
@@ -613,6 +646,13 @@ public class ThrottleProperties {
 
     public void setSkipRedeployingPolicies(String[] skipRedeployingPolicies) {
         this.skipRedeployingPolicies = skipRedeployingPolicies;
+    }
+    public List<String>  getSkipDeployingPolicies() {
+        return skipDeployingPolicies;
+    }
+
+    public void setSkipDeployingPolicies(List<String> skipDeployingPolicies) {
+        this.skipDeployingPolicies = skipDeployingPolicies;
     }
 }
 

@@ -21,6 +21,7 @@ package org.wso2.carbon.apimgt.gateway.handlers.common;
 import io.opentelemetry.context.Context;
 import org.apache.synapse.AbstractSynapseHandler;
 import org.apache.synapse.MessageContext;
+import org.apache.synapse.api.ApiUtils;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
@@ -44,29 +45,37 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
         TracingTracer tracer = ServiceReferenceHolder.getInstance().getTracer();
         TelemetryTracer telemetryTracer = ServiceReferenceHolder.getInstance().getTelemetryTracer();
 
+        if (GatewayUtils.checkForFileBasedApiContexts(ApiUtils.getFullRequestPath(messageContext),
+                GatewayUtils.getTenantDomain())) {
+            return true;
+        }
+
         if (TelemetryUtil.telemetryEnabled()) {
             org.apache.axis2.context.MessageContext axis2MessageContext =
                     ((Axis2MessageContext) messageContext).getAxis2MessageContext();
             Map headersMap =
                     (Map) axis2MessageContext.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
+            if (headersMap != null) {
+                Context spanContext = TelemetryUtil.extract(headersMap);
 
-            Context spanContext = TelemetryUtil.extract(headersMap);
-
-            TelemetrySpan responseLatencySpan = TelemetryUtil.startSpan(APIMgtGatewayConstants.RESPONSE_LATENCY,
-                    spanContext, telemetryTracer);
-            GatewayUtils.setRequestRelatedTags(responseLatencySpan, messageContext);
-            messageContext.setProperty(APIMgtGatewayConstants.RESPONSE_LATENCY, responseLatencySpan);
+                TelemetrySpan responseLatencySpan = TelemetryUtil.startSpan(APIMgtGatewayConstants.RESPONSE_LATENCY,
+                        spanContext, telemetryTracer);
+                GatewayUtils.setRequestRelatedTags(responseLatencySpan, messageContext);
+                messageContext.setProperty(APIMgtGatewayConstants.RESPONSE_LATENCY, responseLatencySpan);
+            }
         } else if (Util.tracingEnabled()) {
             org.apache.axis2.context.MessageContext axis2MessageContext =
                     ((Axis2MessageContext) messageContext).getAxis2MessageContext();
             Map headersMap =
                     (Map) axis2MessageContext.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
-            TracingSpan spanContext = Util.extract(tracer, headersMap);
-            TracingSpan responseLatencySpan =
-                    Util.startSpan(APIMgtGatewayConstants.RESPONSE_LATENCY, spanContext, tracer);
-            Util.setTag(responseLatencySpan, APIMgtGatewayConstants.SPAN_KIND, APIMgtGatewayConstants.SERVER);
-            GatewayUtils.setRequestRelatedTags(responseLatencySpan, messageContext);
-            messageContext.setProperty(APIMgtGatewayConstants.RESPONSE_LATENCY, responseLatencySpan);
+            if (headersMap != null) {
+                TracingSpan spanContext = Util.extract(tracer, headersMap);
+                TracingSpan responseLatencySpan = Util.startSpan(APIMgtGatewayConstants.RESPONSE_LATENCY, spanContext,
+                        tracer);
+                Util.setTag(responseLatencySpan, APIMgtGatewayConstants.SPAN_KIND, APIMgtGatewayConstants.SERVER);
+                GatewayUtils.setRequestRelatedTags(responseLatencySpan, messageContext);
+                messageContext.setProperty(APIMgtGatewayConstants.RESPONSE_LATENCY, responseLatencySpan);
+            }
         }
         return true;
     }
@@ -108,13 +117,17 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
         if (TelemetryUtil.telemetryEnabled() && messageContext.getProperty(APIMgtGatewayConstants.BACKEND_LATENCY_SPAN) != null) {
             TelemetrySpan backendLatencySpan =
                     (TelemetrySpan) messageContext.getProperty(APIMgtGatewayConstants.BACKEND_LATENCY_SPAN);
-            GatewayUtils.setEndpointRelatedInformation(backendLatencySpan, messageContext);
-            TelemetryUtil.finishSpan(backendLatencySpan);
+            if (backendLatencySpan != null) {
+                GatewayUtils.setEndpointRelatedInformation(backendLatencySpan, messageContext);
+                TelemetryUtil.finishSpan(backendLatencySpan);
+            }
         } else if (Util.tracingEnabled() && messageContext.getProperty(APIMgtGatewayConstants.BACKEND_LATENCY_SPAN) != null) {
             TracingSpan backendLatencySpan =
                     (TracingSpan) messageContext.getProperty(APIMgtGatewayConstants.BACKEND_LATENCY_SPAN);
-            GatewayUtils.setEndpointRelatedInformation(backendLatencySpan, messageContext);
-            Util.finishSpan(backendLatencySpan);
+            if (backendLatencySpan != null) {
+                GatewayUtils.setEndpointRelatedInformation(backendLatencySpan, messageContext);
+                Util.finishSpan(backendLatencySpan);
+            }
         }
         return true;
     }
@@ -129,14 +142,17 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
             }
             TelemetrySpan responseLatencySpan =
                     (TelemetrySpan) messageContext.getProperty(APIMgtGatewayConstants.RESPONSE_LATENCY);
-            GatewayUtils.setAPIRelatedTags(responseLatencySpan, messageContext);
-            API api = GatewayUtils.getAPI(messageContext);
-            if (api != null) {
-                TelemetryUtil.updateOperation(responseLatencySpan,
-                        api.getApiName().concat("--").concat(api.getApiVersion()).concat("--")
-                                .concat(GatewayUtils.getTenantDomain()));
+            if (responseLatencySpan != null) {
+                GatewayUtils.setAPIRelatedTags(responseLatencySpan, messageContext);
+                API api = GatewayUtils.getAPI(messageContext);
+                String tenantDomain = (String) messageContext.getProperty(APIMgtGatewayConstants.TENANT_DOMAIN);
+                if (api != null) {
+                    TelemetryUtil.updateOperation(responseLatencySpan,
+                            api.getApiName().concat("--").concat(api.getApiVersion()).concat("--")
+                                    .concat(tenantDomain));
+                }
+                TelemetryUtil.finishSpan(responseLatencySpan);
             }
-            TelemetryUtil.finishSpan(responseLatencySpan);
         } else if (Util.tracingEnabled()) {
             Object resourceSpanObject = messageContext.getProperty(APIMgtGatewayConstants.RESOURCE_SPAN);
             if (resourceSpanObject != null) {
@@ -145,13 +161,19 @@ public class APIMgtLatencySynapseHandler extends AbstractSynapseHandler {
             }
             TracingSpan responseLatencySpan =
                     (TracingSpan) messageContext.getProperty(APIMgtGatewayConstants.RESPONSE_LATENCY);
-            GatewayUtils.setAPIRelatedTags(responseLatencySpan, messageContext);
-            API api = GatewayUtils.getAPI(messageContext);
-            if (api != null) {
-                Util.updateOperation(responseLatencySpan, api.getApiName().concat("--").concat(api
-                        .getApiVersion()).concat("--").concat(GatewayUtils.getTenantDomain()));
+            if (responseLatencySpan != null) {
+                GatewayUtils.setAPIRelatedTags(responseLatencySpan, messageContext);
+                API api = GatewayUtils.getAPI(messageContext);
+                String tenantDomain = (String) messageContext.getProperty(APIMgtGatewayConstants.TENANT_DOMAIN);
+                if (api != null) {
+                    Util.updateOperation(responseLatencySpan,
+                            api.getApiName().concat("--").concat(api.getApiVersion()).concat("--")
+                                    .concat(tenantDomain));
+                }
+                if (responseLatencySpan != null) {
+                    Util.finishSpan(responseLatencySpan);
+                }
             }
-            Util.finishSpan(responseLatencySpan);
         }
         return true;
     }

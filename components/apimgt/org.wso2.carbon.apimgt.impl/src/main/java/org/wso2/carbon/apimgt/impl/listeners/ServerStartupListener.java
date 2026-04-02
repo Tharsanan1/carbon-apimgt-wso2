@@ -21,9 +21,12 @@ import org.apache.axis2.util.JavaUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.common.gateway.dto.TokenIssuerDto;
+import org.wso2.carbon.apimgt.impl.LLMProviderRegistrationService;
+import org.wso2.carbon.apimgt.impl.correlation.CorrelationConfigManager;
 import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.loader.KeyManagerConfigurationDataRetriever;
@@ -45,19 +48,37 @@ public class ServerStartupListener implements ServerStartupObserver {
     public void completedServerStartup() {
 
         copyToExtensions();
-
-        APIManagerConfiguration apiManagerConfiguration =
-                ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService().getAPIManagerConfiguration();
-        if (apiManagerConfiguration != null) {
-            String enableKeyManagerRetrieval =
-                    apiManagerConfiguration.getFirstProperty(APIConstants.ENABLE_KEY_MANAGER_RETRIVAL);
-            if (JavaUtils.isTrueExplicitly(enableKeyManagerRetrieval)) {
-                startConfigureKeyManagerConfigurations();
+        String migrationEnabled = System.getProperty(APIConstants.MIGRATE);
+        if (migrationEnabled == null) {
+            APIManagerConfiguration apiManagerConfiguration =
+                    ServiceReferenceHolder.getInstance().getAPIManagerConfigurationService().getAPIManagerConfiguration();
+            if (apiManagerConfiguration != null) {
+                String enableKeyManagerRetrieval =
+                        apiManagerConfiguration.getFirstProperty(APIConstants.ENABLE_KEY_MANAGER_RETRIVAL);
+                if (JavaUtils.isTrueExplicitly(enableKeyManagerRetrieval)) {
+                    startConfigureKeyManagerConfigurations();
+                }
+                Map<String, TokenIssuerDto> tokenIssuerDtoMap =
+                        apiManagerConfiguration.getJwtConfigurationDto().getTokenIssuerDtoMap();
+                tokenIssuerDtoMap.forEach((issuer, tokenIssuer) -> KeyManagerHolder.addGlobalJWTValidators(tokenIssuer));
+                if (apiManagerConfiguration.isEnableAiConfiguration()) {
+                    try {
+                        LLMProviderRegistrationService
+                                .registerDefaultLLMProviders(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+                    } catch (APIManagementException e) {
+                        log.error("Error occurred during onboarding pre defined LLM Providers in tenant "
+                                + MultitenantConstants.SUPER_TENANT_DOMAIN_NAME, e);
+                    }
+                }
             }
-            Map<String, TokenIssuerDto> tokenIssuerDtoMap =
-                    apiManagerConfiguration.getJwtConfigurationDto().getTokenIssuerDtoMap();
-            tokenIssuerDtoMap.forEach((issuer, tokenIssuer) -> KeyManagerHolder.addGlobalJWTValidators(tokenIssuer));
+        } else {
+            log.info("Running on migration enabled mode: Stopped at ServerStartupListener completed");
         }
+
+        Thread thread = new Thread(() -> {
+            CorrelationConfigManager.getInstance().initializeCorrelationComponentList();
+        });
+        thread.start();
     }
 
     /**

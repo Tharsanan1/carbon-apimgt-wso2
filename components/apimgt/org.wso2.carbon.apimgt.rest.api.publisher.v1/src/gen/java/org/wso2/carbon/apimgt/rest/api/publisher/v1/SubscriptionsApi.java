@@ -57,6 +57,25 @@ SubscriptionsApiService delegate = new SubscriptionsApiServiceImpl();
         return delegate.blockSubscription(subscriptionId, blockState, ifMatch, securityContext);
     }
 
+    @POST
+    @Path("/change-business-plan")
+    
+    @Produces({ "application/json" })
+    @ApiOperation(value = "Change subscription business plan", notes = "This operation can be used to change the business plan of a subscription specifying the subscription Id and the business plan. ", response = Void.class, authorizations = {
+        @Authorization(value = "OAuth2Security", scopes = {
+            @AuthorizationScope(scope = "apim:subscription_manage", description = "Manage all Subscription related operations")
+        })
+    }, tags={ "Subscriptions",  })
+    @ApiResponses(value = { 
+        @ApiResponse(code = 200, message = "OK. Subscription business plan was changed successfully. ", response = Void.class),
+        @ApiResponse(code = 400, message = "Bad Request. Invalid request or validation error.", response = ErrorDTO.class),
+        @ApiResponse(code = 403, message = "Forbidden. The request must be conditional but no condition has been specified.", response = ErrorDTO.class),
+        @ApiResponse(code = 404, message = "Not Found. The specified resource does not exist.", response = ErrorDTO.class),
+        @ApiResponse(code = 409, message = "Conflict. Specified resource already exists.", response = ErrorDTO.class) })
+    public Response changeSubscriptionBusinessPlan( @NotNull @ApiParam(value = "Subscription Id ",required=true)  @QueryParam("subscriptionId") String subscriptionId,  @NotNull @ApiParam(value = "The business plan to be assigned to the subscription. ",required=true)  @QueryParam("businessPlan") String businessPlan,  @ApiParam(value = "Validator for conditional requests; based on ETag. " )@HeaderParam("If-Match") String ifMatch) throws APIManagementException{
+        return delegate.changeSubscriptionBusinessPlan(subscriptionId, businessPlan, ifMatch, securityContext);
+    }
+
     @GET
     @Path("/{subscriptionId}/subscriber-info")
     
@@ -64,6 +83,7 @@ SubscriptionsApiService delegate = new SubscriptionsApiServiceImpl();
     @ApiOperation(value = "Get Details of a Subscriber", notes = "This operation can be used to get details of a user who subscribed to the API. ", response = SubscriberInfoDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:api_view", description = "View API"),
+            @AuthorizationScope(scope = "apim:mcp_server_view", description = "View MCP Server"),
             @AuthorizationScope(scope = "apim:subscription_view", description = "View Subscription"),
             @AuthorizationScope(scope = "apim:subscription_manage", description = "Manage all Subscription related operations")
         })
@@ -82,6 +102,7 @@ SubscriptionsApiService delegate = new SubscriptionsApiServiceImpl();
     @ApiOperation(value = "Get Details of a Pending Invoice for a Monetized Subscription with Metered Billing.", notes = "This operation can be used to get details of a pending invoice for a monetized subscription with meterd billing. ", response = APIMonetizationUsageDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:api_view", description = "View API"),
+            @AuthorizationScope(scope = "apim:mcp_server_view", description = "View MCP Server"),
             @AuthorizationScope(scope = "apim:subscription_view", description = "View Subscription"),
             @AuthorizationScope(scope = "apim:subscription_manage", description = "Manage all Subscription related operations")
         })
@@ -98,9 +119,10 @@ SubscriptionsApiService delegate = new SubscriptionsApiServiceImpl();
     
     
     @Produces({ "application/json" })
-    @ApiOperation(value = "Get all Subscriptions", notes = "This operation can be used to retrieve a list of subscriptions of the user associated with the provided access token. This operation is capable of  1. Retrieving all subscriptions for the user's APIs. `GET https://127.0.0.1:9443/api/am/publisher/v3/subscriptions`  2. Retrieving subscriptions for a specific API. `GET https://127.0.0.1:9443/api/am/publisher/v3/subscriptions?apiId=c43a325c-260b-4302-81cb-768eafaa3aed` ", response = SubscriptionListDTO.class, authorizations = {
+    @ApiOperation(value = "Get all Subscriptions", notes = "This operation can be used to retrieve a list of subscriptions of the user associated with the provided access token. This operation is capable of  1. Retrieving all subscriptions for the user's APIs. `GET https://127.0.0.1:9443/api/am/publisher/v4/subscriptions`  2. Retrieving subscriptions for a specific API. `GET https://127.0.0.1:9443/api/am/publisher/v4/subscriptions?apiId=c43a325c-260b-4302-81cb-768eafaa3aed` ", response = SubscriptionListDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:api_view", description = "View API"),
+            @AuthorizationScope(scope = "apim:mcp_server_view", description = "View MCP Server"),
             @AuthorizationScope(scope = "apim:subscription_view", description = "View Subscription"),
             @AuthorizationScope(scope = "apim:subscription_manage", description = "Manage all Subscription related operations")
         })

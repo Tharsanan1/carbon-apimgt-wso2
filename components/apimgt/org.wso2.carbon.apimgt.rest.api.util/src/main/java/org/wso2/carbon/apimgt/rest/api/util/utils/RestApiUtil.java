@@ -37,6 +37,7 @@ import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.model.DuplicateAPIException;
 import org.wso2.carbon.apimgt.api.model.OAuthAppRequest;
 import org.wso2.carbon.apimgt.api.model.OAuthApplicationInfo;
+import org.wso2.carbon.apimgt.api.model.OrganizationInfo;
 import org.wso2.carbon.apimgt.api.model.ResourceFile;
 import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.impl.AMDefaultKeyManagerImpl;
@@ -54,10 +55,12 @@ import org.wso2.carbon.apimgt.rest.api.util.exception.ForbiddenException;
 import org.wso2.carbon.apimgt.rest.api.util.exception.InternalServerErrorException;
 import org.wso2.carbon.apimgt.rest.api.util.exception.MethodNotAllowedException;
 import org.wso2.carbon.apimgt.rest.api.util.exception.NotFoundException;
+import org.wso2.carbon.apimgt.rest.api.util.exception.PreconditionFailedException;
 import org.wso2.carbon.registry.core.exceptions.ResourceNotFoundException;
 import org.wso2.carbon.registry.core.secure.AuthorizationFailedException;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.uri.template.URITemplateException;
+import org.wso2.uri.template.parser.URITemplateParser;
 import org.wso2.carbon.apimgt.api.OrganizationResolver;
 
 import java.io.File;
@@ -84,7 +87,9 @@ public class RestApiUtil {
 
     public static final Log log = LogFactory.getLog(RestApiUtil.class);
     private static Dictionary<org.wso2.uri.template.URITemplate, List<String>> uriToHttpMethodsMap;
+    private static Dictionary<org.wso2.uri.template.URITemplate, List<String>> basicAuthBlockedUriToHttpMethodsMap;
     private static Dictionary<org.wso2.uri.template.URITemplate, List<String>> ETagSkipListURIToHttpMethodsMap;
+    private static Dictionary<String, List<String>> adminRestrictedUriToHttpMethodsMap;
 
     public static <T> ErrorDTO getConstraintViolationErrorDTO(Set<ConstraintViolation<T>> violations) {
         ErrorDTO errorDTO = new ErrorDTO();
@@ -124,6 +129,25 @@ public class RestApiUtil {
         ErrorDTO errorDTO = new ErrorDTO();
         errorDTO.setCode(code);
         errorDTO.setMoreInfo("");
+        errorDTO.setMessage(message);
+        errorDTO.setDescription(description);
+        return errorDTO;
+    }
+
+    /**
+     * Returns a generic errorDTO
+     *
+     * @param message     specifies the error message
+     * @param code        specifies the error code
+     * @param description specifies the error description
+     * @param moreInfo    specifies more information about the error
+     * @return A generic errorDTO with the specified details
+     */
+    public static ErrorDTO getErrorDTO(String message, Long code, String description, String moreInfo) {
+
+        ErrorDTO errorDTO = new ErrorDTO();
+        errorDTO.setCode(code);
+        errorDTO.setMoreInfo(moreInfo);
         errorDTO.setMessage(message);
         errorDTO.setDescription(description);
         return errorDTO;
@@ -178,18 +202,42 @@ public class RestApiUtil {
      * @return JAXRS Response object
      */
     public static Response getResponseFromResourceFile(String fileNameWithoutExtension, ResourceFile resourceFile) {
+        return buildResourceResponse(fileNameWithoutExtension, resourceFile, APIConstants.APPLICATION_WSDL_MEDIA_TYPE,
+                true);
+    }
+
+    /**
+     * Create a JAXRS Response object based on the provided ResourceFile for Devportal to support both wsdl download and wsdl access via URL.
+     *
+     * @param fileNameWithoutExtension Filename without the extension. The extension is determined from the method
+     * @param resourceFile ResourceFile object
+     * @return JAXRS Response object
+     */
+    public static Response getResponseFromResourceFileForDevportal(String fileNameWithoutExtension,
+            ResourceFile resourceFile) {
+        return buildResourceResponse(fileNameWithoutExtension, resourceFile, APIConstants.APPLICATION_XML_MEDIA_TYPE,
+                false);
+    }
+
+    private static Response buildResourceResponse(String fileNameWithoutExtension, ResourceFile resourceFile,
+            String wsdlContentType, boolean asAttachment) {
         String contentType;
         String extension;
         if (resourceFile.getContentType().contains(APIConstants.APPLICATION_ZIP)) {
             contentType = APIConstants.APPLICATION_ZIP;
             extension = APIConstants.ZIP_FILE_EXTENSION;
         } else {
-            contentType = APIConstants.APPLICATION_WSDL_MEDIA_TYPE;
+            contentType = wsdlContentType;
             extension = APIConstants.WSDL_FILE_EXTENSION;
         }
         String filename = fileNameWithoutExtension + extension;
-        return Response.ok(resourceFile.getContent(), contentType).header("Content-Disposition",
-                "attachment; filename=\"" + filename + "\"" ).build();
+        if (asAttachment) {
+            return Response.ok(resourceFile.getContent(), contentType)
+                    .header("Content-Disposition", "attachment; filename=\"" + filename + "\"").build();
+        } else {
+            return Response.ok(resourceFile.getContent(), contentType)
+                    .header("Content-Disposition", "inline; filename=\"" + filename + "\"").build();
+        }
     }
 
     /**
@@ -379,7 +427,7 @@ public class RestApiUtil {
      * @return a new BadRequestException with the specified details as a response DTO
      */
     public static BadRequestException buildBadRequestException(String description) {
-        ErrorDTO errorDTO = getErrorDTO(RestApiConstants.STATUS_BAD_REQUEST_MESSAGE_DEFAULT, 400l, description);
+        ErrorDTO errorDTO = getErrorDTO(RestApiConstants.STATUS_BAD_REQUEST_MESSAGE_DEFAULT, 400L, description);
         return new BadRequestException(errorDTO);
     }
 
@@ -466,6 +514,32 @@ public class RestApiUtil {
     }
 
     /**
+     * Returns a new ConflictException
+     *
+     * @param message     summary of the error
+     * @param description description of the exception
+     * @param moreInfo    more information
+     * @return a new ConflictException with the specified details as a response DTO
+     */
+    public static ConflictException buildConflictException(String message, String description, String moreInfo) {
+
+        ErrorDTO errorDTO = getErrorDTO(message, 409l, description, moreInfo);
+        return new ConflictException(errorDTO);
+    }
+
+    /**
+     * Returns a new PreconditionFailedException.
+     *
+     * @param message summary of the error
+     * @param description description of the exception
+     * @return a new ConflictException with the specified details as a response DTO
+     */
+    public static PreconditionFailedException buildPreconditionFailedException(String message, String description) {
+        ErrorDTO errorDTO = getErrorDTO(message, 412l, description);
+        return new PreconditionFailedException(errorDTO);
+    }
+
+    /**
      * Check if the specified throwable e is due to an authorization failure
      * @param e throwable to check
      * @return true if the specified throwable e is due to an authorization failure, false otherwise
@@ -486,6 +560,28 @@ public class RestApiUtil {
     public static boolean isDueToResourceNotFound(Throwable e) {
         Throwable rootCause = getPossibleErrorCause(e);
         return rootCause instanceof APIMgtResourceNotFoundException || rootCause instanceof ResourceNotFoundException;
+    }
+
+    /**
+     * Check if the specified throwable e is happened as the provided on-prem key is invalid
+     *
+     * @param e throwable to check
+     * @return true if the specified throwable e is happened as the provided on-prem key is invalid, false otherwise
+     */
+    @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
+    public static boolean isDueToAIServiceNotAccessible(Throwable e) {
+        return detailedMessageMatches(e, "Invalid credentials");
+    }
+
+    /**
+     * Check if the specified throwable e is happened due to quota limit exceed
+     *
+     * @param e throwable to check
+     * @return true if the specified throwable e is happened as the quota limit has exceeded, false otherwise
+     */
+    @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
+    public static boolean isDueToAIServiceThrottled(Throwable e) {
+        return detailedMessageMatches(e, "You have exceeded your quota");
     }
 
     /**
@@ -602,6 +698,17 @@ public class RestApiUtil {
     public static void handleBadRequest(String msg, Log log) throws BadRequestException {
         BadRequestException badRequestException = buildBadRequestException(msg);
         log.error(msg);
+        throw badRequestException;
+    }
+
+    /**
+     * Logs the error, builds a BadRequestException with specified details and throws it
+     *
+     * @param msg error message
+     * @throws BadRequestException
+     */
+    public static void handleBadRequest(String msg) throws BadRequestException {
+        BadRequestException badRequestException = buildBadRequestException(msg);
         throw badRequestException;
     }
 
@@ -780,6 +887,18 @@ public class RestApiUtil {
     }
 
     /**
+     * Builds a NotFoundException with specified details and throws it
+     *
+     * @param resource requested resource
+     * @param id id of resource
+     * @throws NotFoundException
+     */
+    public static void handleResourceNotFoundError(String resource, String id) {
+        NotFoundException notFoundException = buildNotFoundException(resource, id);
+        throw notFoundException;
+    }
+
+    /**
      * Logs the error, builds a NotFoundException with specified details and throws it
      *
      * @param description description of the error
@@ -835,6 +954,22 @@ public class RestApiUtil {
         ConflictException conflictException = buildConflictException(
                 RestApiConstants.STATUS_CONFLICT_MESSAGE_RESOURCE_ALREADY_EXISTS, description);
         log.error(description);
+        throw conflictException;
+    }
+
+    /**
+     * Logs the error, builds a ConflictException with specified details and throws it
+     *
+     * @param description description of the error
+     * @param moreInfo    More info link
+     * @param log         Log instance
+     * @throws ConflictException
+     */
+    public static void handleConflict(String description, String moreInfo, Log log) throws ConflictException {
+
+        ConflictException conflictException =
+                buildConflictException(RestApiConstants.STATUS_CONFLICT_MESSAGE_DEFAULT, description, moreInfo);
+        log.error(description + " " + moreInfo);
         throw conflictException;
     }
 
@@ -914,6 +1049,20 @@ public class RestApiUtil {
     }
 
     /**
+     * Logs the error, builds a ForbiddenException with specified details and throws it
+     * @param msg error message
+     * @param t Throwable instance
+     * @param log Log instance
+     * @throws ForbiddenException
+     */
+    public static void handleOperationBlockedError(String msg, Throwable t, Log log)
+            throws ForbiddenException {
+        ForbiddenException forbiddenException = buildForbiddenException(msg);
+        log.error(msg,t);
+        throw forbiddenException;
+    }
+
+    /**
      * Check whether the HTTP method is allowed for given resources
      *
      * @param method HTTP method
@@ -943,6 +1092,21 @@ public class RestApiUtil {
             }
         }
         return null;
+    }
+
+    /**
+     * Logs the error, builds a PreconditionFailedException with specified details and throws it.
+     *
+     * @param description description of the error
+     * @param log Log instance
+     * @throws ConflictException
+     */
+    public static void handlePreconditionFailedError(String description, Log log)
+            throws PreconditionFailedException {
+        PreconditionFailedException preconditionFailedException = buildPreconditionFailedException(
+                RestApiConstants.STATUS_PRECONDITION_FAILED_MESSAGE_DEFAULT, description);
+        log.error(description);
+        throw preconditionFailedException;
     }
 
     public static OAuthApplicationInfo registerOAuthApplication(OAuthAppRequest appRequest) {
@@ -1002,6 +1166,49 @@ public class RestApiUtil {
     }
 
     /**
+     * Returns the admin permission restricted URIs and associated HTTP methods for REST API by reading api-manager.xml
+     * configuration
+     *
+     * @return A Dictionary with the admin permission restricted URIs and the associated HTTP methods
+     * @throws APIManagementException If an error occurs while parsing the URI configuration
+     */
+    private static Dictionary<String, List<String>> getAdminPermissionRestrictedURIsToMethodsMapFromConfig()
+            throws APIManagementException {
+        URITemplateParser parser = new URITemplateParser();
+        Hashtable<String, List<String>> uriToMethodsMap = new Hashtable<>();
+        APIManagerConfiguration apiManagerConfiguration = ServiceReferenceHolder.getInstance()
+                .getAPIManagerConfigurationService().getAPIManagerConfiguration();
+        List<String> uriList = apiManagerConfiguration.getProperty(
+                APIConstants.API_RESTAPI_ADMIN_PERMISSION_RESTRICTED_URI);
+        List<String> methodsList = apiManagerConfiguration.getProperty(
+                APIConstants.API_RESTAPI_ADMIN_PERMISSION_RESTRICTED_HTTPMethods);
+
+        if (uriList != null && methodsList != null) {
+            if (uriList.size() != methodsList.size()) {
+                String errorMsg = "Provided Admin Permission Restricted URIs for REST API are invalid. Every 'AdminPermissionRestrictedAPI' should include 'URI' and 'HTTPMethods' elements";
+                log.error(errorMsg);
+                return new Hashtable<>();
+            }
+
+            for (int i = 0; i < uriList.size(); i++) {
+                String uri = uriList.get(i);
+                uri = uri.replace("/{version}", "");
+                try {
+                    parser.parse(uri);
+                    String methodsForUri = methodsList.get(i);
+                    List<String> methodListForUri = Arrays.asList(methodsForUri.split(","));
+                    uriToMethodsMap.put(uri, methodListForUri);
+                } catch (URITemplateException e) {
+                    String msg = "Error in parsing uri " + uri + " when retrieving AdminPermissionRestricted URIs for REST API";
+                    log.error(msg, e);
+                    throw new APIManagementException(msg, e);
+                }
+            }
+        }
+        return uriToMethodsMap;
+    }
+
+    /**
      * Returns the white-listed URIs and associated HTTP methods for REST API. If not already read before, reads
      * api-manager.xml configuration, store the results in a static reference and returns the results.
      * Otherwise returns previously stored the static reference object.
@@ -1016,6 +1223,84 @@ public class RestApiUtil {
             uriToHttpMethodsMap = getAllowedURIsToMethodsMapFromConfig();
         }
         return uriToHttpMethodsMap;
+    }
+
+    /**
+     * Returns the AdminPermissionRestricted URIs and associated HTTP methods for REST API. If not already read before, reads
+     * api-manager.xml configuration, store the results in a static reference and returns the results.
+     * Otherwise, returns previously stored the static reference object.
+     *
+     * @return A Dictionary with the permission restricted URIs and the associated HTTP methods
+     * @throws APIManagementException If an error occurs while parsing the URI configuration
+     */
+    public static Dictionary<String, List<String>> getAdminPermissionRestrictedURIsToMethodsMap()
+            throws APIManagementException {
+
+        if (adminRestrictedUriToHttpMethodsMap == null) {
+            adminRestrictedUriToHttpMethodsMap = getAdminPermissionRestrictedURIsToMethodsMapFromConfig();
+        }
+        return adminRestrictedUriToHttpMethodsMap;
+    }
+
+    /**
+     * Returns the Basic Auth Blocked URIs and associated HTTP methods for REST API
+     * by reading api-manager.xml configuration
+     *
+     * @return A Dictionary with the Basic Auth Blocked URIs and the associated HTTP methods.
+     * @throws APIManagementException
+     */
+    private static Dictionary<org.wso2.uri.template.URITemplate, List<String>> getBasicAuthBlockedURIsMapFromConfig()
+            throws APIManagementException {
+        Dictionary<org.wso2.uri.template.URITemplate, List<String>> uriToMethodsMap = new Hashtable<>();
+        APIManagerConfiguration apiManagerConfiguration = ServiceReferenceHolder.getInstance()
+                .getAPIManagerConfigurationService().getAPIManagerConfiguration();
+        List<String> uriList = apiManagerConfiguration
+                .getProperty(APIConstants.API_RESTAPI_BASIC_AUTH_BLOCKED_URI_URI);
+        List<String> methodsList = apiManagerConfiguration
+                .getProperty(APIConstants.API_RESTAPI_BASIC_AUTH_BLOCKED_URI_HTTPMethods);
+
+        if (uriList != null && methodsList != null) {
+            if (uriList.size() != methodsList.size()) {
+                String errorMsg = "Provided Basic Auth Blocked URIs for REST API are invalid."
+                        + " Every 'BasicAuthAllowedURI' should include 'URI' and 'HTTPMethods' elements";
+                log.error(errorMsg);
+                return new Hashtable<>();
+            }
+
+            for (int i = 0; i < uriList.size(); i++) {
+                String uri = uriList.get(i);
+                uri = uri.replace("/{version}", "");
+                try {
+                    org.wso2.uri.template.URITemplate uriTemplate = new org.wso2.uri.template.URITemplate(uri);
+                    String methodsForUri = methodsList.get(i);
+                    List<String> methodListForUri = Arrays.asList(methodsForUri.split(","));
+                    uriToMethodsMap.put(uriTemplate, methodListForUri);
+                } catch (URITemplateException e) {
+                    String msg = "Error in parsing URI " + uri
+                            + " when retrieving Basic Auth Blocked URIs for REST API";
+                    log.error(msg, e);
+                    throw new APIManagementException(msg, e);
+                }
+            }
+        }
+        return uriToMethodsMap;
+    }
+
+    /**
+     * Returns the Basic Auth Blocked URIs and associated HTTP methods for REST API. If not already read before, reads
+     * api-manager.xml configuration, store the results in a static reference and returns the results.
+     * Otherwise, returns previously stored the static reference object.
+     *
+     * @return A Dictionary with the Basic Auth Allowed URIs and the associated HTTP methods.
+     * @throws APIManagementException
+     */
+    public static Dictionary<org.wso2.uri.template.URITemplate, List<String>> getBasicAuthBlockedURIsToMethodsMap()
+            throws APIManagementException {
+
+        if (basicAuthBlockedUriToHttpMethodsMap == null) {
+            basicAuthBlockedUriToHttpMethodsMap = getBasicAuthBlockedURIsMapFromConfig();
+        }
+        return basicAuthBlockedUriToHttpMethodsMap;
     }
 
     /**
@@ -1160,6 +1445,20 @@ public class RestApiUtil {
         }
         return organization;
     }
+    
+    /**
+     * Method to extract the User organization
+     * @param ctx MessageContext
+     * @return organization
+     */
+
+    public static OrganizationInfo getOrganizationInfo(MessageContext ctx) throws APIManagementException {
+        OrganizationInfo organizationInfo = new OrganizationInfo();
+        if (ctx.get(RestApiConstants.ORGANIZATION_INFO) != null) {
+            organizationInfo = (OrganizationInfo) ctx.get(RestApiConstants.ORGANIZATION_INFO);
+        }
+        return organizationInfo;
+    }
 
 
     /**
@@ -1201,5 +1500,30 @@ public class RestApiUtil {
         properties.put(APIConstants.PROPERTY_QUERY_KEY, message.get(Message.QUERY_STRING));
         String organization = resolver.resolve(properties);
         return  organization;
+    }
+    
+    public static boolean isOrganizationVisibilityAllowed(String userName, String visibleOrgs, String userOrg)
+            throws APIManagementException {
+        boolean allowed = false;
+
+        if (APIUtil.areOrganizationsRegistered()) {
+            String[] roles = APIUtil.getListOfRoles(APIUtil.getUserNameWithTenantSuffix(userName));
+            if (Arrays.asList(roles).contains("admin")) {
+                return true;
+            }
+            if (StringUtils.isEmpty(visibleOrgs) || APIConstants.DEFAULT_VISIBLE_ORG.equals(visibleOrgs)) {
+                allowed = true;
+            } else {
+                List<String> visibleOrgList = Arrays.asList(visibleOrgs.split(","));
+
+                if (visibleOrgList.contains(userOrg)) {
+                    allowed = true;
+                } else {
+                    allowed = false;
+                }
+            }
+            return allowed;
+        }
+        return true;
     }
 }

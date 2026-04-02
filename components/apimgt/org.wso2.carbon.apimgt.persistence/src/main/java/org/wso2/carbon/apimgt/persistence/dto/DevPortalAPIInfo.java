@@ -15,6 +15,10 @@
  */
 package org.wso2.carbon.apimgt.persistence.dto;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,8 +28,10 @@ import java.util.Set;
  * APIs in DevPortal which are stored in the persistence layer are included in this.
  */
 public class DevPortalAPIInfo {
+    private static final Log log = LogFactory.getLog(DevPortalAPIInfo.class);
     private String id;
     private String apiName;
+    private String displayName;
     private String version;
     private String providerName;
     private String context;
@@ -34,12 +40,18 @@ public class DevPortalAPIInfo {
     private String businessOwner;
     private String status;
     private Set<String> availableTierNames;
+    private Set<OrganizationTiers> availableTiersForOrganizations = new LinkedHashSet<>();;
     private String subscriptionAvailability; 
     private String subscriptionAvailableOrgs;
     private String createdTime;
     private String description;
     private String gatewayVendor;
     private Map<String, String> additionalProperties;
+    private String businessOwnerEmail;
+    private String technicalOwner;
+    private String technicalOwnerEmail;
+    private Boolean isMonetizationEnabled;
+    private boolean advertiseOnly;
 
     public void setGatewayVendor(String gatewayVendor) {
         this.gatewayVendor = gatewayVendor;
@@ -126,6 +138,15 @@ public class DevPortalAPIInfo {
     public void setAvailableTierNames(Set<String> availableTierNames) {
         this.availableTierNames = availableTierNames;
     }
+
+    public Set<OrganizationTiers> getAvailableTiersForOrganizations() {
+        return availableTiersForOrganizations;
+    }
+
+    public void setAvailableTiersForOrganizations(Set<OrganizationTiers> availableTiersForOrganizations) {
+        this.availableTiersForOrganizations = availableTiersForOrganizations;
+    }
+
     public String getSubscriptionAvailableOrgs() {
         return subscriptionAvailableOrgs;
     }
@@ -145,13 +166,64 @@ public class DevPortalAPIInfo {
         this.additionalProperties = additionalProperties;
     }
 
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getBusinessOwnerEmail() {
+        return businessOwnerEmail;
+    }
+
+    public void setBusinessOwnerEmail(String businessOwnerEmail) {
+        this.businessOwnerEmail = businessOwnerEmail;
+    }
+
+    public String getTechnicalOwner() {
+        return technicalOwner;
+    }
+
+    public void setTechnicalOwner(String technicalOwner) {
+        this.technicalOwner = technicalOwner;
+    }
+
+    public String getTechnicalOwnerEmail() {
+        return technicalOwnerEmail;
+    }
+
+    public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+        this.technicalOwnerEmail = technicalOwnerEmail;
+    }
+
+    public Boolean getMonetizationStatus() {
+        return isMonetizationEnabled;
+    }
+
+    public void setMonetizationStatus(Boolean isMonetizationEnabled) {
+        this.isMonetizationEnabled = isMonetizationEnabled;
+    }
+
+    public boolean isAdvertiseOnly() {
+        return advertiseOnly;
+    }
+
+    public void setAdvertiseOnly(boolean advertiseOnly) {
+        this.advertiseOnly = advertiseOnly;
+    }
+
     @Override
     public String toString() {
         return "DevPortalAPIInfo [id=" + id + ", apiName=" + apiName + ", description=" + description + ", version="
                 + version + ", providerName=" + providerName + ", context=" + context + ", type=" + type + ", " +
-                "thumbnail=" + thumbnail + ", businessOwner=" + businessOwner + ", status=" + status + ", " +
-                "availableTierNames=" + availableTierNames + ", subscriptionAvailability=" + subscriptionAvailability
-                + ", subscriptionAvailableOrgs=" + subscriptionAvailableOrgs + "]";
+                "thumbnail=" + thumbnail + ", businessOwner=" + businessOwner + ", businessOwnerEmail="
+                + businessOwnerEmail + ", technicalOwner=" + technicalOwner + ", technicalOwnerEmail="
+                + technicalOwnerEmail + ", status=" + status + ", " + "availableTierNames=" + availableTierNames +
+                ", subscriptionAvailability=" + subscriptionAvailability + ", subscriptionAvailableOrgs="
+                + subscriptionAvailableOrgs + ", isMonetizationEnabled=" + isMonetizationEnabled + ", advertiseOnly="
+                + advertiseOnly +"]";
     }
 
 }

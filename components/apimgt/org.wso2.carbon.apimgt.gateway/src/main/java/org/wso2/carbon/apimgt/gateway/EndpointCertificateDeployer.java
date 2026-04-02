@@ -20,8 +20,10 @@ package org.wso2.carbon.apimgt.gateway;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.http.HttpEntity;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -29,7 +31,9 @@ import org.apache.http.util.EntityUtils;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.dto.CertificateMetadataDTO;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.utils.TenantUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.certificatemgt.CertificateManager;
 import org.wso2.carbon.apimgt.impl.certificatemgt.CertificateManagerImpl;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.exception.ArtifactSynchronizerException;
@@ -48,12 +52,17 @@ public class EndpointCertificateDeployer {
 
     private static final Log log = LogFactory.getLog(EndpointCertificateDeployer.class);
     private String tenantDomain;
-    private final EventHubConfigurationDto eventHubConfigurationDto =
-            ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getEventHubConfigurationDto();
-    private String baseURL = eventHubConfigurationDto.getServiceUrl() + APIConstants.INTERNAL_WEB_APP_EP;
+    private final EventHubConfigurationDto eventHubConfigurationDto;
+    private final String baseURL;
+
+    public EndpointCertificateDeployer() {
+        eventHubConfigurationDto =
+                ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getEventHubConfigurationDto();
+        baseURL = eventHubConfigurationDto.getServiceUrl() + APIConstants.INTERNAL_WEB_APP_EP;
+    }
 
     public EndpointCertificateDeployer(String tenantDomain) {
-
+        this();
         this.tenantDomain = tenantDomain;
     }
 
@@ -82,7 +91,7 @@ public class EndpointCertificateDeployer {
     }
 
     private void retrieveCertificatesAndDeploy(CloseableHttpResponse closeableHttpResponse) throws IOException {
-
+        CertificateManager certificateManager = CertificateManagerImpl.getInstance();
         boolean tenantFlowStarted = false;
         if (closeableHttpResponse.getStatusLine().getStatusCode() == 200) {
             String content = EntityUtils.toString(closeableHttpResponse.getEntity());
@@ -95,10 +104,12 @@ public class EndpointCertificateDeployer {
                 PrivilegedCarbonContext.startTenantFlow();
                 PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
                 tenantFlowStarted = true;
-                for (CertificateMetadataDTO certificateMetadataDTO : certificateMetadataDTOList) {
-                    CertificateManagerImpl.getInstance()
-                            .addCertificateToGateway(certificateMetadataDTO.getCertificate(),
-                                    certificateMetadataDTO.getAlias());
+                synchronized (certificateManager) {
+                    for (CertificateMetadataDTO certificateMetadataDTO : certificateMetadataDTOList) {
+                        CertificateManagerImpl.getInstance()
+                                .addCertificateToGateway(certificateMetadataDTO.getCertificate(),
+                                        certificateMetadataDTO.getAlias());
+                    }
                 }
             } finally {
                 if (tenantFlowStarted) {
@@ -128,9 +139,95 @@ public class EndpointCertificateDeployer {
 
         HttpClient httpClient = APIUtil.getHttpClient(port, protocol);
         try {
-            return APIUtil.executeHTTPRequest(method, httpClient);
+            return APIUtil.executeHTTPRequestWithRetries(method, httpClient);
         } catch (APIManagementException e) {
             throw new ArtifactSynchronizerException(e);
+        }
+    }
+
+    public void deployAllTenantCertificatesAtStartup() throws APIManagementException {
+
+        String endpoint = baseURL + APIConstants.CERTIFICATE_RETRIEVAL_ENDPOINT;
+
+        try (CloseableHttpResponse closeableHttpResponse = invokeService(endpoint, tenantDomain)) {
+            retrieveAllTenantCertificatesAndDeploy(closeableHttpResponse);
+        } catch (IOException | ArtifactSynchronizerException e) {
+            throw new APIManagementException("Error while inserting certificates into truststore", e);
+        }
+    }
+
+    public void deployAllCertificatesAtStartup() throws APIManagementException {
+
+        String endpoint = baseURL + APIConstants.CERTIFICATE_RETRIEVAL_ENDPOINT;
+        try (CloseableHttpResponse closeableHttpResponse = invokeService(endpoint, APIConstants.ORG_ALL_QUERY_PARAM)) {
+            if (closeableHttpResponse.getStatusLine().getStatusCode() == 200) {
+                retrieveAllCertificatesAndDeploy(closeableHttpResponse.getEntity());
+            } else {
+                log.error("Error while retrieving certificates from the endpoint : " + endpoint
+                        + "with the status code : " + closeableHttpResponse.getStatusLine().getStatusCode()
+                        + "and error : " + closeableHttpResponse.getStatusLine().getReasonPhrase());
+            }
+        } catch (IOException | ArtifactSynchronizerException e) {
+            throw new APIManagementException("Error while inserting certificates into truststore", e);
+        }
+    }
+
+    private void retrieveAllTenantCertificatesAndDeploy(CloseableHttpResponse closeableHttpResponse)
+            throws IOException {
+
+        boolean tenantFlowStarted = false;
+        if (closeableHttpResponse.getStatusLine().getStatusCode() == 200) {
+            String content = EntityUtils.toString(closeableHttpResponse.getEntity());
+            List<CertificateMetadataDTO> certificateMetadataDTOList;
+            Type listType = new TypeToken<List<CertificateMetadataDTO>>() {
+            }.getType();
+            certificateMetadataDTOList = new Gson().fromJson(content, listType);
+
+            try {
+                PrivilegedCarbonContext.startTenantFlow();
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
+                tenantFlowStarted = true;
+                CertificateManagerImpl.getInstance().addAllTenantCertificatesToGateway(certificateMetadataDTOList);
+            } finally {
+                if (tenantFlowStarted) {
+                    PrivilegedCarbonContext.endTenantFlow();
+                }
+            }
+        }
+    }
+
+    private void retrieveAllCertificatesAndDeploy(HttpEntity certContent) throws IOException {
+        CertificateManager certificateManager = CertificateManagerImpl.getInstance();
+        String content = EntityUtils.toString(certContent);
+        List<CertificateMetadataDTO> certificateMetadataDTOList;
+        Type listType = new TypeToken<List<CertificateMetadataDTO>>() {
+        }.getType();
+        certificateMetadataDTOList = new Gson().fromJson(content, listType);
+        synchronized (certificateManager) {
+            for (CertificateMetadataDTO certificateMetadataDTO : certificateMetadataDTOList) {
+                String organization = certificateMetadataDTO.getOrganization();
+                if (StringUtils.isNotEmpty(organization)) {
+                    if (TenantUtils.isTenantAvailable(organization)) {
+                        int tenantId = APIUtil.getTenantIdFromTenantDomain(organization);
+                        if (tenantId != -1) {
+                            CertificateManagerImpl.getInstance()
+                                    .addAllCertificateToGateway(certificateMetadataDTO.getCertificate(),
+                                            certificateMetadataDTO.getAlias(), tenantId);
+                        }
+                    } else {
+                        if (log.isDebugEnabled()) {
+                            log.debug(
+                                    "Skipping certificate deployment for alias: " + certificateMetadataDTO.getAlias() +
+                                            " as the tenant domain is not available or not valid: " + organization);
+                        }
+                    }
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Skipping certificate deployment for alias: " + certificateMetadataDTO.getAlias() +
+                                " as the tenant domain is not available or not valid: " + organization);
+                    }
+                }
+            }
         }
     }
 }

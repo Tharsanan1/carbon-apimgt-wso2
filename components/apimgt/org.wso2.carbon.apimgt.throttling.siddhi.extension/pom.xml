@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -43,7 +43,7 @@
             <artifactId>siddhi-query-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.ops4j.pax.logging</groupId>
+            <groupId>org.wso2.org.ops4j.pax.logging</groupId>
             <artifactId>pax-logging-api</artifactId>
         </dependency>
         <dependency>
@@ -56,6 +56,22 @@
             <artifactId>org.jacoco.agent</artifactId>
             <classifier>runtime</classifier>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.servicemix.bundles</groupId>
+            <artifactId>org.apache.servicemix.bundles.jedis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.json.wso2</groupId>
+            <artifactId>json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.impl</artifactId>
         </dependency>
     </dependencies>
 
@@ -70,10 +86,14 @@
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Bundle-Name>${project.artifactId}</Bundle-Name>
                         <Export-Package>
-                            org.wso2.carbon.apimgt.throttling.siddhi.extension,
                             org.wso2.carbon.apimgt.throttling.siddhi.extension.*
                         </Export-Package>
+                        <Private-Package>
+                        </Private-Package>
                         <Import-Package>
+                            redis.clients.jedis.*,
+                            org.apache.commons.pool2.*,
+                            org.json.*,
                             *;resolution:=optional
                         </Import-Package>
                         <DynamicImport-Package>*</DynamicImport-Package>
@@ -92,4 +112,3 @@
         </plugins>
     </build>
 </project>
-

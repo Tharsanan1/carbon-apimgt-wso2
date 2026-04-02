@@ -8,6 +8,8 @@ public class ExtendedJWTConfigurationDto extends JWTConfigurationDto {
     private boolean tenantBasedSigningEnabled;
     private boolean enableUserClaimRetrievalFromUserStore;
     private boolean isBindFederatedUserClaims;
+    private boolean isBindFederatedUserClaimsForOpaque;
+    private boolean isJWKSApiEnabled;
 
     public String getClaimRetrieverImplClass() {
 
@@ -57,5 +59,21 @@ public class ExtendedJWTConfigurationDto extends JWTConfigurationDto {
     public void setBindFederatedUserClaims(boolean isBindFederatedUserClaims) {
 
         this.isBindFederatedUserClaims = isBindFederatedUserClaims;
+    }
+
+    public boolean isJWKSApiEnabled() {
+        return isJWKSApiEnabled;
+    }
+
+    public void setJWKSApiEnabled(boolean JWKSApiEnabled) {
+        this.isJWKSApiEnabled = JWKSApiEnabled;
+    }
+
+    public boolean isBindFederatedUserClaimsForOpaque() {
+        return isBindFederatedUserClaimsForOpaque;
+    }
+
+    public void setBindFederatedUserClaimsForOpaque(boolean bindFederatedUserClaimsForOpaque) {
+        isBindFederatedUserClaimsForOpaque = bindFederatedUserClaimsForOpaque;
     }
 }

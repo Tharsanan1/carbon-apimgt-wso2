@@ -26,7 +26,6 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.Scope;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
-import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
@@ -34,6 +33,7 @@ import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SettingsDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SettingsIdentityProviderDTO;
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestApiUtil;
+import org.wso2.carbon.apimgt.spec.parser.definitions.OASParserUtil;
 import org.wso2.carbon.base.MultitenantConstants;
 import org.wso2.carbon.identity.application.authentication.framework.exception.FrameworkException;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
@@ -60,13 +60,17 @@ public class SettingsMappingUtil {
         SettingsDTO settingsDTO = new SettingsDTO();
         settingsDTO.setScopes(GetScopeList());
         settingsDTO.setApplicationSharingEnabled(APIUtil.isMultiGroupAppSharingEnabled());
+        settingsDTO.setIsJWTEnabledForLoginTokens(APIUtil.isJWTEnabledForPortals());
         settingsDTO.setRecommendationEnabled(recommendationEnabled);
         settingsDTO.setMapExistingAuthApps(APIUtil.isMapExistingAuthAppsEnabled());
         settingsDTO.setMonetizationEnabled(moneatizationEnabled);
+        settingsDTO.setOrgWideAppUpdateEnabled(APIUtil.isOrgWideAppUpdateEnabled());
         SettingsIdentityProviderDTO identityProviderDTO = new SettingsIdentityProviderDTO();
         identityProviderDTO.setExternal(APIUtil.getIdentityProviderConfig() != null);
         settingsDTO.setIdentityProvider(identityProviderDTO);
         settingsDTO.setIsAnonymousModeEnabled(anonymousEnabled);
+        settingsDTO.setIsLegacyApiKeysEnabled(APIUtil.isLegacyApiKeysEnabled());
+        settingsDTO.setOrgAccessControlEnabled(APIUtil.isOrganizationAccessControlEnabled());
         APIManagerConfiguration config = ServiceReferenceHolder.getInstance().
                 getAPIManagerConfigurationService().getAPIManagerConfiguration();
         boolean enableChangePassword =
@@ -124,6 +128,12 @@ public class SettingsMappingUtil {
         settingsDTO.setPasswordPolicyPattern(passwordPolicyPattern);
         settingsDTO.setPasswordPolicyMinLength(passwordPolicyMinLength);
         settingsDTO.setPasswordPolicyMaxLength(passwordPolicyMaxLength);
+        settingsDTO.setApiChatEnabled(config.getApiChatConfigurationDto().isEnabled());
+        settingsDTO.setMarketplaceAssistantEnabled(config.getMarketplaceAssistantConfigurationDto().isEnabled());
+        settingsDTO.setAiAuthTokenProvided(config.getApiChatConfigurationDto().isAuthTokenProvided() ||
+                config.getApiChatConfigurationDto().isKeyProvided());
+        settingsDTO.setDevportalMode(
+                SettingsDTO.DevportalModeEnum.fromValue(config.getDevportalMode()));
 
         if (isUserAvailable) {
             settingsDTO.setGrantTypes(APIUtil.getGrantTypes());

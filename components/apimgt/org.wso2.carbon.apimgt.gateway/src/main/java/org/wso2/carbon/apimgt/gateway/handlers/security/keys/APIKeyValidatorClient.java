@@ -19,6 +19,7 @@ package org.wso2.carbon.apimgt.gateway.handlers.security.keys;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityException;
@@ -76,12 +77,12 @@ public class APIKeyValidatorClient {
     }
 
     public APIKeyValidationInfoDTO validateSubscription(String context, String version, int appId,
-                                                        String tenantDomain)
+                                                        String tenantDomain, String keyType)
             throws APISecurityException {
 
         try {
             return apiKeyValidationService
-                    .validateSubscription(context, version, appId, tenantDomain);
+                    .validateSubscription(context, version, appId, tenantDomain, keyType);
         } catch (APIKeyMgtException | APIManagementException e) {
             log.error("Error while  validate subscriptions", e);
             throw new APISecurityException(APISecurityConstants.API_AUTH_GENERAL_ERROR,
@@ -128,5 +129,16 @@ public class APIKeyValidatorClient {
     public Map<String, Scope> retrieveScopes(String tenantDomain) {
         return apiKeyValidationService.retrieveScopes(tenantDomain);
 
+    }
+
+    public APIKeyValidationInfoDTO validateAPIKeySubscription(String apiContext, String apiVersion, String tenantDomain,
+                                                              APIKeyInfo apiKeyInfo) throws APISecurityException {
+        try {
+            return apiKeyValidationService.validateAPIKeySubscription(apiContext, apiVersion, tenantDomain, apiKeyInfo);
+        } catch (APIKeyMgtException e) {
+            log.error("Error occurred while validating API key subscription: " + e.getMessage());
+            throw new APISecurityException(APISecurityConstants.API_AUTH_GENERAL_ERROR,
+                    "Error while accessing in-memory store for API subscription validation", e);
+        }
     }
 }

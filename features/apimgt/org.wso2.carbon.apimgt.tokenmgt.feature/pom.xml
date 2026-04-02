@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt-feature</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -111,7 +111,7 @@
                                 <bundleDef>
                                     org.wso2.carbon.identity.framework:org.wso2.carbon.identity.user.registration.stub:${carbon.identity.version}
                                 </bundleDef>
-                                <bundleDef>com.googlecode.json-simple.wso2:json-simple</bundleDef>
+                                <bundleDef>com.googlecode.json-simple:json-simple</bundleDef>
                                 <bundleDef>com.google.code.gson:gson:${google.code.gson.version}</bundleDef>
                                 <bundleDef>net.sf.ehcache.wso2:ehcache</bundleDef>
                                 <bundleDef>org.json.wso2:json:${orbit.version.json}</bundleDef>
@@ -127,7 +127,7 @@
                                     org.wso2.carbon.identity.framework:org.wso2.carbon.identity.authenticator.thrift:${carbon.identity.version}
                                 </importBundleDef>
                                 <importBundleDef>
-                                    org.wso2.carbon.event-processing:org.wso2.carbon.event.processor.stub:${event.processor.stub.version}
+                                    org.wso2.carbon.event-processing:org.wso2.carbon.event.processor.stub:${event.processor.version}
                                 </importBundleDef>
                             </importBundles>
                             <importFeatures>

@@ -2,7 +2,6 @@ package org.wso2.carbon.apimgt.rest.api.common;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.core.util.Json;
-
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.PathItem;
@@ -18,29 +17,46 @@ import org.apache.commons.logging.LogFactory;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
-import org.wso2.carbon.apimgt.api.*;
+import org.wso2.carbon.apimgt.api.APIConsumer;
+import org.wso2.carbon.apimgt.api.APIDefinition;
+import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.APIMgtAuthorizationFailedException;
+import org.wso2.carbon.apimgt.api.APIProvider;
+import org.wso2.carbon.apimgt.api.ExceptionCodes;
+import org.wso2.carbon.apimgt.api.OAuthTokenInfo;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.Scope;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
+import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerFactory;
-import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.rest.api.common.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.spec.parser.definitions.OASParserUtil;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 import org.wso2.uri.template.URITemplateException;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.InvalidKeyException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.Set;
-import java.util.HashSet;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,15 +65,19 @@ import static org.wso2.carbon.apimgt.impl.APIConstants.X_WSO2_BASEPATH;
 import static org.wso2.carbon.apimgt.impl.APIConstants.X_WSO2_DISABLE_SECURITY;
 import static org.wso2.carbon.apimgt.impl.APIConstants.X_WSO2_PRODUCTION_ENDPOINTS;
 import static org.wso2.carbon.apimgt.impl.APIConstants.X_WSO2_SANDBOX_ENDPOINTS;
+import static org.wso2.carbon.apimgt.rest.api.common.RestApiConstants.REST_API_GOVERNANCE_CONTEXT_FULL;
+import static org.wso2.carbon.apimgt.rest.api.common.RestApiConstants.REST_API_GOVERNANCE_VERSION;
 
 public class RestApiCommonUtil {
 
     public static final ThreadLocal userThreadLocal = new ThreadLocal();
     private static final Log log = LogFactory.getLog(RestApiCommonUtil.class);
+    private static Set<URITemplate> dcrResourceMappings;
     private static Set<URITemplate> storeResourceMappings;
     private static Set<URITemplate> publisherResourceMappings;
     private static Set<URITemplate> adminAPIResourceMappings;
     private static Set<URITemplate> serviceCatalogAPIResourceMappings;
+    private static Set<URITemplate> governanceResourceMapping;
 
     public static void unsetThreadLocalRequestedTenant() {
 
@@ -96,14 +116,30 @@ public class RestApiCommonUtil {
 
         String version = (String) message.get(RestApiConstants.API_VERSION);
 
+        String[] segments = basePath.split("/");
+        String lastSegment = StringUtils.EMPTY;
+        for (int i = segments.length - 1; i >= 0; i--) {
+            if (StringUtils.isNotEmpty(segments[i])) {
+                lastSegment = segments[i];
+                break;
+            }
+        }
+
+        String derivedBasePath;
+        if (lastSegment.equals(version)) {
+            derivedBasePath = basePath;
+        } else {
+            derivedBasePath = basePath + version;
+        }
+
         //get all the URI templates of the REST API from the base path
-        Set<URITemplate> uriTemplates = RestApiCommonUtil.getURITemplatesForBasePath(basePath + version);
+        Set<URITemplate> uriTemplates = RestApiCommonUtil.getURITemplatesForBasePath(derivedBasePath);
         if (uriTemplates.isEmpty()) {
             if (log.isDebugEnabled()) {
-                log.debug("No matching scopes found for request with path: " + basePath
-                        + ". Skipping scope validation.");
+                log.debug("No matching scopes found for request with path: " + derivedBasePath
+                        + ". Hence, failing the scope validation.");
             }
-            return true;
+            return false;
         }
 
         for (Object template : uriTemplates.toArray()) {
@@ -122,7 +158,7 @@ public class RestApiCommonUtil {
                 for (String scope : scopes) {
                     Scope scp = ((URITemplate) template).getScope();
                     if (scp != null) {
-                        if (scope.equalsIgnoreCase(scp.getKey())) {
+                        if (scope.equals(scp.getKey())) {
                             //we found scopes matches
                             if (log.isDebugEnabled()) {
                                 log.debug("Scope validation successful for access token: " +
@@ -134,7 +170,7 @@ public class RestApiCommonUtil {
                     } else if (!((URITemplate) template).retrieveAllScopes().isEmpty()) {
                         List<Scope> scopesList = ((URITemplate) template).retrieveAllScopes();
                         for (Scope scpObj : scopesList) {
-                            if (scope.equalsIgnoreCase(scpObj.getKey())) {
+                            if (scope.equals(scpObj.getKey())) {
                                 //we found scopes matches
                                 if (log.isDebugEnabled()) {
                                     log.debug("Scope validation successful for access token: " +
@@ -180,6 +216,10 @@ public class RestApiCommonUtil {
             uriTemplates = RestApiCommonUtil.getAdminAPIAppResourceMapping(RestApiConstants.REST_API_ADMIN_VERSION);
         } else if (basePath.contains(RestApiConstants.REST_API_SERVICE_CATALOG_CONTEXT_FULL)) {
             uriTemplates = RestApiCommonUtil.getServiceCatalogAPIResourceMapping();
+        } else if (basePath.contains(RestApiConstants.REST_API_DCR_CONTEXT_FULL)) {
+            uriTemplates = RestApiCommonUtil.getDCRAppResourceMapping();
+        } else if (basePath.contains(REST_API_GOVERNANCE_CONTEXT_FULL)) {
+            uriTemplates = RestApiCommonUtil.getGovernanceResourceMapping(REST_API_GOVERNANCE_VERSION);
         }
         return uriTemplates;
     }
@@ -200,15 +240,10 @@ public class RestApiCommonUtil {
         if (storeResourceMappings != null) {
             return storeResourceMappings;
         } else {
-            try {
-                String definition;
-                if (RestApiConstants.REST_API_STORE_VERSION_0.equals(version)) {
-                    definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/store-api.json"),
-                                    RestApiConstants.CHARSET);
-                } else {
-                    definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/devportal-api.yaml"),
-                                    RestApiConstants.CHARSET);
-                }
+            String defFileName = RestApiConstants.REST_API_STORE_VERSION_0.equals(version) ?
+                    "/store-api.json" : "/devportal-api.yaml";
+            try (InputStream defStream = RestApiCommonUtil.class.getResourceAsStream(defFileName)) {
+                String definition = IOUtils.toString(defStream, RestApiConstants.CHARSET);
                 APIDefinition oasParser = OASParserUtil.getOASParser(definition);
                 //Get URL templates from swagger content w created
                 storeResourceMappings = oasParser.getURITemplates(definition);
@@ -236,15 +271,10 @@ public class RestApiCommonUtil {
         if (adminAPIResourceMappings != null) {
             return adminAPIResourceMappings;
         } else {
-            try {
-                String definition;
-                if (RestApiConstants.REST_API_ADMIN_VERSION_0.equals(version)) {
-                    definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/admin-api.json"),
-                                    RestApiConstants.CHARSET);
-                } else {
-                    definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/admin-api.yaml"),
-                                    RestApiConstants.CHARSET);
-                }
+            String defFileName = RestApiConstants.REST_API_ADMIN_VERSION_0.equals(version) ?
+                    "/admin-api.json" : "/admin-api.yaml";
+            try (InputStream defStream = RestApiCommonUtil.class.getResourceAsStream(defFileName)) {
+                String definition = IOUtils.toString(defStream, RestApiConstants.CHARSET);
                 APIDefinition oasParser = OASParserUtil.getOASParser(definition);
                 //Get URL templates from swagger content we created
                 adminAPIResourceMappings = oasParser.getURITemplates(definition);
@@ -255,6 +285,35 @@ public class RestApiCommonUtil {
             }
             return adminAPIResourceMappings;
         }
+    }
+
+    /**
+     * This is static method to return URI Templates map of API Governance REST API.
+     * This content need to load only one time and keep it in memory as content will not change
+     * during runtime.
+     *
+     * @return URITemplate set associated with API Manager Governance REST API
+     */
+    public static Set<URITemplate> getGovernanceResourceMapping(String version) {
+
+        API api = new API(new APIIdentifier(RestApiConstants.REST_API_PROVIDER,
+                RestApiConstants.REST_API_GOVERNANCE_CONTEXT, RestApiConstants.REST_API_GOVERNANCE_VERSION));
+
+        if (governanceResourceMapping == null) {
+            try (InputStream defStream = RestApiCommonUtil.class.getResourceAsStream("/governance-api.yaml")) {
+                String definition;
+                definition = IOUtils.toString(defStream, RestApiConstants.CHARSET);
+                APIDefinition oasParser = OASParserUtil.getOASParser(definition);
+                //Get URL templates from swagger content we created
+                governanceResourceMapping = oasParser.getURITemplates(definition);
+            } catch (APIManagementException e) {
+                log.error("Error while reading resource mappings for Governance API: " + api.getId().getApiName(), e);
+            } catch (IOException e) {
+                log.error("Error while reading the swagger definition for Governance API: "
+                        + api.getId().getApiName(), e);
+            }
+        }
+        return governanceResourceMapping;
     }
 
     /**
@@ -271,15 +330,10 @@ public class RestApiCommonUtil {
         if (publisherResourceMappings != null) {
             return publisherResourceMappings;
         } else {
-            try {
-                String definition;
-                if (RestApiConstants.REST_API_PUBLISHER_VERSION_0.equals(version)) {
-                    definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/publisher-api.json"),
-                                    RestApiConstants.CHARSET);
-                } else {
-                    definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/publisher-api.yaml"),
-                                    RestApiConstants.CHARSET);
-                }
+            String defFileName = RestApiConstants.REST_API_PUBLISHER_VERSION_0.equals(version) ?
+                    "/publisher-api.json" : "/publisher-api.yaml";
+            try (InputStream defStream = RestApiCommonUtil.class.getResourceAsStream(defFileName)) {
+                String definition = IOUtils.toString(defStream, RestApiConstants.CHARSET);
                 APIDefinition oasParser = OASParserUtil.getOASParser(definition);
                 //Get URL templates from swagger content we created
                 publisherResourceMappings = oasParser.getURITemplates(definition);
@@ -290,6 +344,32 @@ public class RestApiCommonUtil {
             }
             return publisherResourceMappings;
         }
+    }
+
+    /**
+     * This is static method to return URI Templates map of DCR REST API.
+     * This content need to load only one time and keep it in memory as content will not change
+     * during runtime.
+     *
+     * @return URITemplate set associated with API Manager DCR REST API
+     */
+    public static Set<URITemplate> getDCRAppResourceMapping() {
+        API api = new API(new APIIdentifier(RestApiConstants.REST_API_PROVIDER, RestApiConstants.REST_API_DCR_CONTEXT,
+                RestApiConstants.REST_API_DCR_VERSION));
+
+        if (dcrResourceMappings == null) {
+            try (InputStream resourceStream = RestApiCommonUtil.class.getResourceAsStream("/dcr.yaml")) {
+                String definition = IOUtils.toString(resourceStream, "UTF-8");
+                APIDefinition oasParser = OASParserUtil.getOASParser(definition);
+                //Get URL templates from swagger content we created
+                dcrResourceMappings = oasParser.getURITemplates(definition);
+            } catch (APIManagementException e) {
+                log.error("Error while reading resource mappings for API: " + api.getId().getApiName(), e);
+            } catch (IOException e) {
+                log.error("Error while reading the swagger definition for API: " + api.getId().getApiName(), e);
+            }
+        }
+        return dcrResourceMappings;
     }
 
     /**
@@ -306,10 +386,9 @@ public class RestApiCommonUtil {
         if (serviceCatalogAPIResourceMappings != null) {
             return serviceCatalogAPIResourceMappings;
         } else {
-            try {
-                String definition;
-                definition = IOUtils.toString(RestApiCommonUtil.class.getResourceAsStream("/service-catalog-api.yaml"),
-                                RestApiConstants.CHARSET);
+            try (InputStream resourceStream = RestApiCommonUtil.class
+                    .getResourceAsStream("/service-catalog-api.yaml")) {
+                String definition = IOUtils.toString(resourceStream, RestApiConstants.CHARSET);
                 APIDefinition oasParser = OASParserUtil.getOASParser(definition);
                 //Get URL templates from swagger content we created
                 serviceCatalogAPIResourceMappings = oasParser.getURITemplates(definition);
@@ -327,17 +406,16 @@ public class RestApiCommonUtil {
      *
      * @return MAP of scope list for all portal
      */
-    public static  Map<String, List<String>> getScopesInfoFromAPIYamlDefinitions() throws APIManagementException {
+    public static Map<String, List<String>> getScopesInfoFromAPIYamlDefinitions() throws APIManagementException {
 
-        Map<String, List<String>>   portalScopeList = new HashMap<>();
-        String [] fileNameArray = {"/admin-api.yaml", "/publisher-api.yaml", "/devportal-api.yaml",
+        Map<String, List<String>> portalScopeList = new HashMap<>();
+        String[] fileNameArray = {"/admin-api.yaml", "/publisher-api.yaml", "/devportal-api.yaml",
                 "/service-catalog-api.yaml"};
         for (String fileName : fileNameArray) {
-            String definition = null;
-            try {
-                definition = IOUtils
-                        .toString(RestApiCommonUtil.class.getResourceAsStream(fileName), "UTF-8");
-            } catch (IOException  e) {
+            String definition;
+            try (InputStream resourceStream = RestApiCommonUtil.class.getResourceAsStream(fileName)) {
+                definition = IOUtils.toString(resourceStream, "UTF-8");
+            } catch (IOException e) {
                 throw new APIManagementException("Error while reading the swagger definition ,",
                         ExceptionCodes.DEFINITION_EXCEPTION);
             }
@@ -545,6 +623,24 @@ public class RestApiCommonUtil {
     }
 
     /**
+     * Returns the paginated url for subscriptions
+     *
+     * @param offset  starting index
+     * @param limit   max number of objects returned
+     * @param groupId groupId of the Application
+     * @return constructed paginated url
+     */
+    public static String getSubscriptionPaginatedURL(Integer offset, Integer limit, String groupId) {
+
+        groupId = groupId == null ? "" : groupId;
+        String paginatedURL = RestApiConstants.SUBSCRIPTIONS_GET_PAGINATION_URL_APIID;
+        paginatedURL = paginatedURL.replace(RestApiConstants.LIMIT_PARAM, String.valueOf(limit));
+        paginatedURL = paginatedURL.replace(RestApiConstants.OFFSET_PARAM, String.valueOf(offset));
+        paginatedURL = paginatedURL.replace(RestApiConstants.GROUPID_PARAM, groupId);
+        return paginatedURL;
+    }
+
+    /**
      * Returns the paginated url for subscriptions for a particular application
      *
      * @param offset        starting index
@@ -737,7 +833,9 @@ public class RestApiCommonUtil {
 
         String apiSwagger = apiProvider.getOpenAPIDefinition(uuid, api.getOrganization());
         APIDefinition parser = OASParserUtil.getOASParser(apiSwagger);
-        return parser.getOASDefinitionForPublisher(api, apiSwagger);
+        return parser.getOASDefinitionForPublisher(api, apiSwagger,
+                ServiceReferenceHolder.getInstance().getAPIMDependencyConfigurationService()
+                        .getAPIMDependencyConfigurations().getOasParserOptions());
     }
 
     /**
@@ -849,6 +947,59 @@ public class RestApiCommonUtil {
         openAPI.addExtension(X_WSO2_BASEPATH, context + "/" + version);
         openAPI.addExtension(X_WSO2_DISABLE_SECURITY, true);
         return Json.mapper().writeValueAsString(openAPI);
+    }
+
+    public static String generateSignedUrl(String basePath, String separator, String apiUUID)
+            throws APIManagementException {
+        try {
+            long timeOfExpiration = (System.currentTimeMillis() + (15 * 60 * 1000)) / 1000;
+            byte[] signedString = signWithHmacSHA256((apiUUID + ":" + timeOfExpiration), getHmacKeyBytes());
+            String signature = toHexString(signedString);
+            return basePath + separator + APIConstants.URL_EXPIRATION_TIME_PARAM + timeOfExpiration + APIConstants.URL_SIGNATURE_PARAM + signature;
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new APIManagementException("Error generating HMAC signature for API resource URL: " + apiUUID, e);
+        }
+    }
+
+    public static void validateSignedUrl(long exp, String sig, String apiUUID) throws APIManagementException {
+        long now = System.currentTimeMillis() / 1000L;
+        if (exp <= now) {
+            throw new APIManagementException("Provided URL is invalid for API UUID: " + apiUUID, ExceptionCodes.WSDL_URL_INVALID);
+        }
+        try {
+            byte[] signedString = signWithHmacSHA256((apiUUID + ":" + exp), getHmacKeyBytes());
+            String expectedSignature = toHexString(signedString);
+            if (sig == null || !MessageDigest.isEqual(expectedSignature.getBytes(StandardCharsets.UTF_8),
+                    sig.getBytes(StandardCharsets.UTF_8))) {
+                throw new APIManagementException("Provided URL is unauthorized for API UUID: " + apiUUID,
+                        ExceptionCodes.WSDL_URL_INVALID);
+            }
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new APIManagementException("Error validating HMAC signature for API URL: " + apiUUID, e);
+        }
+    }
+
+    protected static byte[] getHmacKeyBytes() throws APIManagementException {
+        byte[] key = ServiceReferenceHolder.getInstance().getUrlSigningKey();
+        if (key == null) {
+            throw new APIManagementException("URL signing key is not initialized.");
+        }
+        return key;
+    }
+
+    private static byte[] signWithHmacSHA256(String data, byte[] key) throws NoSuchAlgorithmException, InvalidKeyException {
+        Mac mac = Mac.getInstance(APIConstants.AWSConstants.HMAC_SHA_256);
+        SecretKeySpec secretKeySpec = new SecretKeySpec(key, APIConstants.AWSConstants.HMAC_SHA_256);
+        mac.init(secretKeySpec);
+        return mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String toHexString(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte b : bytes) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
     }
 
 }

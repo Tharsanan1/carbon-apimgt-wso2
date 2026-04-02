@@ -11,6 +11,7 @@
     </Database>
     <JWTConfiguration>
         <EnableJWTGeneration>false</EnableJWTGeneration>
+        <EnableJWKSApi>true</EnableJWKSApi>
 	    <SignatureAlgorithm>NONE</SignatureAlgorithm>
     </JWTConfiguration>
     <APIUsageTracking>
@@ -50,5 +51,14 @@
             <SupportedLanguages>java,android</SupportedLanguages>
         </ClientGeneration>
     </SwaggerCodegen>
+
+    <!-- Default Correlation Log Components -->
+    <CorrelationLogComponents>
+        <CorrelationLogComponent>http</CorrelationLogComponent>
+        <CorrelationLogComponent>jdbc</CorrelationLogComponent>
+        <CorrelationLogComponent>ldap</CorrelationLogComponent>
+        <CorrelationLogComponent>synapse</CorrelationLogComponent>
+        <CorrelationLogComponent>method-calls</CorrelationLogComponent>
+    </CorrelationLogComponents>
 
 </APIManager>

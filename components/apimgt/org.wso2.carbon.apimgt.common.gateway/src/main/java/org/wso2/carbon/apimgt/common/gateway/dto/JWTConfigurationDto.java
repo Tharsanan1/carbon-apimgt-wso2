@@ -34,6 +34,9 @@ public class JWTConfigurationDto {
     private String jwtHeader = "X-JWT-Assertion";
     private String consumerDialectUri = "http://wso2.org/claims";
     private String signatureAlgorithm = "SHA256withRSA";
+
+    private boolean useSHA256Hash = false;
+    private String jwtDecoding = "base64";
     private boolean enableUserClaims;
     private String gatewayJWTGeneratorImpl;
     private Map<String, TokenIssuerDto> tokenIssuerDtoMap = new HashMap();
@@ -41,6 +44,18 @@ public class JWTConfigurationDto {
     private Certificate publicCert;
     private PrivateKey privateKey;
     private long ttl;
+    private boolean enableBase64Padding = false;
+
+    private boolean useKid;
+    private boolean isEncodeX5tWithoutPadding;
+
+    public boolean useKid() {
+        return useKid;
+    }
+
+    public void setUseKid(boolean useKid) {
+        this.useKid = useKid;
+    }
 
     public JWTConfigurationDto(JWTConfigurationDto jwtConfigurationDto) {
 
@@ -48,6 +63,8 @@ public class JWTConfigurationDto {
         this.jwtHeader = jwtConfigurationDto.jwtHeader;
         this.consumerDialectUri = jwtConfigurationDto.consumerDialectUri;
         this.signatureAlgorithm = jwtConfigurationDto.signatureAlgorithm;
+        this.useSHA256Hash = jwtConfigurationDto.useSHA256Hash;
+        this.jwtDecoding = jwtConfigurationDto.jwtDecoding;
         this.enableUserClaims = jwtConfigurationDto.enableUserClaims;
         this.gatewayJWTGeneratorImpl = jwtConfigurationDto.gatewayJWTGeneratorImpl;
         this.tokenIssuerDtoMap = jwtConfigurationDto.tokenIssuerDtoMap;
@@ -130,6 +147,14 @@ public class JWTConfigurationDto {
         this.jwtExcludedClaims = jwtClaims;
     }
 
+    public String getJwtDecoding() {
+        return jwtDecoding;
+    }
+
+    public void setJwtDecoding(String jwtDecoding) {
+        this.jwtDecoding = jwtDecoding;
+    }
+
     public boolean isEnableUserClaims() {
 
         return enableUserClaims;
@@ -170,4 +195,27 @@ public class JWTConfigurationDto {
         return ttl;
     }
 
+    public boolean useSHA256Hash() {
+        return useSHA256Hash;
+    }
+
+    public void setUseSHA256Hash(boolean useSHA256Hash) {
+        this.useSHA256Hash = useSHA256Hash;
+    }
+
+    public void setEnableBase64Padding(boolean enableBase64Padding) {
+        this.enableBase64Padding = enableBase64Padding;
+    }
+
+    public boolean isEnableBase64Padding() {
+        return enableBase64Padding;
+    }
+
+    public boolean isEncodeX5tWithoutPadding() {
+        return isEncodeX5tWithoutPadding;
+    }
+
+    public void setEncodeX5tWithoutPadding(boolean encodeX5tWithoutPadding) {
+        isEncodeX5tWithoutPadding = encodeX5tWithoutPadding;
+    }
 }

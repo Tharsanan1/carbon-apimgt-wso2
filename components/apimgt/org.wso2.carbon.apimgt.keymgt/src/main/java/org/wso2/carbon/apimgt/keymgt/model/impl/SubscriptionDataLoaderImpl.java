@@ -18,14 +18,17 @@
 package org.wso2.carbon.apimgt.keymgt.model.impl;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpStatus;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.util.EntityUtils;
+import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.dto.GatewayArtifactSynchronizerProperties;
@@ -64,8 +67,6 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
     private static final Log log = LogFactory.getLog(SubscriptionDataLoaderImpl.class);
     private EventHubConfigurationDto getEventHubConfigurationDto;
     private GatewayArtifactSynchronizerProperties gatewayArtifactSynchronizerProperties;
-    public static final int retrievalTimeoutInSeconds = 15;
-    public static final int retrievalRetries = 15;
     public static final String UTF8 = "UTF-8";
 
     public SubscriptionDataLoaderImpl() {
@@ -147,6 +148,36 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
                 String responseString = null;
                 try {
                     responseString = invokeService(apisEP, tenantDomain);
+                } catch (IOException e) {
+                    String msg = "Error while executing the http client " + apisEP;
+                    log.error(msg, e);
+                    throw new DataLoadingException(msg, e);
+                }
+                if (responseString != null && !responseString.isEmpty()) {
+                    APIList apiList = new Gson().fromJson(responseString, APIList.class);
+                    apis.addAll(apiList.getList());
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("apis :" + apis.get(0).toString());
+                }
+            }
+        }
+
+        return apis;
+    }
+
+    @Override
+    public List<API> loadAllTenantApiMetadata() throws DataLoadingException {
+
+        Set<String> gatewayLabels = gatewayArtifactSynchronizerProperties.getGatewayLabels();
+        List<API> apis = new ArrayList<>();
+        if (gatewayLabels != null && gatewayLabels.size() > 0) {
+            for (String gatewayLabel : gatewayLabels) {
+                String apisEP =
+                        APIConstants.SubscriptionValidationResources.APIS + "?gatewayLabel=" + getEncodedLabel(gatewayLabel);
+                String responseString;
+                try {
+                    responseString = invokeService(apisEP, APIConstants.ORG_ALL_QUERY_PARAM);
                 } catch (IOException e) {
                     String msg = "Error while executing the http client " + apisEP;
                     log.error(msg, e);
@@ -259,9 +290,14 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
             throw new DataLoadingException(msg, e);
         }
         if (responseString != null && !responseString.isEmpty()) {
-            ApplicationList list = new Gson().fromJson(responseString, ApplicationList.class);
-            if (list.getList() != null && !list.getList().isEmpty()) {
-                application = list.getList().get(0);
+            ApplicationList applicationList = new Gson().fromJson(responseString, ApplicationList.class);
+            if (applicationList != null && applicationList.getList() != null && !applicationList.getList().isEmpty()) {
+                for (Application app : applicationList.getList()) {
+                    if (app.getId() == appId) {
+                        application = app;
+                        break;
+                    }
+                }
             }
         }
         return application;
@@ -422,6 +458,31 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
 
     }
 
+    @Override
+    public void subscribeToAPIInternally(API api, Application app, String tenantDomain) {
+        String path  = String.format("%s?appId=%s&appUuid=%s",
+                APIConstants.SubscriptionValidationResources.SUBSCRIBE_INTERNAL, app.getId(), app.getUUID());
+        Gson gson = new Gson();
+        String apiJson = gson.toJson(api);
+        JsonObject apiJsonObject = gson.fromJson(apiJson, JsonObject.class);
+        // Remove the deployed property from the API object before sending to the internal API
+        // as this is not there in the internal DTO
+        apiJsonObject.remove("deployed");
+        apiJsonObject.remove("apiProperties");
+        if (log.isDebugEnabled()) {
+            log.debug("Removed 'deployed' and 'apiProperties' fields from API object before internal subscription");
+        }
+        String modifiedApiJson = gson.toJson(apiJsonObject);
+
+        try {
+            invokePostService(path, tenantDomain, modifiedApiJson);
+        } catch (IOException | DataLoadingException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Error while subscribing to API", e);
+            }
+        }
+    }
+
     private String invokeService(String path, String tenantDomain) throws DataLoadingException, IOException {
 
         String serviceURLStr = getEventHubConfigurationDto.getServiceUrl().concat(APIConstants.INTERNAL_WEB_APP_EP);
@@ -438,47 +499,47 @@ public class SubscriptionDataLoaderImpl implements SubscriptionDataLoader {
                 method.setHeader(APIConstants.HEADER_TENANT, tenantDomain);
             }
             HttpClient httpClient = APIUtil.getHttpClient(servicePort, serviceProtocol);
-
-            HttpResponse httpResponse = null;
-            int retryCount = 0;
-            boolean retry = false;
-            do {
-                try {
-                    httpResponse = httpClient.execute(method);
-                    if (HttpStatus.SC_OK != httpResponse.getStatusLine().getStatusCode()) {
-                        log.error("Could not retrieve subscriptions for tenantDomain: " + tenantDomain
-                                + ". Received response with status code "
-                                + httpResponse.getStatusLine().getStatusCode());
-                        throw new DataLoadingException("Error while retrieving subscription");
-                    }
-                    retry = false;
-                } catch (IOException | DataLoadingException ex) {
-                    retryCount++;
-                    if (retryCount < retrievalRetries) {
-                        retry = true;
-                        log.warn("Failed retrieving " + path + " from remote endpoint: " + ex.getMessage()
-                                + ". Retrying after " + retrievalTimeoutInSeconds +
-                                " seconds.");
-                        try {
-                            Thread.sleep(retrievalTimeoutInSeconds * 1000);
-                        } catch (InterruptedException e) {
-                            // Ignore
-                        }
-                    } else {
-                        throw ex;
-                    }
-                }
-            } while (retry);
-            if (HttpStatus.SC_OK != httpResponse.getStatusLine().getStatusCode()) {
-                log.error("Could not retrieve subscriptions for tenantDomain : " + tenantDomain);
-                throw new DataLoadingException("Error while retrieving subscription from " + path);
+            String responseString;
+            try (CloseableHttpResponse httpResponse = APIUtil.executeHTTPRequestWithRetries(method, httpClient)) {
+                responseString = EntityUtils.toString(httpResponse.getEntity(), UTF8);
+            } catch (APIManagementException e) {
+                throw new DataLoadingException("Error while retrieving subscriptions", e);
             }
-            String responseString = EntityUtils.toString(httpResponse.getEntity(), UTF8);
+
             if (log.isDebugEnabled()) {
                 log.debug("Response : " + responseString);
             }
             return responseString;
+    }
 
+    private void invokePostService(String path, String tenantDomain, String payload)
+            throws IOException, DataLoadingException {
+        String serviceURLStr = getEventHubConfigurationDto.getServiceUrl().concat(APIConstants.INTERNAL_WEB_APP_EP);
+        HttpPost post = new HttpPost(serviceURLStr + path);
+        URL serviceURL = new URL(serviceURLStr + path);
+        byte[] credentials = getServiceCredentials(getEventHubConfigurationDto);
+        int servicePort = serviceURL.getPort();
+        String serviceProtocol = serviceURL.getProtocol();
+        post.setHeader(APIConstants.AUTHORIZATION_HEADER_DEFAULT,
+                APIConstants.AUTHORIZATION_BASIC +
+                        new String(credentials, StandardCharsets.UTF_8));
+        post.setHeader("Content-Type", "application/json");
+        if (tenantDomain != null) {
+            post.setHeader(APIConstants.HEADER_TENANT, tenantDomain);
+        }
+        post.setEntity(new StringEntity(payload));
+
+        HttpClient httpClient = APIUtil.getHttpClient(servicePort, serviceProtocol);
+        String responseString;
+        try (CloseableHttpResponse httpResponse = APIUtil.executeHTTPRequest(post, httpClient)) {
+            responseString = EntityUtils.toString(httpResponse.getEntity(), UTF8);
+        } catch (APIManagementException e) {
+            throw new DataLoadingException("Error while invoking post service", e);
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Response : " + responseString);
+        }
     }
 
     private byte[] getServiceCredentials(EventHubConfigurationDto eventHubConfigurationDto) {

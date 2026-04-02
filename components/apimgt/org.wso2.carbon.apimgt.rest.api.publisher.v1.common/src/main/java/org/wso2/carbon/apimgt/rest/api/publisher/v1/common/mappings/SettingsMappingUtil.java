@@ -24,10 +24,14 @@ import org.json.simple.JSONObject;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIProvider;
 import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.api.model.GatewayFeatureCatalog;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
+import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.EnvironmentListDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.GatewayFeatureCatalogDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MonetizationAttributeDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.SecurityAuditAttributeDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.SettingsDTO;
@@ -58,6 +62,7 @@ public class SettingsMappingUtil {
 
         SettingsDTO settingsDTO = new SettingsDTO();
         EnvironmentListDTO environmentListDTO = new EnvironmentListDTO();
+        settingsDTO.setIsJWTEnabledForLoginTokens(APIUtil.isJWTEnabledForPortals());
         if (isUserAvailable) {
             Map<String, Environment> environments = APIUtil.getEnvironments(organization);
             if (environments != null) {
@@ -67,6 +72,7 @@ public class SettingsMappingUtil {
             String storeUrl = APIUtil.getStoreUrl();
             String loggedInUserTenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
             settingsDTO.setSubscriberContactAttributes(getSubscriberContactAttributes());
+            int tenantId = APIUtil.getTenantIdFromTenantDomain(loggedInUserTenantDomain);
             Map<String, String> domainMappings =
                     APIUtil.getDomainMappings(loggedInUserTenantDomain, APIConstants.API_DOMAIN_MAPPINGS_STORE);
             if (domainMappings.size() != 0) {
@@ -77,13 +83,20 @@ public class SettingsMappingUtil {
                     break;
                 }
             }
+            settingsDTO.setDefaultAdvancePolicy(APIUtil.getDefaultAPILevelPolicy(tenantId));
+            settingsDTO.setDefaultSubscriptionPolicy(APIUtil.getDefaultSubscriptionPolicy(tenantId));
             settingsDTO.setDevportalUrl(storeUrl);
             settingsDTO.setMonetizationAttributes(getMonetizationAttributes());
             settingsDTO.setSecurityAuditProperties(getSecurityAuditProperties());
             settingsDTO.setExternalStoresEnabled(
                     APIUtil.isExternalStoresEnabled(RestApiCommonUtil.getLoggedInUserTenantDomain()));
             settingsDTO.setDocVisibilityEnabled(APIUtil.isDocVisibilityLevelsEnabled());
+            settingsDTO.setOrgAccessControlEnabled(APIUtil.isOrganizationAccessControlEnabled());
+            settingsDTO.setPortalConfigurationOnlyModeEnabled(APIUtil.isPortalConfigurationOnlyModeEnabled());
             settingsDTO.setCrossTenantSubscriptionEnabled(APIUtil.isCrossTenantSubscriptionsEnabled());
+            settingsDTO.setAllowSubscriptionValidationDisabling(
+                    APIUtil.isSubscriptionValidationDisablingAllowed(organization));
+            settingsDTO.setRetryCallWithNewOAuthTokenEnabled(APIUtil.isRetryCallWithNewOAuthTokenEnabled());
             Map<String, Environment> gatewayEnvironments = APIUtil.getReadOnlyGatewayEnvironments();
             String authorizationHeader = APIUtil.getOAuthConfiguration(loggedInUserTenantDomain,
                     APIConstants.AUTHORIZATION_HEADER);
@@ -92,6 +105,14 @@ public class SettingsMappingUtil {
                 authorizationHeader = APIConstants.AUTHORIZATION_HEADER_DEFAULT;
             }
             settingsDTO.setAuthorizationHeader(authorizationHeader);
+            settingsDTO.setGatewayFeatureCatalog(getGatewayFeatureCatalog());
+            APIManagerConfiguration config = ServiceReferenceHolder.getInstance().
+                getAPIManagerConfigurationService().getAPIManagerConfiguration();
+            settingsDTO.setDesignAssistantEnabled(config.getDesignAssistantConfigurationDto().isEnabled());
+            settingsDTO.setAiAuthTokenProvided(config.getDesignAssistantConfigurationDto().isAuthTokenProvided() ||
+                    config.getDesignAssistantConfigurationDto().isKeyProvided());
+            settingsDTO.setIsMCPSupportEnabled(config.isMCPSupportEnabled());
+            settingsDTO.setIsGatewayNotificationEnabled(APIUtil.isGatewayNotificationEnabled());
         }
         return settingsDTO;
     }
@@ -168,5 +189,15 @@ public class SettingsMappingUtil {
             properties.setBaseUrl(baseUrl);
         }
         return properties;
+    }
+
+    private GatewayFeatureCatalogDTO getGatewayFeatureCatalog() throws APIManagementException {
+        GatewayFeatureCatalog gatewayFeatureCatalog = APIUtil.getGatewayFeatureCatalog();
+
+        GatewayFeatureCatalogDTO gatewayFeatureCatalogDTO = new GatewayFeatureCatalogDTO();
+        gatewayFeatureCatalogDTO.setApiTypes(gatewayFeatureCatalog.getApiTypes());
+        gatewayFeatureCatalogDTO.setGatewayFeatures(gatewayFeatureCatalog.getGatewayFeatures());
+
+        return gatewayFeatureCatalogDTO;
     }
 }

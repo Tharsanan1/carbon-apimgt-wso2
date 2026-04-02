@@ -12,7 +12,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -26,6 +26,10 @@
         <dependency>
             <groupId>org.wso2.carbon.analytics-common</groupId>
             <artifactId>org.wso2.carbon.event.output.adapter.core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.carbon.analytics-common</groupId>
@@ -69,8 +73,12 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.apache.poi.wso2</groupId>
+            <groupId>org.wso2.orbit.org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.orbit.org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.wsdl4j</groupId>
@@ -137,7 +145,7 @@
         </dependency>
         <dependency>
             <groupId>org.wso2.orbit.com.h2database</groupId>
-            <artifactId>h2</artifactId>
+            <artifactId>h2-engine</artifactId>
         </dependency>
         <dependency>
             <groupId>com.ibm.icu</groupId>
@@ -170,8 +178,16 @@
             <artifactId>org.wso2.carbon.registry.indexing</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.googlecode.json-simple.wso2</groupId>
+            <groupId>com.googlecode.json-simple</groupId>
             <artifactId>json-simple</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.minidev</groupId>
+            <artifactId>json-smart</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.orbit.com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.carbon.apimgt</groupId>
@@ -189,38 +205,27 @@
             <groupId>org.wso2.carbon.identity.framework</groupId>
             <artifactId>org.wso2.carbon.identity.mgt.stub</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.wso2.carbon.identity.user.ws</groupId>
             <artifactId>org.wso2.carbon.um.ws.api.stub</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.wso2.carbon.identity.framework</groupId>
             <artifactId>org.wso2.carbon.user.mgt.stub</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.wso2.carbon.analytics-common</groupId>
             <artifactId>org.wso2.carbon.databridge.agent</artifactId>
         </dependency>
-
-
-
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
-
         <dependency>
             <groupId>org.hamcrest</groupId>
             <artifactId>hamcrest-all</artifactId>
             <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.wso2.carbon.governance</groupId>
-            <artifactId>org.wso2.carbon.governance.custom.lifecycles.checklist</artifactId>
         </dependency>
 
         <dependency>
@@ -228,12 +233,17 @@
             <artifactId>pdfbox</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.wso2.carbon.governance</groupId>
-            <artifactId>org.wso2.carbon.governance.lcm</artifactId>
+            <groupId>org.wso2.orbit.org.apache.pdfbox</groupId>
+            <artifactId>pdfbox-io</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.wso2.carbon.event-processing</groupId>
             <artifactId>org.wso2.carbon.event.processor.stub</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
         </dependency>
         <dependency>
             <groupId>io.swagger</groupId>
@@ -245,38 +255,22 @@
         </dependency>
         <dependency>
             <groupId>org.wso2.orbit.io.swagger</groupId>
-            <artifactId>swagger-inflector-oas3</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.wso2.orbit.io.swagger</groupId>
-            <artifactId>swagger-parser</artifactId>
+            <artifactId>swagger-inflector-oas3-jdk21</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.orbit.io.swagger.v3</groupId>
             <artifactId>swagger-parser</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.swagger.core.v3</groupId>
-            <artifactId>swagger-models</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.swagger.core.v3</groupId>
-            <artifactId>swagger-core</artifactId>
-        </dependency>
-        <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-guava</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-ext</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.orbit.org.openapitools</groupId>
             <artifactId>openapi-generator</artifactId>
         </dependency>
         <dependency>
-            <groupId>xerces.wso2</groupId>
+            <groupId>org.wso2.orbit.xerces</groupId>
             <artifactId>xercesImpl</artifactId>
         </dependency>
         <dependency>
@@ -359,12 +353,15 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>${fasterxml.jackson.core.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.wso2.carbon.analytics-common</groupId>
             <artifactId>org.wso2.carbon.event.stream.core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.multitenancy</groupId>
+            <artifactId>org.wso2.carbon.tenant.mgt.stub</artifactId>
         </dependency>
         <dependency>
             <groupId>org.wso2.carbon.apimgt</groupId>
@@ -392,7 +389,6 @@
         <dependency>
             <groupId>io.apicurio</groupId>
             <artifactId>apicurio-data-models</artifactId>
-            <version>1.1.5</version>
         </dependency>
         <dependency>
             <groupId>org.wso2.carbon.apimgt</groupId>
@@ -412,8 +408,25 @@
             <artifactId>velocity-engine-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.wso2.orbit.com.amazonaws</groupId>
-            <artifactId>awslambda</artifactId>
+            <groupId>org.wso2.orbit.software.amazon.awssdk</groupId>
+            <artifactId>aws-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon</groupId>
+            <artifactId>org.wso2.carbon.logging.correlation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>commons-io.wso2</groupId>
+            <artifactId>commons-io</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.spec.parser</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
     <build>
@@ -487,6 +500,24 @@
                     <argLine>
                         --add-opens=java.xml/jdk.xml.internal=ALL-UNNAMED
                         --add-opens=java.base/jdk.internal.loader=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED 
+                        --add-opens java.base/java.io=ALL-UNNAMED 
+                        --add-opens java.base/java.util=ALL-UNNAMED 
+                        --add-opens java.base/java.time=ALL-UNNAMED
+                        --add-opens java.base/java.net=ALL-UNNAMED
+                        --add-opens java.base/sun.reflect.misc=ALL-UNNAMED 
+                        --add-opens java.base/java.util.stream=ALL-UNNAMED 
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens java.base/java.math=ALL-UNNAMED
+                        --add-opens java.base/java.security=ALL-UNNAMED 
+                        --add-opens java.base/java.nio.charset=ALL-UNNAMED
+                        --add-opens java.base/java.util.concurrent=ALL-UNNAMED
+                        --add-opens java.base/java.text=ALL-UNNAMED
+                        --add-opens java.base/sun.security.x509=ALL-UNNAMED
+                        --add-opens java.base/java.security.cert=ALL-UNNAMED
+                        --add-exports java.base/sun.security.x509=ALL-UNNAMED
+                        --add-opens java.base/java.util.regex=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED
                     </argLine>
                     <systemProperties>
                         <property>
@@ -515,7 +546,7 @@
                         </property>
                     </systemProperties>
                     <classpathDependencyExcludes>
-                        <classpathDependencyExclude>org.ops4j.pax.logging</classpathDependencyExclude>
+                        <classpathDependencyExclude>org.wso2.org.ops4j.pax.logging</classpathDependencyExclude>
                     </classpathDependencyExcludes>
                 </configuration>
                 <dependencies>
@@ -549,17 +580,19 @@
                             org.wso2.carbon.apimgt.keymgt.client.*;version="${carbon.apimgt.imp.pkg.version}",
                             org.wso2.carbon.apimgt.api.*;version="${carbon.apimgt.imp.pkg.version}",
                             org.wso2.carbon.apimgt.api.model.xsd.*;version="${carbon.apimgt.imp.pkg.version}",
-                            org.wso2.carbon.apimgt.persistence.*;version="${carbon.apimgt.version}",
+                            org.wso2.carbon.apimgt.persistence.*;version="${carbon.apimgt.imp.pkg.version}",
                             !org.wso2.carbon.apimgt.api.model.xsd.*,
-                            org.wso2.carbon.apimgt.persistence.*;version="${carbon.apimgt.version}",
                             javax.servlet;version="${javax.servlet.imp.pkg.version}",
                             javax.servlet.http;version="${javax.servlet.imp.pkg.version}",
                             javax.servlet.resources;version="${javax.servlet.imp.pkg.version}",
-                            org.eclipse.equinox.http.helper,
                             com.google.gson,
-                            com.amazonaws.*; version="${com.amazonaws.version}",
+                            software.amazon.awssdk.services.sts.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
+                            software.amazon.awssdk.services.lambda.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
+                            software.amazon.awssdk.core.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
+                            software.amazon.awssdk.awscore.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
                             org.apache.axis2.*; version="${imp.pkg.version.axis2}",
-                            org.apache.commons.*,
+                            org.apache.commons.io.*;version="${import.package.version.commons.io}",
+                            org.apache.commons.codec.*;version="${import.package.version.commons.codec}",
                             org.apache.http.*,
                             org.osgi.framework.*;version="${imp.package.version.osgi.framework}",
                             org.osgi.util.*;version="${imp.package.version.osgi.util}",
@@ -571,7 +604,7 @@
                             org.wso2.carbon.registry.indexing.*;
                             version="${carbon.registry.package.import.version.range}",
                             org.apache.pdfbox.*; version="${pdfbox.version}",
-                            org.apache.poi.*,
+                            org.apache.poi.*; version="${apache.poi.import.range}";resolution:=optional,
                             org.apache.neethi.*,
                             org.apache.velocity.*,
                             org.apache.solr.common,
@@ -590,6 +623,7 @@
                             io.swagger.v3.core.*,
                             io.swagger.v3.oas.models.*,
                             io.swagger.v3.parser,
+                            com.nimbusds.jwt.*,
                             io.swagger.v3.parser.converter,
                             com.fasterxml.jackson.datatype.guava,
                             com.github.benmanes.caffeine.cache;version="${caffeine.version}",
@@ -610,6 +644,7 @@
                             org.wso2.carbon.user.api;version="${imp.pkg.version.org.wso2.carbon.user.api}",
                             org.wso2.carbon.user.mgt.stub.*;version="${carbon.identity.imp.pkg.version}",
                             org.wso2.carbon.user.mgt.*;version="${carbon.identity.imp.pkg.version}",
+                            org.wso2.carbon.tenant.mgt.stub.*,
                             org.xml.sax,
                             org.wso2.carbon.um.ws.api.stub,
                             org.wso2.securevault.*,
@@ -619,10 +654,44 @@
                             *;resolution:=optional
                         </Import-Package>
                         <DynamicImport-Package>*</DynamicImport-Package>
+                        <Provide-Capability>
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.impl.APIManagerConfigurationService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.impl.jwt.JWTValidationService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.impl.keymgt.KeyManagerDataService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.impl.keymgt.KeyManagerConfigurationService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.impl.APIMDependencyConfigurationService
+                        </Provide-Capability>
                     </instructions>
                 </configuration>
             </plugin>
-
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>9</source>
+                    <target>9</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>properties-maven-plugin</artifactId>
+                <version>1.2.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>set-system-properties</goal>
+                        </goals>
+                        <configuration>
+                            <properties>
+                                <property>
+                                    <name>org.aspectj.weaver.openarchives</name>
+                                    <value>${org.aspectj.weaver.openarchives.limit}</value>
+                                </property>
+                            </properties>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

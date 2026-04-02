@@ -27,10 +27,14 @@ import org.apache.cxf.jaxrs.ext.MessageContext;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.phase.PhaseInterceptorChain;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.APIMgtResourceAlreadyExistsException;
 import org.wso2.carbon.apimgt.api.APIProvider;
 import org.wso2.carbon.apimgt.api.FaultGatewaysException;
 import org.wso2.carbon.apimgt.api.APIMgtResourceNotFoundException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
+import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.model.APIIdentifier;
+import org.wso2.carbon.apimgt.api.model.APIInfo;
 import org.wso2.carbon.apimgt.api.model.APIProduct;
 import org.wso2.carbon.apimgt.api.model.APIProductIdentifier;
 import org.wso2.carbon.apimgt.api.model.APIStateChangeResponse;
@@ -38,11 +42,15 @@ import org.wso2.carbon.apimgt.api.model.APIStatus;
 import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.api.model.Documentation;
 import org.wso2.carbon.apimgt.api.model.DocumentationContent;
+import org.wso2.carbon.apimgt.api.model.DuplicateAPIException;
 import org.wso2.carbon.apimgt.api.model.Environment;
 import org.wso2.carbon.apimgt.api.model.ResourceFile;
 import org.wso2.carbon.apimgt.api.model.APIRevision;
 import org.wso2.carbon.apimgt.api.model.APIRevisionDeployment;
+import org.wso2.carbon.apimgt.api.model.ServiceEntry;
 import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
+import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.ServiceCatalogImpl;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.importexport.APIImportExportException;
 import org.wso2.carbon.apimgt.impl.importexport.ExportFormat;
@@ -57,6 +65,7 @@ import org.wso2.carbon.apimgt.rest.api.publisher.v1.ApiProductsApiService;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.common.mappings.APIMappingUtil;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.common.mappings.DocumentationMappingUtil;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.common.mappings.PublisherCommonUtils;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIProductDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIProductListDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.DocumentDTO;
@@ -72,7 +81,9 @@ import org.wso2.carbon.apimgt.rest.api.util.exception.BadRequestException;
 import org.wso2.carbon.apimgt.rest.api.util.utils.RestApiUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -84,10 +95,13 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import static org.wso2.carbon.apimgt.api.ExceptionCodes.API_VERSION_ALREADY_EXISTS;
 import static org.wso2.carbon.apimgt.impl.APIConstants.DOCUMENTATION_INLINE_CONTENT_TYPE;
 import static org.wso2.carbon.apimgt.impl.APIConstants.UN_AUTHORIZED_ERROR_MESSAGE;
 
@@ -139,7 +153,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             //documentation = apiProvider.getProductDocumentation(documentId, tenantDomain);
             DocumentationContent docContent = apiProvider.getDocumentationContent(apiProductId, documentId, organization);
             if (docContent == null) {
-                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_PRODUCT_DOCUMENTATION, documentId, log);
+                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_PRODUCT_DOCUMENTATION, documentId);
                 return null;
             }
 
@@ -181,9 +195,9 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
     }
 
     @Override
-    public Response addAPIProductDocumentContent(String apiProductId, String documentId,
-                              String ifMatch, InputStream fileInputStream, Attachment fileDetail, String inlineContent,
-                                                                          MessageContext messageContext) {
+    public Response addAPIProductDocumentContent(String apiProductId, String documentId, String ifMatch,
+            InputStream fileInputStream, Attachment fileDetail, String inlineContent, MessageContext messageContext)
+            throws APIManagementException {
         try {
             String organization = RestApiUtil.getValidatedOrganization(messageContext);
             APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
@@ -206,9 +220,13 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                 if (!documentation.getSourceType().equals(Documentation.DocumentSourceType.FILE)) {
                     RestApiUtil.handleBadRequest("Source type of product document " + documentId + " is not FILE", log);
                 }
-                RestApiPublisherUtils
-                        .attachFileToProductDocument(apiProductId, documentation, fileInputStream, fileDetail,
-                                organization);
+                String filename = fileDetail.getContentDisposition().getFilename();
+                if (APIUtil.isSupportedFileType(filename)) {
+                    RestApiPublisherUtils.attachFileToProductDocument(apiProductId, documentation, fileInputStream,
+                            fileDetail, organization);
+                } else {
+                    RestApiUtil.handleBadRequest("Unsupported extension type of document file: " + filename, log);
+                }
             } else if (inlineContent != null) {
                 if (!documentation.getSourceType().equals(Documentation.DocumentSourceType.INLINE) && !documentation
                         .getSourceType().equals(Documentation.DocumentSourceType.MARKDOWN)) {
@@ -238,6 +256,8 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                 RestApiUtil.handleAuthorizationFailure(
                         "Authorization failure while adding content to the document: " + documentId + " of API Product "
                                 + apiProductId, e, log);
+            } else if (e.getErrorHandler() != ExceptionCodes.INTERNAL_ERROR) {
+                throw e;
             } else {
                 RestApiUtil.handleInternalServerError("Failed to add content to the document " + documentId, e, log);
             }
@@ -342,6 +362,12 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                 RestApiUtil.handleBadRequest("Invalid document sourceUrl Format", log);
                 return null;
             }
+            if (body.getType() == DocumentDTO.TypeEnum.OTHER
+                    && body.getOtherTypeName() != null
+                    && apiProvider.isAnotherOverviewDocumentationExist(apiProductId, documentId, body.getOtherTypeName(), organization)) {
+                RestApiUtil.handleBadRequest("Requested other document type _overview already exists", log);
+                return null;
+            }
 
             //overriding some properties
             body.setName(oldDocument.getName());
@@ -424,11 +450,22 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             Documentation documentation = DocumentationMappingUtil.fromDTOtoDocumentation(body);
             String documentName = body.getName();
             String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            Pattern pattern = Pattern.compile(APIConstants.REGEX_ILLEGAL_CHARACTERS_FOR_API_METADATA);
+            Matcher matcher = pattern.matcher(documentName);
+            if (matcher.find()) {
+                RestApiUtil.handleBadRequest("Document name cannot contain illegal characters  " +
+                        "( " + APIConstants.REGEX_ILLEGAL_CHARACTERS_FOR_API_METADATA + " )", log);
+            }
             //this will fail if user does not have access to the API Product or the API Product does not exist
             APIProductIdentifier productIdentifier = APIMappingUtil.getAPIProductIdentifierFromUUID(apiProductId, organization);
             if (apiProvider.isDocumentationExist(apiProductId, documentName, organization)) {
                 String errorMessage = "Requested document '" + documentName + "' already exists";
                 RestApiUtil.handleResourceAlreadyExistsError(errorMessage, log);
+            }
+            if (body.getType() == DocumentDTO.TypeEnum.OTHER
+                    && body.getOtherTypeName() != null
+                    && apiProvider.isAnotherOverviewDocumentationExist(apiProductId, null, body.getOtherTypeName(), organization)) {
+                RestApiUtil.handleBadRequest("Requested other document type _overview already exists", log);
             }
             documentation = apiProvider.addDocumentation(apiProductId, documentation, organization);
 
@@ -492,7 +529,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
 
     @Override
     public Response updateAPIProduct(String apiProductId, APIProductDTO body, String ifMatch,
-            MessageContext messageContext) {
+            MessageContext messageContext) throws APIManagementException {
         try {
             String username = RestApiCommonUtil.getLoggedInUsername();
             String tenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
@@ -501,16 +538,19 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             if (retrievedProduct == null) {
                 RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API_PRODUCT, apiProductId, log);
             }
-            APIProduct updatedProduct = PublisherCommonUtils.updateApiProduct(retrievedProduct, body, apiProvider, username, tenantDomain);
+            APIProduct updatedProduct = PublisherCommonUtils.updateApiProduct(retrievedProduct, body,
+                    apiProvider, username, tenantDomain);
             APIProductDTO updatedProductDTO = getAPIProductByID(apiProductId, apiProvider);
             return Response.ok().entity(updatedProductDTO).build();
-        } catch (APIManagementException | FaultGatewaysException e) {
+        } catch (APIManagementException e) {
             if (isAuthorizationFailure(e)) {
                 RestApiUtil.handleAuthorizationFailure("User is not authorized to access the API", e, log);
             } else {
-                String errorMessage = "Error while updating API Product : " + apiProductId;
-                RestApiUtil.handleInternalServerError(errorMessage, e, log);
+                throw e;
             }
+        } catch (FaultGatewaysException e) {
+            String errorMessage = "Error while updating API Product : " + apiProductId;
+            RestApiUtil.handleInternalServerError(errorMessage, e, log);
         }
         return null;
     }
@@ -575,6 +615,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
     @Override
     public Response updateAPIProductThumbnail(String apiProductId, InputStream fileInputStream,
             Attachment fileDetail, String ifMatch, MessageContext messageContext) {
+        ByteArrayInputStream inputStream = null;
         try {
             APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
             String tenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
@@ -582,17 +623,15 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             String extension = FilenameUtils.getExtension(fileName);
             if (!RestApiConstants.ALLOWED_THUMBNAIL_EXTENSIONS.contains(extension.toLowerCase())) {
                 RestApiUtil.handleBadRequest(
-                        "Unsupported Thumbnail File Extension. Supported extensions are .jpg, .png, .jpeg .svg "
+                        "Unsupported Thumbnail File Extension. Supported extensions are .jpg, .png, .jpeg, .svg "
                                 + "and .gif", log);
             }
-            String fileContentType = URLConnection.guessContentTypeFromName(fileName);
-            if (org.apache.commons.lang3.StringUtils.isBlank(fileContentType)) {
-                fileContentType = fileDetail.getContentType().toString();
-            }
+            inputStream = (ByteArrayInputStream) RestApiPublisherUtils.validateThumbnailContent(fileInputStream);
+            String fileMediaType = RestApiPublisherUtils.getMediaType(inputStream, fileDetail);
 
             //this will fail if user does not have access to the API or the API does not exist
             APIProduct apiProduct = apiProvider.getAPIProductbyUUID(apiProductId, tenantDomain);
-            ResourceFile apiImage = new ResourceFile(fileInputStream, fileContentType);
+            ResourceFile apiImage = new ResourceFile(inputStream, fileMediaType);
             apiProvider.setThumbnailToAPI(apiProductId, apiImage, tenantDomain);
             /*
             String thumbPath = APIUtil.getProductIconPath(apiProduct.getId());
@@ -615,9 +654,12 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
         } catch (APIManagementException e) {
             String errorMessage = "Error while updating API Product : " + apiProductId;
             RestApiUtil.handleInternalServerError(errorMessage, e, log);
-        } catch (URISyntaxException e) {
-            String errorMessage = "Error while retrieving thumbnail location of API Product : " + apiProductId;
+        } catch (URISyntaxException | IOException e) {
+            String errorMessage = "Error while updating thumbnail location of API Product : " + apiProductId;
             RestApiUtil.handleInternalServerError(errorMessage, e, log);
+        } finally {
+            IOUtils.closeQuietly(fileInputStream);
+            IOUtils.closeQuietly(inputStream);
         }
         return null;
     }
@@ -768,14 +810,20 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
         try {
             APIProduct createdProduct = PublisherCommonUtils.addAPIProductWithGeneratedSwaggerDefinition(body,
                     RestApiCommonUtil.getLoggedInUsername(), organization);
-            APIProductDTO createdApiProductDTO = APIMappingUtil.fromAPIProducttoDTO(createdProduct);
+            APIProductDTO createdApiProductDTO = APIMappingUtil.fromAPIProducttoDTO(createdProduct, false);
             URI createdApiProductUri = new URI(
                     RestApiConstants.RESOURCE_PATH_API_PRODUCTS + "/" + createdApiProductDTO.getId());
             return Response.created(createdApiProductUri).entity(createdApiProductDTO).build();
 
-        } catch (APIManagementException | FaultGatewaysException e) {
-            String errorMessage = "Error while adding new API Product : " + provider + "-" + body.getName()
-                    + " - " + e.getMessage();
+        } catch (APIManagementException e) {
+            if (e.getMessage().contains(ExceptionCodes.API_CONTEXT_MALFORMED_EXCEPTION.getErrorMessage())) {
+                RestApiUtil.handleBadRequest("Error while adding new API Product. "
+                    + e.getMessage().replace("API", "API Product"), e, log);
+            }
+            throw e;
+        } catch (FaultGatewaysException e) {
+            String errorMessage = "Error while adding new API Product : " + provider + "-" + body.getName() + " - "
+                    + e.getMessage();
             RestApiUtil.handleInternalServerError(errorMessage, e, log);
         } catch (URISyntaxException e) {
             String errorMessage = "Error while retrieving API Product location : " + provider + "-"
@@ -796,12 +844,29 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
         return errorMessage != null && errorMessage.contains(UN_AUTHORIZED_ERROR_MESSAGE);
     }
 
+    /**
+     * Check whether the given API Product is indeed an API Product and not an API
+     * @param apiProductId the API Product ID to check
+     * @throws APIManagementException if the artifact corresponding to the given id is not found or it's not an API
+     *                                Product ID
+     */
+    private void validateAPIProduct(String apiProductId) throws APIManagementException {
+        APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+        APIInfo apiInfo = apiProvider.getAPIInfoByUUID(apiProductId);
+        if (apiInfo != null && !APIConstants.API_PRODUCT.equalsIgnoreCase(apiInfo.getApiType())) {
+            String msg = "Failed to get API Product. API Product artifact corresponding to artifactId " + apiProductId
+                    + " does not exist";
+            throw new APIMgtResourceNotFoundException(msg);
+        }
+    }
+
     @Override
     public Response createAPIProductRevision(String apiProductId, APIRevisionDTO apIRevisionDTO,
                                              MessageContext messageContext) throws APIManagementException {
         try {
             String organization = RestApiUtil.getValidatedOrganization(messageContext);
             APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+            validateAPIProduct(apiProductId);
             APIRevision apiRevision = new APIRevision();
             apiRevision.setApiUUID(apiProductId);
             apiRevision.setDescription(apIRevisionDTO.getDescription());
@@ -818,7 +883,11 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             return Response.created(createdApiUri).entity(createdApiRevisionDTO).build();
         } catch (APIManagementException e) {
             String errorMessage = "Error while adding new API Revision for API Product: " + apiProductId;
-            RestApiUtil.handleInternalServerError(errorMessage, e, log);
+            if (e.getErrorHandler().getErrorCode() == ExceptionCodes.MAXIMUM_REVISIONS_REACHED.getErrorCode()) {
+                throw e;
+            } else {
+                RestApiUtil.handleInternalServerError(errorMessage, e, log);
+            }
         } catch (URISyntaxException e) {
             String errorMessage = "Error while retrieving created revision API location for API Product: "
                     + apiProductId;
@@ -832,6 +901,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                                              MessageContext messageContext) throws APIManagementException {
         APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
+        validateAPIProduct(apiProductId);
         apiProvider.deleteAPIProductRevision(apiProductId, revisionId, organization);
         List<APIRevision> apiRevisions = apiProvider.getAPIRevisions(apiProductId);
         APIRevisionListDTO apiRevisionListDTO = APIMappingUtil.fromListAPIRevisiontoDTO(apiRevisions);
@@ -844,6 +914,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                                              MessageContext messageContext) throws APIManagementException {
         APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
+        validateAPIProduct(apiProductId);
         Map<String, Environment> environments = APIUtil.getEnvironments(organization);
         List<APIRevisionDeployment> apiRevisionDeployments = new ArrayList<>();
         for (APIRevisionDeploymentDTO apiRevisionDeploymentDTO : apIRevisionDeploymentDTO) {
@@ -851,16 +922,17 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             apiRevisionDeployment.setRevisionUUID(revisionId);
             String environment = apiRevisionDeploymentDTO.getName();
             if (environments.get(environment) == null) {
-                RestApiUtil.handleBadRequest("Gateway environment not found: " + environment, log);
+                String errorMessage = "Gateway environment not found: " + environment;
+                throw new APIManagementException(errorMessage,
+                        ExceptionCodes.from(ExceptionCodes.PROVIDED_GATEWAY_ENVIRONMENT_NOT_FOUND, environment));
             }
             apiRevisionDeployment.setDeployment(environment);
             apiRevisionDeployment.setVhost(apiRevisionDeploymentDTO.getVhost());
             if (StringUtils.isEmpty(apiRevisionDeploymentDTO.getVhost())) {
-                // vhost is only required when deploying an revision, not required when un-deploying a revision
+                // vhost is only required when deploying a revision, not required when un-deploying a revision
                 // since the same scheme 'APIRevisionDeployment' is used for deploy and undeploy, handle it here.
-                RestApiUtil.handleBadRequest(
-                        "Required field 'vhost' not found in deployment", log
-                );
+                String errorMessage = "Required field 'vhost' not found in deployment";
+                throw new APIManagementException(errorMessage, ExceptionCodes.GATEWAY_ENVIRONMENT_VHOST_NOT_PROVIDED);
             }
             apiRevisionDeployment.setDisplayOnDevportal(apiRevisionDeploymentDTO.isDisplayOnDevportal());
             apiRevisionDeployments.add(apiRevisionDeployment);
@@ -891,6 +963,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
     public Response getAPIProductRevisionDeployments(String apiProductId,
                                                      MessageContext messageContext) throws APIManagementException {
         APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+        validateAPIProduct(apiProductId);
         List<APIRevisionDeployment> apiRevisionDeploymentsList = new ArrayList<>();
         List<APIRevision> apiRevisions = apiProvider.getAPIRevisions(apiProductId);
         for (APIRevision apiRevision : apiRevisions) {
@@ -912,6 +985,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                                            MessageContext messageContext) throws APIManagementException {
         try {
             APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+            validateAPIProduct(apiProductId);
             APIRevisionListDTO apiRevisionListDTO;
             List<APIRevision> apiRevisions = apiProvider.getAPIRevisions(apiProductId);
             apiRevisionListDTO = APIMappingUtil.fromListAPIRevisiontoDTO(
@@ -930,6 +1004,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                                               MessageContext messageContext) throws APIManagementException {
         APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
+        validateAPIProduct(apiProductId);
         apiProvider.restoreAPIProductRevision(apiProductId, revisionId, organization);
         APIProductDTO apiToReturn = getAPIProductByID(apiProductId, apiProvider);
         Response.Status status = Response.Status.CREATED;
@@ -942,10 +1017,13 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                                                List<APIRevisionDeploymentDTO> apIRevisionDeploymentDTO,
                                                MessageContext messageContext) throws APIManagementException {
         APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+        validateAPIProduct(apiProductId);
         if (revisionId == null && revisionNumber != null) {
             revisionId = apiProvider.getAPIRevisionUUID(revisionNumber, apiProductId);
             if (revisionId == null) {
-                return Response.status(Response.Status.BAD_REQUEST).entity(null).build();
+                throw new APIManagementException(
+                        "Revision " + revisionNumber + " is not found for API Product with UUID " + apiProductId,
+                        ExceptionCodes.from(ExceptionCodes.API_REVISION_NOT_FOUND, revisionNumber));
             }
         }
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
@@ -959,7 +1037,9 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                 apiRevisionDeployment.setRevisionUUID(revisionId);
                 String environment = apiRevisionDeploymentDTO.getName();
                 if (environments.get(environment) == null) {
-                    RestApiUtil.handleBadRequest("Gateway environment not found: " + environment, log);
+                    String errorMessage = "Gateway environment not found: " + environment;
+                    throw new APIManagementException(errorMessage,
+                            ExceptionCodes.from(ExceptionCodes.PROVIDED_GATEWAY_ENVIRONMENT_NOT_FOUND, environment));
                 }
                 apiRevisionDeployment.setDeployment(environment);
                 apiRevisionDeployment.setVhost(apiRevisionDeploymentDTO.getVhost());
@@ -981,7 +1061,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
         try {
             String tenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
             APIProduct api = apiProvider.getAPIProductbyUUID(apiProductId, tenantDomain);
-            return APIMappingUtil.fromAPIProducttoDTO(api);
+            return APIMappingUtil.fromAPIProducttoDTO(api, false);
         } catch (APIManagementException e) {
             //Auth failure occurs when cross tenant accessing APIs. Sends 404, since we don't need
             // to expose the existence of the resource
@@ -1002,6 +1082,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
     public Response updateAPIProductDeployment(String apiProductId, String deploymentId, APIRevisionDeploymentDTO
             apIRevisionDeploymentDTO, MessageContext messageContext) throws APIManagementException {
         APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+        validateAPIProduct(apiProductId);
         String revisionId = apIRevisionDeploymentDTO.getRevisionUuid();
         String decodedDeploymentName;
         if (deploymentId != null) {
@@ -1082,6 +1163,7 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
                                                 MessageContext messageContext) throws APIManagementException {
 
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
+        validateAPIProduct(apiProductId);
         LifecycleStateDTO lifecycleStateDTO = getLifecycleState(apiProductId, organization);
         return Response.ok().entity(lifecycleStateDTO).build();
     }
@@ -1122,6 +1204,52 @@ public class ApiProductsApiServiceImpl implements ApiProductsApiService {
             return Response.ok().build();
         } catch (APIManagementException e) {
             String errorMessage = "Error while deleting task ";
+            RestApiUtil.handleInternalServerError(errorMessage, e, log);
+        }
+        return null;
+    }
+
+    @Override
+    public Response createNewAPIProductVersion(String newVersion, String apiProductId, Boolean defaultVersion,
+            MessageContext messageContext) {
+
+        URI newVersionedApiProductUri;
+        APIProductDTO newVersionedApiProduct;
+
+        try {
+            APIProductIdentifier productIdentifier = APIUtil.getAPIProductIdentifierFromUUID(apiProductId);
+            if (productIdentifier == null) {
+                throw new APIMgtResourceNotFoundException(
+                        "Couldn't retrieve existing API Product with API Product Id: " + apiProductId,
+                        ExceptionCodes.from(ExceptionCodes.API_NOT_FOUND, apiProductId));
+            }
+            APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
+            String tenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
+            APIProduct versionedAPIProduct = apiProvider.createNewAPIProductVersion(apiProductId, newVersion,
+                    defaultVersion, tenantDomain);
+            newVersionedApiProduct = APIMappingUtil.fromAPIProducttoDTO(versionedAPIProduct, false);
+            newVersionedApiProductUri = new URI(
+                    RestApiConstants.RESOURCE_PATH_API_PRODUCTS + "/" + versionedAPIProduct.getUuid());
+            return Response.created(newVersionedApiProductUri).entity(newVersionedApiProduct).build();
+
+        } catch (APIManagementException e) {
+            if (RestApiUtil.isDueToResourceAlreadyExists(e)) {
+                String errorMessage = "Requested new version " + newVersion + " of API Product " + apiProductId
+                        + " already exists";
+                RestApiUtil.handleResourceAlreadyExistsError(errorMessage, e, log);
+            } else if (RestApiUtil.isDueToResourceNotFound(e) || RestApiUtil.isDueToAuthorizationFailure(e)) {
+                //Auth failure occurs when cross tenant accessing APIs. Sends 404, since we don't need to expose
+                // the existence of the resource
+                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API_PRODUCT, apiProductId, e, log);
+            } else if (isAuthorizationFailure(e)) {
+                RestApiUtil.handleAuthorizationFailure("Authorization failure while copying API Product : "
+                                + apiProductId, e, log);
+            } else {
+                String errorMessage = "Error while copying API Product : " + apiProductId;
+                RestApiUtil.handleInternalServerError(errorMessage, e, log);
+            }
+        } catch (URISyntaxException e) {
+            String errorMessage = "Error while retrieving API location of " + apiProductId;
             RestApiUtil.handleInternalServerError(errorMessage, e, log);
         }
         return null;

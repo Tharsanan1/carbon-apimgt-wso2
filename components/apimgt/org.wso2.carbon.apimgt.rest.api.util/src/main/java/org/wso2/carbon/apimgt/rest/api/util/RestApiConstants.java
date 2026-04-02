@@ -159,9 +159,15 @@ public final class RestApiConstants {
     public static final String REST_API_ADMIN_CONTEXT_FULL_0 = REST_API_ADMIN_CONTEXT + REST_API_ADMIN_VERSION_0;
     public static final String REST_API_ADMIN_CONTEXT_FULL_1 = REST_API_ADMIN_CONTEXT + REST_API_ADMIN_VERSION_1;
     public static final String REST_API_PROVIDER = "admin";
+    public static final String ALLOWED_ORIGINS_DEFAULT = "{}";
     public static final String REST_API_WEB_APP_AUTHENTICATOR_IMPL_CLASS_NAME = "org.wso2.carbon.apimgt.rest.api.util.impl.WebAppAuthenticatorImpl";
     public static final String AUTH_HEADER_NAME = "Authorization";
-    public static final Pattern REGEX_BEARER_PATTERN = Pattern.compile("Bearer\\s");
+    /**
+     * According to <a href="https://www.rfc-editor.org/rfc/rfc9110#name-authentication-scheme">RFC 9110</a>
+     * and <a href="https://datatracker.ietf.org/doc/html/rfc2617#section-1.2">RFC 2617</a>, the authentication scheme
+     * name should be treated as case-insensitive.
+     **/
+    public static final Pattern REGEX_BEARER_PATTERN = Pattern.compile("Bearer\\s", Pattern.CASE_INSENSITIVE);
     public static final String COOKIE_HEADER_NAME = "cookie";
     public static final String AUTH_COOKIE_NAME = "AM_ACC_TOKEN_DEFAULT_P2"; // This cookie name should be used when setting the cookie for SPA app in SPA app user authentication response to REST API context as path directive
 
@@ -174,6 +180,7 @@ public final class RestApiConstants {
     public static final String PAGINATION_PREVIOUS_OFFSET = "previous_offset";
     public static final String PAGINATION_PREVIOUS_LIMIT = "previous_limit";
     public static final String DEFAULT_SORT_ORDER = "asc";
+    public static final String DEFAULT_SORT_BY = "apiName";
 
     public static final int TAG_LIMIT_DEFAULT = 1000;
     public static final int TAG_OFFSET_DEFAULT = 0;

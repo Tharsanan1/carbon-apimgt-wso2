@@ -18,8 +18,13 @@
 
 package org.wso2.carbon.apimgt.api.model.subscription;
 
+import org.wso2.carbon.apimgt.api.model.OperationPolicy;
+import org.wso2.carbon.apimgt.api.model.policy.APIPolicy;
+
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Entity for keeping API related information.
@@ -32,12 +37,18 @@ public class API implements CacheableEntity<String> {
     private String name = null;
     private String version = null;
     private String context = null;
+    private String contextTemplate = null;
     private String policy = null;
     private String apiType = null;
     private Boolean isDefaultVersion = false;
     private String environment;
     private String status;
     private String revision;
+    private String organization;
+    private Set<OperationPolicy> apiPolicies = new HashSet<>();
+    private boolean isSubscriptionValidationDisabled = false;
+    private int isEgress;
+    private String subtype;
 
     public String getRevision() {
 
@@ -93,6 +104,16 @@ public class API implements CacheableEntity<String> {
     public void setContext(String context) {
 
         this.context = context;
+    }
+
+    public String getContextTemplate() {
+
+        return contextTemplate;
+    }
+
+    public void setContextTemplate(String contextTemplate) {
+
+        this.contextTemplate = contextTemplate;
     }
 
     public String getProvider() {
@@ -189,5 +210,45 @@ public class API implements CacheableEntity<String> {
     public void setStatus(String status) {
 
         this.status = status;
+    }
+
+    public String getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(String organization) {
+        this.organization = organization;
+    }
+
+    public void setApiPolicy(OperationPolicy apiPolicy) {
+        this.apiPolicies.add(apiPolicy);
+    }
+
+    public Set<OperationPolicy> getApiPolicies() {
+        return apiPolicies;
+    }
+
+    public boolean isSubscriptionValidationDisabled() {
+        return isSubscriptionValidationDisabled;
+    }
+
+    public void setSubscriptionValidationDisabled(boolean subscriptionValidationDisabled) {
+        isSubscriptionValidationDisabled = subscriptionValidationDisabled;
+    }
+
+    public int isEgress() {
+        return isEgress;
+    }
+
+    public void setEgress(int egress) {
+        isEgress = egress;
+    }
+
+    public String getSubtype() {
+        return subtype;
+    }
+
+    public void setSubtype(String subtype) {
+        this.subtype = subtype;
     }
 }

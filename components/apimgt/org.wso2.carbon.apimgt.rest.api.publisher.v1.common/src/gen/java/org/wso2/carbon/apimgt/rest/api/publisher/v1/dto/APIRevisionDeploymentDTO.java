@@ -22,10 +22,46 @@ public class APIRevisionDeploymentDTO   {
   
     private String revisionUuid = null;
     private String name = null;
+
+    @XmlType(name="StatusEnum")
+    @XmlEnum(String.class)
+    public enum StatusEnum {
+        CREATED("CREATED"),
+        APPROVED("APPROVED"),
+        REJECTED("REJECTED");
+        private String value;
+
+        StatusEnum (String v) {
+            value = v;
+        }
+
+        public String value() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(value);
+        }
+
+        @JsonCreator
+        public static StatusEnum fromValue(String v) {
+            for (StatusEnum b : StatusEnum.values()) {
+                if (String.valueOf(b.value).equals(v)) {
+                    return b;
+                }
+            }
+return null;
+        }
+    }
+    private StatusEnum status = StatusEnum.CREATED;
     private String vhost = null;
-    private Boolean displayOnDevportal = null;
+    private Boolean displayOnDevportal = true;
     private java.util.Date deployedTime = null;
     private java.util.Date successDeployedTime = null;
+    private Integer liveGatewayCount = null;
+    private Integer deployedGatewayCount = null;
+    private Integer failedGatewayCount = null;
 
   /**
    **/
@@ -52,13 +88,30 @@ public class APIRevisionDeploymentDTO   {
   }
 
   
-  @ApiModelProperty(example = "default", value = "")
+  @ApiModelProperty(example = "Default", value = "")
   @JsonProperty("name")
  @Size(min=1,max=255)  public String getName() {
     return name;
   }
   public void setName(String name) {
     this.name = name;
+  }
+
+  /**
+   **/
+  public APIRevisionDeploymentDTO status(StatusEnum status) {
+    this.status = status;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "CREATED", value = "")
+  @JsonProperty("status")
+  public StatusEnum getStatus() {
+    return status;
+  }
+  public void setStatus(StatusEnum status) {
+    this.status = status;
   }
 
   /**
@@ -129,6 +182,60 @@ public class APIRevisionDeploymentDTO   {
     this.successDeployedTime = successDeployedTime;
   }
 
+  /**
+   * The number of gateways that are currently live in the gateway environment 
+   **/
+  public APIRevisionDeploymentDTO liveGatewayCount(Integer liveGatewayCount) {
+    this.liveGatewayCount = liveGatewayCount;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1", value = "The number of gateways that are currently live in the gateway environment ")
+  @JsonProperty("liveGatewayCount")
+  public Integer getLiveGatewayCount() {
+    return liveGatewayCount;
+  }
+  public void setLiveGatewayCount(Integer liveGatewayCount) {
+    this.liveGatewayCount = liveGatewayCount;
+  }
+
+  /**
+   * The number of gateways in which the API revision is deployed successfully 
+   **/
+  public APIRevisionDeploymentDTO deployedGatewayCount(Integer deployedGatewayCount) {
+    this.deployedGatewayCount = deployedGatewayCount;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1", value = "The number of gateways in which the API revision is deployed successfully ")
+  @JsonProperty("deployedGatewayCount")
+  public Integer getDeployedGatewayCount() {
+    return deployedGatewayCount;
+  }
+  public void setDeployedGatewayCount(Integer deployedGatewayCount) {
+    this.deployedGatewayCount = deployedGatewayCount;
+  }
+
+  /**
+   * The number of gateways where the API revision deployment has failed 
+   **/
+  public APIRevisionDeploymentDTO failedGatewayCount(Integer failedGatewayCount) {
+    this.failedGatewayCount = failedGatewayCount;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1", value = "The number of gateways where the API revision deployment has failed ")
+  @JsonProperty("failedGatewayCount")
+  public Integer getFailedGatewayCount() {
+    return failedGatewayCount;
+  }
+  public void setFailedGatewayCount(Integer failedGatewayCount) {
+    this.failedGatewayCount = failedGatewayCount;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -141,15 +248,19 @@ public class APIRevisionDeploymentDTO   {
     APIRevisionDeploymentDTO apIRevisionDeployment = (APIRevisionDeploymentDTO) o;
     return Objects.equals(revisionUuid, apIRevisionDeployment.revisionUuid) &&
         Objects.equals(name, apIRevisionDeployment.name) &&
+        Objects.equals(status, apIRevisionDeployment.status) &&
         Objects.equals(vhost, apIRevisionDeployment.vhost) &&
         Objects.equals(displayOnDevportal, apIRevisionDeployment.displayOnDevportal) &&
         Objects.equals(deployedTime, apIRevisionDeployment.deployedTime) &&
-        Objects.equals(successDeployedTime, apIRevisionDeployment.successDeployedTime);
+        Objects.equals(successDeployedTime, apIRevisionDeployment.successDeployedTime) &&
+        Objects.equals(liveGatewayCount, apIRevisionDeployment.liveGatewayCount) &&
+        Objects.equals(deployedGatewayCount, apIRevisionDeployment.deployedGatewayCount) &&
+        Objects.equals(failedGatewayCount, apIRevisionDeployment.failedGatewayCount);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(revisionUuid, name, vhost, displayOnDevportal, deployedTime, successDeployedTime);
+    return Objects.hash(revisionUuid, name, status, vhost, displayOnDevportal, deployedTime, successDeployedTime, liveGatewayCount, deployedGatewayCount, failedGatewayCount);
   }
 
   @Override
@@ -159,10 +270,14 @@ public class APIRevisionDeploymentDTO   {
     
     sb.append("    revisionUuid: ").append(toIndentedString(revisionUuid)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
     sb.append("    vhost: ").append(toIndentedString(vhost)).append("\n");
     sb.append("    displayOnDevportal: ").append(toIndentedString(displayOnDevportal)).append("\n");
     sb.append("    deployedTime: ").append(toIndentedString(deployedTime)).append("\n");
     sb.append("    successDeployedTime: ").append(toIndentedString(successDeployedTime)).append("\n");
+    sb.append("    liveGatewayCount: ").append(toIndentedString(liveGatewayCount)).append("\n");
+    sb.append("    deployedGatewayCount: ").append(toIndentedString(deployedGatewayCount)).append("\n");
+    sb.append("    failedGatewayCount: ").append(toIndentedString(failedGatewayCount)).append("\n");
     sb.append("}");
     return sb.toString();
   }

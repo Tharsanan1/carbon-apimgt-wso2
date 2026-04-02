@@ -36,6 +36,7 @@ import org.apache.synapse.api.Resource;
 import org.apache.synapse.api.dispatch.RESTDispatcher;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.rest.RESTConstants;
+import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.WebsocketUtil;
@@ -52,7 +53,10 @@ import org.wso2.carbon.apimgt.gateway.inbound.websocket.request.GraphQLRequestPr
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.request.RequestProcessor;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.response.GraphQLResponseProcessor;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.response.ResponseProcessor;
+import org.wso2.carbon.apimgt.gateway.inbound.websocket.Authentication.ApiKeyAuthenticator;
+import org.wso2.carbon.apimgt.gateway.inbound.websocket.Authentication.NoAuthAuthenticator;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.utils.InboundWebsocketProcessorUtil;
+import org.wso2.carbon.apimgt.gateway.inbound.websocket.Authentication.OAuthAuthenticator;
 import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
@@ -65,13 +69,14 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * This class intercepts the inbound websocket handler execution during handshake, request messaging, response
  * messaging phases. This processor depends on netty inbound websocket channel pipeline.
  */
-public class InboundWebSocketProcessor {
+public class InboundWebSocketProcessor implements WebSocketProcessor {
 
     private static final Log log = LogFactory.getLog(InboundWebSocketProcessor.class);
     private WebSocketAnalyticsMetricsHandler metricsHandler;
@@ -92,6 +97,7 @@ public class InboundWebSocketProcessor {
      * @param inboundMessageContext InboundMessageContext
      * @return InboundProcessorResponseDTO with handshake processing response
      */
+    @Override
     public InboundProcessorResponseDTO handleHandshake(FullHttpRequest req, ChannelHandlerContext ctx,
                                                        InboundMessageContext inboundMessageContext) {
 
@@ -101,6 +107,9 @@ public class InboundWebSocketProcessor {
             setUris(req, inboundMessageContext);
             InboundWebsocketProcessorUtil.setTenantDomainToContext(inboundMessageContext);
             setMatchingResource(ctx, req, inboundMessageContext);
+            // This needs to be called after setMatchingResource() to correctly set the fullRequestPath when invoking
+            // with authorization as a query parameter
+            setUris(req, inboundMessageContext);
             String userAgent = req.headers().get(HttpHeaders.USER_AGENT);
 
             // '-' is used for empty values to avoid possible errors in DAS side.
@@ -112,15 +121,28 @@ public class InboundWebSocketProcessor {
             PrivilegedCarbonContext.startTenantFlow();
             PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(
                     inboundMessageContext.getTenantDomain(), true);
-            if (validateOAuthHeader(req, inboundMessageContext)) {
+            if (isNoAuthentication(inboundMessageContext)) {
+                inboundMessageContext.setAuthenticator(new NoAuthAuthenticator());
                 setRequestHeaders(req, inboundMessageContext);
-                inboundMessageContext.getRequestHeaders().put(WebsocketUtil.authorizationHeader, req.headers()
-                        .get(WebsocketUtil.authorizationHeader));
+                inboundProcessorResponseDTO = 
+                    handshakeProcessor.processHandshake(inboundMessageContext);
+            } else if (isOauthAuthentication(req, inboundMessageContext)) {
+                inboundMessageContext.setAuthenticator(new OAuthAuthenticator());
+                setRequestHeaders(req, inboundMessageContext);
+                setOrReplaceRequestHeaderIgnoreCase(WebsocketUtil.authorizationHeader, req, inboundMessageContext);
+                inboundProcessorResponseDTO =
+                        handshakeProcessor.processHandshake(inboundMessageContext);
+                setRequestHeaders(req, inboundMessageContext);
+            } else if (isAPIKeyAuthentication(req, inboundMessageContext)) {
+                inboundMessageContext.setAuthenticator(new ApiKeyAuthenticator());
+                setRequestHeaders(req, inboundMessageContext);
+                setOrReplaceRequestHeaderIgnoreCase(APIConstants.API_KEY_HEADER_QUERY_PARAM, req, inboundMessageContext);
                 inboundProcessorResponseDTO =
                         handshakeProcessor.processHandshake(inboundMessageContext);
                 setRequestHeaders(req, inboundMessageContext);
             } else {
-                String errorMessage = "No Authorization Header or access_token query parameter present";
+                String errorMessage = "No Authorization header, access_token query parameter, apikey header or query " +
+                        "parameter present";
                 log.error(errorMessage + " in request for the websocket context "
                         + inboundMessageContext.getApiContext());
                 inboundProcessorResponseDTO = InboundWebsocketProcessorUtil.getHandshakeErrorDTO(
@@ -144,7 +166,12 @@ public class InboundWebSocketProcessor {
             log.error(e.getMessage());
             inboundProcessorResponseDTO = InboundWebsocketProcessorUtil.getHandshakeErrorDTO(
                     WebSocketApiConstants.HandshakeErrorConstants.RESOURCE_NOT_FOUND_ERROR, e.getMessage());
-            publishResourceNotFoundEvent(ctx);
+
+            Object errorCode = WebSocketUtils.getPropertyFromChannel(SynapseConstants.ERROR_CODE, ctx);
+            if (errorCode != null && (int) errorCode ==
+                    org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.RESOURCE_NOT_FOUND_ERROR_CODE) {
+                publishResourceNotFoundEvent(ctx);
+            }
         }
         return inboundProcessorResponseDTO;
     }
@@ -158,7 +185,9 @@ public class InboundWebSocketProcessor {
      * @param inboundMessageContext InboundMessageContext
      * @return InboundProcessorResponseDTO with handshake processing response
      */
-    public InboundProcessorResponseDTO handleRequest(WebSocketFrame msg, InboundMessageContext inboundMessageContext) {
+    @Override
+    public InboundProcessorResponseDTO handleRequest(WebSocketFrame msg, InboundMessageContext inboundMessageContext)
+            throws APISecurityException {
 
         RequestProcessor requestProcessor;
         String msgText = null;
@@ -181,6 +210,7 @@ public class InboundWebSocketProcessor {
      * @param inboundMessageContext InboundMessageContext
      * @return InboundProcessorResponseDTO with handshake processing response
      */
+    @Override
     public InboundProcessorResponseDTO handleResponse(WebSocketFrame msg, InboundMessageContext inboundMessageContext)
             throws Exception {
 
@@ -205,16 +235,24 @@ public class InboundWebSocketProcessor {
      * @return if validation success
      * @throws APISecurityException if an error occurs
      */
-    private boolean validateOAuthHeader(FullHttpRequest req, InboundMessageContext inboundMessageContext)
+    protected boolean isOauthAuthentication(FullHttpRequest req, InboundMessageContext inboundMessageContext)
             throws APISecurityException {
 
-        if (!inboundMessageContext.getRequestHeaders().containsKey(WebsocketUtil.authorizationHeader)) {
+        boolean containsAuthorizationHeader = inboundMessageContext.getRequestHeaders()
+                .keySet()
+                .stream()
+                .anyMatch(key -> key.equalsIgnoreCase(WebsocketUtil.authorizationHeader));
+
+        if (!containsAuthorizationHeader) {
             QueryStringDecoder decoder = new QueryStringDecoder(inboundMessageContext.getFullRequestPath());
             Map<String, List<String>> requestMap = decoder.parameters();
-            if (requestMap.containsKey(APIConstants.AUTHORIZATION_QUERY_PARAM_DEFAULT)) {
-                inboundMessageContext.getHeadersToAdd().put(WebsocketUtil.authorizationHeader, APIConstants.CONSUMER_KEY_SEGMENT
-                        + StringUtils.SPACE + requestMap.get(APIConstants.AUTHORIZATION_QUERY_PARAM_DEFAULT).get(0));
-                InboundWebsocketProcessorUtil.removeTokenFromQuery(requestMap, inboundMessageContext);
+            if (requestMap.containsKey(APIConstants.AUTHORIZATION_QUERY_PARAM_DEFAULT) && requestMap.get(APIConstants.
+                    AUTHORIZATION_QUERY_PARAM_DEFAULT) != null) {
+                inboundMessageContext.getHeadersToAdd().put(WebsocketUtil.authorizationHeader,
+                        APIConstants.CONSUMER_KEY_SEGMENT + StringUtils.SPACE + requestMap.get(APIConstants.
+                                AUTHORIZATION_QUERY_PARAM_DEFAULT).get(0));
+                InboundWebsocketProcessorUtil.removeTokenFromQuery(requestMap, inboundMessageContext, APIConstants.
+                        AUTHORIZATION_QUERY_PARAM_DEFAULT);
                 req.setUri(inboundMessageContext.getFullRequestPath());
             } else {
                 return false;
@@ -224,12 +262,71 @@ public class InboundWebSocketProcessor {
     }
 
     /**
+     * Validates apikey query param and reset apikey header in the handshake request.
+     *
+     * @param req                   Handshake request
+     * @param inboundMessageContext InboundMessageContext
+     * @return true if validation success
+     * @throws APISecurityException if an error occurs
+     */
+    protected boolean isAPIKeyAuthentication(FullHttpRequest req, InboundMessageContext inboundMessageContext)
+            throws APISecurityException {
+
+        boolean containsAuthorizationHeader = inboundMessageContext.getRequestHeaders()
+                .keySet()
+                .stream()
+                .anyMatch(key -> key.equalsIgnoreCase(APIConstants.API_KEY_HEADER_QUERY_PARAM));
+
+        if (!containsAuthorizationHeader) {
+            QueryStringDecoder decoder = new QueryStringDecoder(inboundMessageContext.getFullRequestPath());
+            Map<String, List<String>> requestMap = decoder.parameters();
+            if (requestMap.containsKey(APIConstants.API_KEY_HEADER_QUERY_PARAM) && requestMap.get(APIConstants.
+                    API_KEY_HEADER_QUERY_PARAM) != null) {
+                inboundMessageContext.getHeadersToAdd().put(APIConstants.API_KEY_HEADER_QUERY_PARAM, requestMap.
+                        get(APIConstants.API_KEY_HEADER_QUERY_PARAM).get(0));
+                InboundWebsocketProcessorUtil.removeTokenFromQuery(requestMap, inboundMessageContext,
+                        APIConstants.API_KEY_HEADER_QUERY_PARAM);
+                req.setUri(inboundMessageContext.getFullRequestPath());
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Parse the authSceme for the selected resource in the InboundMessageContext.
+     *
+     * @param inboundMessageContext InboundMessageContext
+     * @return true if validation success
+     * 
+     */
+    private boolean isNoAuthentication(InboundMessageContext ctx) {
+        List<URLMapping> urlMappings = ctx.getElectedAPI().getUrlMappings();
+        for (URLMapping urlMapping : urlMappings) {
+            if (urlMapping.getUrlPattern() != null && urlMapping.getUrlPattern()
+                    .equalsIgnoreCase(ctx.getMatchingResource())) {
+                if (APIConstants.AUTH_NO_AUTHENTICATION.equals(urlMapping.getAuthScheme())) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Found resource authentication scheme: " + APIConstants.AUTH_NO_AUTHENTICATION + 
+                                " for WebSocket context: " + ctx.getApiContext() + 
+                                ", resource: " + ctx.getMatchingResource());
+                    }
+                        return true;
+                }
+            }
+        }
+        log.debug("No matching resource found to dispatch the request");
+        return false;
+    }
+
+    /**
      * Extract full request path from the request and update InboundMessageContext.
      *
      * @param req                   Request object
      * @param inboundMessageContext InboundMessageContext
      */
-    private void setUris(FullHttpRequest req, InboundMessageContext inboundMessageContext)
+    protected void setUris(FullHttpRequest req, InboundMessageContext inboundMessageContext)
             throws WebSocketApiException {
 
         try {
@@ -260,7 +357,7 @@ public class InboundWebSocketProcessor {
      * @throws WebSocketApiException     If an error occurs
      * @throws ResourceNotFoundException If no matching API or resource found
      */
-    private void setMatchingResource(ChannelHandlerContext ctx, FullHttpRequest req,
+    protected void setMatchingResource(ChannelHandlerContext ctx, FullHttpRequest req,
                                      InboundMessageContext inboundMessageContext) throws WebSocketApiException,
             ResourceNotFoundException {
 
@@ -269,7 +366,8 @@ public class InboundWebSocketProcessor {
             MessageContext synCtx = getMessageContext(inboundMessageContext);
             API api = InboundWebsocketProcessorUtil.getApi(synCtx, inboundMessageContext);
             if (api == null) {
-                throw new ResourceNotFoundException("No matching API found to dispatch the request");
+                throw new ResourceNotFoundException("No matching API was found to dispatch the request for path : "
+                        + inboundMessageContext.getRequestPath());
             }
             inboundMessageContext.setApi(api);
             reConstructFullUriWithVersion(req, synCtx, inboundMessageContext);
@@ -282,17 +380,24 @@ public class InboundWebSocketProcessor {
                     Resource resource = dispatcher.findResource(synCtx, acceptableResources);
                     if (resource != null) {
                         selectedResource = resource;
-                        if (APIUtil.isAnalyticsEnabled()) {
-                            WebSocketUtils.setApiPropertyToChannel(ctx, APIMgtGatewayConstants.SYNAPSE_ENDPOINT_ADDRESS,
-                                    WebSocketUtils.getEndpointUrl(resource, synCtx));
+                        if (selectedResource.getDispatcherHelper()
+                                .getString() != null && !selectedResource.getDispatcherHelper().getString()
+                                .contains("/*")) {
+                            break;
                         }
-                        break;
                     }
+                }
+                if (selectedResource != null && APIUtil.isAnalyticsEnabled()) {
+                    WebSocketUtils.setApiPropertyToChannel(ctx, APIMgtGatewayConstants.SYNAPSE_ENDPOINT_ADDRESS,
+                            WebSocketUtils.getEndpointUrl(selectedResource, synCtx));
                 }
             }
             setApiPropertiesToChannel(ctx, inboundMessageContext);
             if (selectedResource == null) {
-                throw new ResourceNotFoundException("No matching resource found to dispatch the request");
+                WebSocketUtils.setApiPropertyToChannel(ctx, SynapseConstants.ERROR_CODE,
+                        org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.RESOURCE_NOT_FOUND_ERROR_CODE);
+                throw new ResourceNotFoundException("No matching resource was found to dispatch the request for path : "
+                        + inboundMessageContext.getRequestPath());
             }
             if (APIConstants.GRAPHQL_API.equals(inboundMessageContext.getElectedAPI().getApiType())) {
                 inboundMessageContext.setGraphQLSchemaDTO(DataHolder.getInstance()
@@ -316,7 +421,7 @@ public class InboundWebSocketProcessor {
      * @throws AxisFault          if an error occurs getting context
      * @throws URISyntaxException if an error occurs getting transport scheme
      */
-    private MessageContext getMessageContext(InboundMessageContext inboundMessageContext)
+    protected MessageContext getMessageContext(InboundMessageContext inboundMessageContext)
             throws AxisFault, URISyntaxException {
 
         String tenantDomain = inboundMessageContext.getTenantDomain();
@@ -335,7 +440,7 @@ public class InboundWebSocketProcessor {
      * @param ctx                   ChannelHandlerContext
      * @param inboundMessageContext InboundMessageContext
      */
-    private void setApiPropertiesToChannel(ChannelHandlerContext ctx, InboundMessageContext inboundMessageContext) {
+    protected void setApiPropertiesToChannel(ChannelHandlerContext ctx, InboundMessageContext inboundMessageContext) {
         Map<String, Object> apiPropertiesMap = WebSocketUtils.getApiProperties(ctx);
         apiPropertiesMap.put(RESTConstants.SYNAPSE_REST_API, inboundMessageContext.getApiName());
         apiPropertiesMap.put(RESTConstants.PROCESSED_API, inboundMessageContext.getApi());
@@ -355,7 +460,7 @@ public class InboundWebSocketProcessor {
      * @param synCtx                Synapse request
      * @param inboundMessageContext InboundMessageContext
      */
-    private void reConstructFullUriWithVersion(FullHttpRequest req, MessageContext synCtx,
+    protected void reConstructFullUriWithVersion(FullHttpRequest req, MessageContext synCtx,
                                                InboundMessageContext inboundMessageContext) {
 
         String fullRequestPath = inboundMessageContext.getFullRequestPath().replace(
@@ -375,11 +480,9 @@ public class InboundWebSocketProcessor {
      *
      * @param ctx Channel context
      */
-    private void publishResourceNotFoundEvent(ChannelHandlerContext ctx) {
+    protected void publishResourceNotFoundEvent(ChannelHandlerContext ctx) {
 
         if (APIUtil.isAnalyticsEnabled()) {
-            WebSocketUtils.setApiPropertyToChannel(ctx, SynapseConstants.ERROR_CODE,
-                    org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants.RESOURCE_NOT_FOUND_ERROR_CODE);
             WebSocketUtils.setApiPropertyToChannel(ctx, SynapseConstants.ERROR_MESSAGE,
                     "No matching resource found to dispatch the request");
             metricsHandler.handleHandshake(ctx);
@@ -392,7 +495,7 @@ public class InboundWebSocketProcessor {
      *
      * @param ctx Channel context
      */
-    private void publishHandshakeAuthErrorEvent(ChannelHandlerContext ctx, String errorMessage) {
+    protected void publishHandshakeAuthErrorEvent(ChannelHandlerContext ctx, String errorMessage) {
 
         if (APIUtil.isAnalyticsEnabled()) {
             WebSocketUtils.setApiPropertyToChannel(ctx, SynapseConstants.ERROR_CODE,
@@ -408,7 +511,7 @@ public class InboundWebSocketProcessor {
      *
      * @param ctx Channel context
      */
-    private void removeErrorPropertiesFromChannel(ChannelHandlerContext ctx) {
+    protected void removeErrorPropertiesFromChannel(ChannelHandlerContext ctx) {
         WebSocketUtils.removeApiPropertyFromChannel(ctx, SynapseConstants.ERROR_CODE);
         WebSocketUtils.removeApiPropertyFromChannel(ctx, SynapseConstants.ERROR_MESSAGE);
     }
@@ -419,7 +522,7 @@ public class InboundWebSocketProcessor {
      * @param request               Handshake request
      * @param inboundMessageContext InboundMessageContext
      */
-    private void setRequestHeaders(FullHttpRequest request, InboundMessageContext inboundMessageContext) {
+    protected void setRequestHeaders(FullHttpRequest request, InboundMessageContext inboundMessageContext) {
         Map<String, String> headersToAdd = inboundMessageContext.getHeadersToAdd();
         List<String> headersToRemove = inboundMessageContext.getHeadersToRemove();
         for (Map.Entry<String, String> header : headersToAdd.entrySet()) {
@@ -431,4 +534,21 @@ public class InboundWebSocketProcessor {
         inboundMessageContext.setHeadersToRemove(new ArrayList<>());
     }
 
+    /**
+     * Sets or replaces a request header in InboundMessageContext matching the header key case-insensitively.
+     *
+     * @param headerKey             Header key to set or replace
+     * @param request               Handshake request
+     * @param inboundMessageContext InboundMessageContext
+     */
+    private static void setOrReplaceRequestHeaderIgnoreCase(String headerKey, FullHttpRequest request,
+                                                            InboundMessageContext inboundMessageContext) {
+        Optional<String> existingKey = inboundMessageContext.getRequestHeaders().keySet()
+                .stream()
+                .filter(key -> key.equalsIgnoreCase(headerKey))
+                .findFirst();
+
+        existingKey.ifPresent(inboundMessageContext.getRequestHeaders()::remove);
+        inboundMessageContext.getRequestHeaders().put(headerKey, request.headers().get(headerKey));
+    }
 }

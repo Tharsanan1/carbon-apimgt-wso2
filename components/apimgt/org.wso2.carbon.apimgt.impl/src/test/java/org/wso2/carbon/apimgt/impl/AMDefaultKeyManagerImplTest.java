@@ -31,6 +31,7 @@ import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.powermock.reflect.Whitebox;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.AccessTokenInfo;
 import org.wso2.carbon.apimgt.api.model.ApplicationConstants;
@@ -45,6 +46,7 @@ import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
@@ -177,6 +179,196 @@ public class AMDefaultKeyManagerImplTest {
         OAuthApplicationInfo oauthApplicationResponse = keyManager.createApplication(oauthRequest);
         Assert.assertEquals(StringUtils.join(REDIRECT_URIS, ","), oauthApplicationResponse.getCallBackURL());
         Assert.assertEquals(APP_UUID, oauthApplicationResponse.getClientName());
+    }
+
+
+    @Test
+    public void testTokenAuthorizedUserType() throws KeyManagerClientException, APIManagementException {
+        String accessToken = "155ddde3-68db-35b1-82dc-1247616b2da9";
+        IntrospectInfo response = new IntrospectInfo();
+        response.setActive(true);
+        response.setExpiry(Long.MAX_VALUE);
+        response.setIat(new Date().getTime());
+        response.setAut("application");
+        Mockito.when(introspectionClient.introspect(accessToken)).thenReturn(response);
+        AccessTokenInfo accessTokenInfo = keyManager.getTokenMetaData(accessToken);
+        Assert.assertTrue(accessTokenInfo.isApplicationToken());
+
+        response.setAut("application_user");
+        Mockito.when(introspectionClient.introspect(accessToken)).thenReturn(response);
+        accessTokenInfo = keyManager.getTokenMetaData(accessToken);
+        Assert.assertFalse(accessTokenInfo.isApplicationToken());
+
+        response.setAut("APPLICATION");
+        Mockito.when(introspectionClient.introspect(accessToken)).thenReturn(response);
+        accessTokenInfo = keyManager.getTokenMetaData(accessToken);
+        Assert.assertTrue(accessTokenInfo.isApplicationToken());
+
+        response.setAut("APPLICATION_USER");
+        Mockito.when(introspectionClient.introspect(accessToken)).thenReturn(response);
+        accessTokenInfo = keyManager.getTokenMetaData(accessToken);
+        Assert.assertFalse(accessTokenInfo.isApplicationToken());
+
+        response.setAut("");
+        Mockito.when(introspectionClient.introspect(accessToken)).thenReturn(response);
+        accessTokenInfo = keyManager.getTokenMetaData(accessToken);
+        Assert.assertFalse(accessTokenInfo.isApplicationToken());
+    }
+
+    @Test
+    public void testGetTokenTypeToSendInRequestUpdateJWTToJWT() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_JWT);
+
+        ClientInfo clientInfo = new ClientInfo();
+        clientInfo.setTokenType(APIConstants.TOKEN_TYPE_JWT);
+
+        Mockito.when(dcrClient.getApplication(java.util.Base64.getUrlEncoder().encodeToString(
+                oauthApplication.getClientId().getBytes(StandardCharsets.UTF_8)))).thenReturn(clientInfo);
+
+        String tokenType = Whitebox.invokeMethod(keyManager, "getTokenTypeToSendInRequest", oauthApplication, true);
+        Assert.assertEquals(APIConstants.TOKEN_TYPE_JWT, tokenType);
+    }
+
+    @Test
+    public void testGetTokenTypeToSendInRequestUpdateJWTToOAuth() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_JWT);
+
+        ClientInfo clientInfo = new ClientInfo();
+        clientInfo.setTokenType(APIConstants.TOKEN_TYPE_OAUTH);
+
+        Mockito.when(dcrClient.getApplication(java.util.Base64.getUrlEncoder().encodeToString(
+                oauthApplication.getClientId().getBytes(StandardCharsets.UTF_8)))).thenReturn(clientInfo);
+
+        String tokenType = Whitebox.invokeMethod(keyManager, "getTokenTypeToSendInRequest",
+                oauthApplication, true);
+        Assert.assertEquals(APIConstants.TOKEN_TYPE_JWT, tokenType);
+    }
+
+    @Test
+    public void testGetTokenTypeToSendInRequestUpdateOAuthToOAuth() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_OAUTH);
+
+        ClientInfo clientInfo = new ClientInfo();
+        clientInfo.setTokenType(APIConstants.TOKEN_TYPE_OAUTH);
+
+        Mockito.when(dcrClient.getApplication(java.util.Base64.getUrlEncoder().encodeToString(
+                oauthApplication.getClientId().getBytes(StandardCharsets.UTF_8)))).thenReturn(clientInfo);
+
+        String tokenType = Whitebox.invokeMethod(keyManager, "getTokenTypeToSendInRequest", oauthApplication, true);
+        Assert.assertEquals(APIConstants.TOKEN_TYPE_OAUTH, tokenType);
+    }
+
+    @Test
+    public void testGetTokenTypeToSendInRequestUpdateCustomType() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_OAUTH);
+
+        String customTokenType = "customTokenType";
+        ClientInfo clientInfo = new ClientInfo();
+        clientInfo.setTokenType(customTokenType);
+
+        Mockito.when(dcrClient.getApplication(java.util.Base64.getUrlEncoder().encodeToString(
+                oauthApplication.getClientId().getBytes(StandardCharsets.UTF_8)))).thenReturn(clientInfo);
+
+        String tokenType = Whitebox.invokeMethod(keyManager, "getTokenTypeToSendInRequest", oauthApplication, true);
+        Assert.assertEquals(customTokenType, tokenType);
+    }
+
+    @Test
+    public void testGetTokenTypeToSendInRequestCreateJWT() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_JWT);
+
+        String tokenType = Whitebox.invokeMethod(keyManager, "getTokenTypeToSendInRequest", oauthApplication, false);
+        Assert.assertEquals(APIConstants.TOKEN_TYPE_JWT, tokenType);
+    }
+
+    @Test
+    public void testGetTokenTypeToSendInRequestCreateDefault() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.DEFAULT_TOKEN_TYPE);
+
+        String tokenType = Whitebox.invokeMethod(keyManager, "getTokenTypeToSendInRequest", oauthApplication, false);
+        Assert.assertEquals(APIConstants.DEFAULT_TOKEN_TYPE, tokenType);
+    }
+
+    @Test
+    public void testApplicationInfoBuildWithNegativeExpiryTimes() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_OAUTH);
+
+        String customTokenType = "customTokenType";
+        ClientInfo clientInfo = new ClientInfo();
+        clientInfo.setTokenType(customTokenType);
+        clientInfo.setRefreshTokenLifeTime(-1L);
+        clientInfo.setUserAccessTokenLifeTime(-1L);
+        clientInfo.setApplicationAccessTokenLifeTime(-1L);
+        clientInfo.setIdTokenLifeTime(-1L);
+
+        Mockito.when(dcrClient.getApplication(java.util.Base64.getUrlEncoder().encodeToString(
+                oauthApplication.getClientId().getBytes(StandardCharsets.UTF_8)))).thenReturn(clientInfo);
+
+        OAuthApplicationInfo appInfo = Whitebox.invokeMethod(keyManager, "buildDTOFromClientInfo",
+                clientInfo, oauthApplication);
+        Map<String, Object> additionalProps;
+        Object additionalPropsObj = appInfo.getParameter(APIConstants.JSON_ADDITIONAL_PROPERTIES);
+        Assert.assertTrue(additionalPropsObj instanceof Map);
+
+        additionalProps = (Map<String, Object>) additionalPropsObj;
+        Assert.assertEquals(Integer.MAX_VALUE - 1L,
+                additionalProps.get(APIConstants.KeyManager.REFRESH_TOKEN_EXPIRY_TIME));
+        Assert.assertEquals(Integer.MAX_VALUE - 1L,
+                additionalProps.get(APIConstants.KeyManager.USER_ACCESS_TOKEN_EXPIRY_TIME));
+        Assert.assertEquals(Integer.MAX_VALUE - 1L,
+                additionalProps.get(APIConstants.KeyManager.APPLICATION_ACCESS_TOKEN_EXPIRY_TIME));
+        Assert.assertEquals(Integer.MAX_VALUE - 1L,
+                additionalProps.get(APIConstants.KeyManager.ID_TOKEN_EXPIRY_TIME));
+    }
+
+    @Test
+    public void testApplicationInfoBuildWithPositiveExpiryTimes() throws Exception {
+        OAuthApplicationInfo oauthApplication = new OAuthApplicationInfo();
+        oauthApplication.setClientId("test");
+        oauthApplication.setTokenType(APIConstants.TOKEN_TYPE_OAUTH);
+
+        String customTokenType = "customTokenType";
+        ClientInfo clientInfo = new ClientInfo();
+        clientInfo.setTokenType(customTokenType);
+        clientInfo.setRefreshTokenLifeTime(100L);
+        clientInfo.setUserAccessTokenLifeTime(100L);
+        clientInfo.setApplicationAccessTokenLifeTime(100L);
+        clientInfo.setIdTokenLifeTime(100L);
+
+        Mockito.when(dcrClient.getApplication(java.util.Base64.getUrlEncoder().encodeToString(
+                oauthApplication.getClientId().getBytes(StandardCharsets.UTF_8)))).thenReturn(clientInfo);
+
+        OAuthApplicationInfo appInfo = Whitebox.invokeMethod(keyManager, "buildDTOFromClientInfo",
+                clientInfo, oauthApplication);
+        Map<String, Object> additionalProps;
+        Object additionalPropsObj = appInfo.getParameter(APIConstants.JSON_ADDITIONAL_PROPERTIES);
+        Assert.assertTrue(additionalPropsObj instanceof Map);
+
+        additionalProps = (Map<String, Object>) additionalPropsObj;
+        Assert.assertEquals(100L,
+                additionalProps.get(APIConstants.KeyManager.REFRESH_TOKEN_EXPIRY_TIME));
+        Assert.assertEquals(100L,
+                additionalProps.get(APIConstants.KeyManager.USER_ACCESS_TOKEN_EXPIRY_TIME));
+        Assert.assertEquals(100L,
+                additionalProps.get(APIConstants.KeyManager.APPLICATION_ACCESS_TOKEN_EXPIRY_TIME));
+        Assert.assertEquals(100L,
+                additionalProps.get(APIConstants.KeyManager.ID_TOKEN_EXPIRY_TIME));
+
+
     }
 
 //

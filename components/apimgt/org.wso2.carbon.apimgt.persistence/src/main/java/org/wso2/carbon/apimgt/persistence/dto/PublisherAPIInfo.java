@@ -20,6 +20,7 @@ package org.wso2.carbon.apimgt.persistence.dto;
 
 import java.util.Date;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A subset of org.wso2.carbon.apimgt.persistence.models.PublisherAPI. Minimal API information required only for
@@ -29,6 +30,7 @@ import java.util.Map;
 public class PublisherAPIInfo {
     private String id;
     private String apiName;
+    private String displayName;
     private String version;
     private String providerName;
     private String context;
@@ -38,10 +40,17 @@ public class PublisherAPIInfo {
     private String createdTime;
     private Date updatedTime;
     private String audience;
+    private Set<String> audiences;
     private Map<String, String> additionalProperties;
     private String description;
     private String gatewayVendor;
     private boolean advertiseOnly;
+    private String updatedBy;
+    private String businessOwner;
+    private String businessOwnerEmail;
+    private String technicalOwner;
+    private String technicalOwnerEmail;
+    private Boolean isMonetizationEnabled;
 
     public String getAudience() {
         return audience;
@@ -49,6 +58,14 @@ public class PublisherAPIInfo {
 
     public void setAudience(String audience) {
         this.audience = audience;
+    }
+
+    public Set<String> getAudiences() {
+        return audiences;
+    }
+
+    public void setAudiences(Set<String> audiences) {
+        this.audiences = audiences;
     }
 
     public String getApiName() {
@@ -123,12 +140,28 @@ public class PublisherAPIInfo {
 
     public void setUpdatedTime(Date updatedTime) { this.updatedTime = updatedTime; }
 
+    public void setUpdatedBy(String updatedBy) {
+        this.updatedBy = updatedBy;
+    }
+
+    public String getUpdatedBy() {
+        return updatedBy;
+    }
+
     public String getDescription() {
         return description;
     }
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     public String getGatewayVendor() {
@@ -147,11 +180,53 @@ public class PublisherAPIInfo {
         this.advertiseOnly = advertiseOnly;
     }
 
+    public String getBusinessOwner() {
+        return businessOwner;
+    }
+
+    public void setBusinessOwner(String businessOwner) {
+        this.businessOwner = businessOwner;
+    }
+
+    public String getBusinessOwnerEmail() {
+        return businessOwnerEmail;
+    }
+
+    public void setBusinessOwnerEmail(String businessOwnerEmail) {
+        this.businessOwnerEmail = businessOwnerEmail;
+    }
+
+    public String getTechnicalOwner() {
+        return technicalOwner;
+    }
+
+    public void setTechnicalOwner(String technicalOwner) {
+        this.technicalOwner = technicalOwner;
+    }
+
+    public String getTechnicalOwnerEmail() {
+        return technicalOwnerEmail;
+    }
+
+    public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+        this.technicalOwnerEmail = technicalOwnerEmail;
+    }
+
+    public Boolean getMonetizationStatus() {
+        return isMonetizationEnabled;
+    }
+
+    public void setMonetizationStatus(Boolean isMonetizationEnabled) {
+        this.isMonetizationEnabled = isMonetizationEnabled;
+    }
+
     @Override
     public String toString() {
         return "PublisherAPIInfo [id=" + id + ", apiName=" + apiName + ", description=" + description + ", version=" +
                 version + ", providerName=" + providerName + ", context=" + context + ", status=" + status + ", type="
-                + type + ", thumbnail=" + thumbnail + ", advertiseOnly=" + advertiseOnly + "]";
+                + type + ", thumbnail=" + thumbnail + ", advertiseOnly=" + advertiseOnly + ", businessOwner=" +
+                businessOwner + ", businessOwnerEmail=" + businessOwnerEmail + ", technicalOwner=" + technicalOwner +
+                ", technicalOwnerEmail=" + technicalOwnerEmail + ", isMonetizationEnabled=" + isMonetizationEnabled +"]";
     }
 
     public Map<String, String> getAdditionalProperties() {

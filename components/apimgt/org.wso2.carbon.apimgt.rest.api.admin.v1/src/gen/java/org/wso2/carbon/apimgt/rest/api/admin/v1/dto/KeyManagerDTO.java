@@ -9,6 +9,7 @@ import java.util.List;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.ClaimMappingEntryDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerCertificatesDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerEndpointDTO;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerPermissionsDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.TokenValidationDTO;
 import javax.validation.constraints.*;
 
@@ -57,7 +58,9 @@ public class KeyManagerDTO   {
     private String scopesClaim = null;
     private List<TokenValidationDTO> tokenValidation = new ArrayList<TokenValidationDTO>();
     private Boolean enabled = null;
+    private Boolean global = null;
     private Object additionalProperties = null;
+    private KeyManagerPermissionsDTO permissions = null;
 
     @XmlType(name="TokenTypeEnum")
     @XmlEnum(String.class)
@@ -91,6 +94,7 @@ return null;
         }
     }
     private TokenTypeEnum tokenType = TokenTypeEnum.DIRECT;
+    private List<String> allowedOrganizations = new ArrayList<String>();
 
   /**
    **/
@@ -630,6 +634,23 @@ return null;
 
   /**
    **/
+  public KeyManagerDTO global(Boolean global) {
+    this.global = global;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "")
+  @JsonProperty("global")
+  public Boolean isGlobal() {
+    return global;
+  }
+  public void setGlobal(Boolean global) {
+    this.global = global;
+  }
+
+  /**
+   **/
   public KeyManagerDTO additionalProperties(Object additionalProperties) {
     this.additionalProperties = additionalProperties;
     return this;
@@ -644,6 +665,24 @@ return null;
   }
   public void setAdditionalProperties(Object additionalProperties) {
     this.additionalProperties = additionalProperties;
+  }
+
+  /**
+   **/
+  public KeyManagerDTO permissions(KeyManagerPermissionsDTO permissions) {
+    this.permissions = permissions;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("permissions")
+  public KeyManagerPermissionsDTO getPermissions() {
+    return permissions;
+  }
+  public void setPermissions(KeyManagerPermissionsDTO permissions) {
+    this.permissions = permissions;
   }
 
   /**
@@ -662,6 +701,23 @@ return null;
   }
   public void setTokenType(TokenTypeEnum tokenType) {
     this.tokenType = tokenType;
+  }
+
+  /**
+   **/
+  public KeyManagerDTO allowedOrganizations(List<String> allowedOrganizations) {
+    this.allowedOrganizations = allowedOrganizations;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("allowedOrganizations")
+  public List<String> getAllowedOrganizations() {
+    return allowedOrganizations;
+  }
+  public void setAllowedOrganizations(List<String> allowedOrganizations) {
+    this.allowedOrganizations = allowedOrganizations;
   }
 
 
@@ -705,13 +761,16 @@ return null;
         Objects.equals(scopesClaim, keyManager.scopesClaim) &&
         Objects.equals(tokenValidation, keyManager.tokenValidation) &&
         Objects.equals(enabled, keyManager.enabled) &&
+        Objects.equals(global, keyManager.global) &&
         Objects.equals(additionalProperties, keyManager.additionalProperties) &&
-        Objects.equals(tokenType, keyManager.tokenType);
+        Objects.equals(permissions, keyManager.permissions) &&
+        Objects.equals(tokenType, keyManager.tokenType) &&
+        Objects.equals(allowedOrganizations, keyManager.allowedOrganizations);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, displayName, type, description, wellKnownEndpoint, introspectionEndpoint, clientRegistrationEndpoint, tokenEndpoint, displayTokenEndpoint, revokeEndpoint, displayRevokeEndpoint, userInfoEndpoint, authorizeEndpoint, endpoints, certificates, issuer, alias, scopeManagementEndpoint, availableGrantTypes, enableTokenGeneration, enableTokenEncryption, enableTokenHashing, enableMapOAuthConsumerApps, enableOAuthAppCreation, enableSelfValidationJWT, claimMapping, consumerKeyClaim, scopesClaim, tokenValidation, enabled, additionalProperties, tokenType);
+    return Objects.hash(id, name, displayName, type, description, wellKnownEndpoint, introspectionEndpoint, clientRegistrationEndpoint, tokenEndpoint, displayTokenEndpoint, revokeEndpoint, displayRevokeEndpoint, userInfoEndpoint, authorizeEndpoint, endpoints, certificates, issuer, alias, scopeManagementEndpoint, availableGrantTypes, enableTokenGeneration, enableTokenEncryption, enableTokenHashing, enableMapOAuthConsumerApps, enableOAuthAppCreation, enableSelfValidationJWT, claimMapping, consumerKeyClaim, scopesClaim, tokenValidation, enabled, global, additionalProperties, permissions, tokenType, allowedOrganizations);
   }
 
   @Override
@@ -750,8 +809,11 @@ return null;
     sb.append("    scopesClaim: ").append(toIndentedString(scopesClaim)).append("\n");
     sb.append("    tokenValidation: ").append(toIndentedString(tokenValidation)).append("\n");
     sb.append("    enabled: ").append(toIndentedString(enabled)).append("\n");
+    sb.append("    global: ").append(toIndentedString(global)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
     sb.append("    tokenType: ").append(toIndentedString(tokenType)).append("\n");
+    sb.append("    allowedOrganizations: ").append(toIndentedString(allowedOrganizations)).append("\n");
     sb.append("}");
     return sb.toString();
   }

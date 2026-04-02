@@ -23,6 +23,9 @@
         <field type="text" required="true">
             <name>Name</name>
         </field>
+        <field type="text">
+            <name>Display Name</name>
+        </field>
         <field type="text" required="true">
             <name>Context</name>
         </field>
@@ -40,6 +43,9 @@
         </field>
         <field type="text">
             <name>Type</name>
+        </field>
+        <field type="text">
+            <name>Originated From</name>
         </field>
         <field type="text">
             <name>testKey</name>
@@ -195,6 +201,9 @@
      </field>
      <field type="text">
             <name>Authorization Header</name>
+     </field>
+     <field type="text">
+            <name>API Key Header</name>
      </field>
      <field type="text">
              <name>API Security</name>

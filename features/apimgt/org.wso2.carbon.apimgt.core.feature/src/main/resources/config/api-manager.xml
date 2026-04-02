@@ -5,7 +5,7 @@
     <DataSourceName>jdbc/WSO2AM_DB</DataSourceName>
 
     <!-- This parameter is used when adding api management capability to other products like GReg, AS, DSS etc.-->
-    <GatewayType>Synapse</GatewayType>
+    <GatewayType>Regular</GatewayType>
 
     <!-- This parameter is used to enable the securevault support when try to publish endpoint secured APIs. Values should be "true" or "false".
     By default secure vault is disabled.-->
@@ -101,6 +101,7 @@
             <Environment type="hybrid" api-console="true">
                 <Name>Default</Name>
                 <DisplayName>Default</DisplayName>
+                <GatewayType>Regular</GatewayType>
                 <Description>This is a hybrid gateway that handles both production and sandbox token traffic.</Description>
                 <!-- Server URL of the API gateway -->
                 <ServerURL>https://localhost:${mgt.transport.https.port}${carbon.context}services/</ServerURL>
@@ -184,6 +185,41 @@
     </Analytics>
 
     <!--
+        Configurations relevant to API Chat AI feature.
+        This enables the API Chat feature which leverages AI for API testing within Developer Portal.
+    -->
+    <APIChat>
+        <!-- Enable API Chat for API Manager -->
+        <Enabled>true</Enabled>
+
+        <AuthToken></AuthToken>
+
+        <Endpoint>http://localhost:9090</Endpoint>
+
+        <Resources>
+            <PrepareResource>/prepare</PrepareResource>
+            <ExecuteResource>/execute</ExecuteResource>
+        </Resources>
+
+    </APIChat>
+
+    <!--
+        Configurations relevant to Design Assistant AI feature.
+        This enables the Design Assistant feature which leverages AI for API designing within Publisher Portal.
+    -->
+    <DesignAssistant>
+        <!-- Enable API Design Assistant for API Manager -->
+        <Enabled>true</Enabled>
+        <AuthToken></AuthToken>
+        <Endpoint>http://localhost:9090</Endpoint>
+        <Resources>
+            <ChatResource>/chat</ChatResource>
+            <GenApiPayloadResource>/generate-api-payload</GenApiPayloadResource>
+        </Resources>
+
+    </DesignAssistant>
+
+    <!--
         API key validator configuration used by API key manager (IS), API store and API gateway.
         API gateway uses it to validate and authenticate users against the provided API keys.
     -->
@@ -263,6 +299,11 @@
         </PersistentNotifier>
     </TokenRevocationNotifiers>
 
+    <TokenValidation>
+        <!-- Enforce validating JWT type header -->
+        <EnforceTypeHeaderValidation>false</EnforceTypeHeaderValidation>
+    </TokenValidation>
+
     <!-- Settings related to managing API access tiers. -->
     <TierManagement>
         <!-- Enable the providers to expose their APIs over the special 'Unlimited' tier which
@@ -326,6 +367,7 @@
              property,it will show two additional permission levels as visible only to all registered users in a particular
              domain or only visible to API doc creator -->
         <!--EnableAPIDocVisibilityLevels>true</EnableAPIDocVisibilityLevels-->
+        <!--EnablePortalConfigurationOnlyMode>false</EnablePortalConfigurationOnlyMode-->
         <!-- Uncomment this to limit the number of APIs in api the API Publisher -->
         <!--APIsPerPage>30</APIsPerPage-->
         <!-- This property need to be enabled to enable the publisher access control support -->
@@ -371,6 +413,23 @@
         <Access-Control-Allow-Credentials>false</Access-Control-Allow-Credentials>
     </CORSConfiguration>
 
+    <!--
+        Configurations relevant to Marketplace Assistant feature.
+        This enables the Marketplace Assistant feature which leverages AI for API searching within Developer Portal.
+    -->
+    <MarketplaceAssistant>
+        <!-- Enable Marketplace Assistant for API Manager -->
+        <Enabled>true</Enabled>
+        <AuthToken></AuthToken>
+        <Endpoint>http://localhost:9090</Endpoint>
+        <Resources>
+            <ChatResource>/chat</ChatResource>
+            <ApiPublishResource>/publish-api</ApiPublishResource>
+            <ApiDeleteResource>/remove-api</ApiDeleteResource>
+            <ApiCountResource>/api-count</ApiCountResource>
+        </Resources>
+    </MarketplaceAssistant>
+
     <!-- This property is there to configure velocity log output into existing Log4j carbon Logger.
          You can enable this and set preferable Logger name. -->
     <!-- VelocityLogger>VELOCITY</VelocityLogger -->
@@ -378,6 +437,10 @@
     <RESTAPI>
         <!--Configure white-listed URIs of REST API. Accessing white-listed URIs does not require credentials (does not require Authorization header). -->
         <AllowedURIs>
+            <AllowedURI>
+                <URI>/internal/gateway/.well-known</URI>
+                <HTTPMethods>GET,HEAD</HTTPMethods>
+            </AllowedURI>
             <AllowedURI>
                 <URI>/api/am/publisher/{version}/swagger.json</URI>
                 <HTTPMethods>GET,HEAD</HTTPMethods>
@@ -493,6 +556,14 @@
             <AllowedURI>
                 <URI>/api/am/store/{version}/api-categories</URI>
                 <HTTPMethods>GET</HTTPMethods>
+            </AllowedURI>
+            <AllowedURI>
+                <URI>/api/am/governance/{version}/swagger.yaml</URI>
+                <HTTPMethods>GET,HEAD</HTTPMethods>
+            </AllowedURI>
+            <AllowedURI>
+                <URI>/api/am/governance/{version}/swagger.json</URI>
+                <HTTPMethods>GET,HEAD</HTTPMethods>
             </AllowedURI>
         </AllowedURIs>
         <ETagSkipList>
@@ -680,7 +751,7 @@
     	<ServerUrl>https://localhost:9445/bpmn</ServerUrl>
     	<ServerUser>${admin.username}</ServerUser>
     	<ServerPassword>${admin.password}</ServerPassword>
-    	<WorkflowCallbackAPI>https://localhost:${mgt.transport.https.port}/api/am/admin/v2/workflows/update-workflow-status</WorkflowCallbackAPI>
+    	<WorkflowCallbackAPI>https://localhost:${mgt.transport.https.port}/api/am/admin/v4/workflows/update-workflow-status</WorkflowCallbackAPI>
         <TokenEndPoint>https://localhost:${https.nio.port}/token</TokenEndPoint>
         <DCREndPoint>https://localhost:${mgt.transport.https.port}/client-registration/v0.17/register</DCREndPoint>
         <DCREndPointUser>${admin.username}</DCREndPointUser>

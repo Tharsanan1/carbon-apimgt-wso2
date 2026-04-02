@@ -30,7 +30,11 @@ public class WorkflowConstants {
 
     public static final String WF_TYPE_AM_APPLICATION_CREATION = "AM_APPLICATION_CREATION";
 
+    public static final String WF_TYPE_AM_APPLICATION_UPDATE = "AM_APPLICATION_UPDATE";
+
     public static final String WF_TYPE_AM_APPLICATION_DELETION = "AM_APPLICATION_DELETION";
+
+    public static final String WF_TYPE_AM_REVISION_DEPLOYMENT = "AM_REVISION_DEPLOYMENT";
     
     public static final String WF_TYPE_AM_API_STATE = "AM_API_STATE";
 
@@ -53,8 +57,11 @@ public class WorkflowConstants {
 
     public static final String PASSWORD_ = "password";
 
+    public static final String API_REVISION_DEPLOYMENT = "APIRevisionDeployment";
+
     public static final String APPLICATION_CREATION = "ApplicationCreation";
 
+    public static final String APPLICATION_UPDATE = "ApplicationUpdate";
     public static final String PRODUCTION_APPLICATION_REGISTRATION = "ProductionApplicationRegistration";
 
     public static final String SANDBOX_APPLICATION_REGISTRATION = "SandboxApplicationRegistration";
@@ -114,6 +121,7 @@ public class WorkflowConstants {
     
     public static final String WORKFLOW_OAUTH_APP_NAME = "workflow_app";
     public static final String WORKFLOW_OAUTH_APP_GRANT_TYPES = "client_credentials password refresh_token";
+    public static final String ENVIRONMENT = "environment";
     
     public static class PayloadConstants {
         public static final String PROCESS_DEF_KEY = "processDefinitionKey";

@@ -36,6 +36,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Set;
@@ -81,15 +82,17 @@ public class OAuthClient {
             // Set authorization header
             httpPost.setHeader(APIConstants.OAuthConstants.AUTHORIZATION_HEADER, "Basic " + credentials);
             httpPost.setHeader(APIConstants.HEADER_CONTENT_TYPE, APIConstants.OAuthConstants.APPLICATION_X_WWW_FORM_URLENCODED);
-            if (refreshToken != null) {
+            if (APIConstants.OAuthConstants.CLIENT_CREDENTIALS.equals(grantType)) {
+                // As per the RFC 6749, a refresh token should not be included in token response for client credentials grant type.
+                refreshToken = null;
+                payload.append(APIConstants.OAuthConstants.CLIENT_CRED_GRANT_TYPE);
+            } else if (refreshToken != null) {
                 payload.append(APIConstants.OAuthConstants.REFRESH_TOKEN_GRANT_TYPE)
                         .append("&refresh_token=").append(refreshToken);
-            } else if (APIConstants.OAuthConstants.CLIENT_CREDENTIALS.equals(grantType)) {
-                payload.append(APIConstants.OAuthConstants.CLIENT_CRED_GRANT_TYPE);
             } else if (APIConstants.OAuthConstants.PASSWORD.equals(grantType)) {
                 payload.append(APIConstants.OAuthConstants.PASSWORD_GRANT_TYPE + "&username=")
-                        .append(username).append("&password=")
-                        .append(String.valueOf(password));
+                        .append(URLEncoder.encode(username, APIConstants.DigestAuthConstants.CHARSET)).append("&password=")
+                        .append(URLEncoder.encode(String.valueOf(password), APIConstants.DigestAuthConstants.CHARSET));
             }
 
             payload = appendCustomParameters(customParameters, payload);
@@ -97,7 +100,13 @@ public class OAuthClient {
             httpPost.setEntity(new StringEntity(payload.toString()));
 
             try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
-                return getTokenResponse(response);
+                if (refreshToken != null && response.getStatusLine().getStatusCode() == HttpStatus.SC_BAD_REQUEST) {
+                    // If refresh token expired generate token with Password grant
+                    return generateToken(url,clientId,clientSecret,username,password,"PASSWORD",
+                            customParameters,null);
+                } else {
+                    return getTokenResponse(response);
+                }
             } finally {
                 httpPost.releaseConnection();
             }
@@ -135,13 +144,15 @@ public class OAuthClient {
             throw new APIManagementException("Error while accessing the Token URL. "
                     + "Found http status " + response.getStatusLine());
         }
-        BufferedReader reader = new BufferedReader(new InputStreamReader(response
-                .getEntity().getContent(), StandardCharsets.UTF_8));
-        String inputLine;
+
         StringBuilder stringBuilder = new StringBuilder();
 
-        while ((inputLine = reader.readLine()) != null) {
-            stringBuilder.append(inputLine);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(response
+                .getEntity().getContent(), StandardCharsets.UTF_8))) {
+            String inputLine;
+            while ((inputLine = reader.readLine()) != null) {
+                stringBuilder.append(inputLine);
+            }
         }
 
         JSONParser parser = new JSONParser();
@@ -152,8 +163,13 @@ public class OAuthClient {
             if (jsonResponse.containsKey("refresh_token")) {
                 tokenResponse.setRefreshToken((String) jsonResponse.get("refresh_token"));
             }
-            if (jsonResponse.containsKey("scope")) {
-                Set<String> scopeSet = Stream.of(jsonResponse.get("scope").toString().trim()
+            Object scopes = jsonResponse.get("scope");
+            /* The scopes object will be null in the following scenarios
+                1. The scope key is not present in the jsonResponse object
+                2. The value of the scope key is null (Example: "scope": null)
+            */
+            if (scopes != null) {
+                Set<String> scopeSet = Stream.of(scopes.toString().trim()
                         .split("\\s*,\\s*")).collect(Collectors.toSet());
                 tokenResponse.setScope(scopeSet);
             }

@@ -18,15 +18,21 @@
 package org.wso2.carbon.apimgt.impl.dto;
 
 import org.apache.commons.lang3.StringUtils;
+import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.jwt.JWTValidator;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class OrganizationKeyManagerDto {
 
-    private Map<String, KeyManagerDto> keyManagerMap = new HashMap<>();
-    private Map<String, String> issuerNameMap = new HashMap<>();
+    private Map<String, KeyManagerDto> keyManagerMap = new LinkedHashMap<>();
+    private Map<String, Set<String>> issuerNameMap = new HashMap<>();
 
     public Map<String, KeyManagerDto> getKeyManagerMap() {
 
@@ -38,25 +44,40 @@ public class OrganizationKeyManagerDto {
         return keyManagerMap.get(name);
     }
 
-    public void putKeyManagerDto(KeyManagerDto keyManagerDto) {
+    public void putKeyManagerDto(KeyManagerDto keyManagerDto, String type) {
 
-        keyManagerMap.put(keyManagerDto.getName(), keyManagerDto);
-        issuerNameMap.put(keyManagerDto.getIssuer(), keyManagerDto.getName());
+        if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerDto.getName()) && (
+                APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(type)
+                        || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(type))) {
+            Map<String, KeyManagerDto> newKeyManagerMap = new LinkedHashMap<>();
+            newKeyManagerMap.put(keyManagerDto.getName(), keyManagerDto);
+            keyManagerMap.remove(keyManagerDto.getName());
+            newKeyManagerMap.putAll(keyManagerMap);
+            keyManagerMap = newKeyManagerMap;
+        } else {
+            keyManagerMap.put(keyManagerDto.getName(), keyManagerDto);
+        }
+        issuerNameMap.computeIfAbsent(keyManagerDto.getIssuer(), k -> new HashSet<>()).add(keyManagerDto.getName());
+        
     }
 
     public void removeKeyManagerDtoByName(String name) {
 
         KeyManagerDto keyManagerDto = keyManagerMap.get(name);
         if (keyManagerDto != null) {
-            issuerNameMap.remove(keyManagerDto.getIssuer());
+            issuerNameMap.get(keyManagerDto.getIssuer()).remove(name);
+            if (issuerNameMap.get(keyManagerDto.getIssuer()).isEmpty()) {
+                issuerNameMap.remove(keyManagerDto.getIssuer());
+            }
         }
         keyManagerMap.remove(name);
     }
 
     public JWTValidator getJWTValidatorByIssuer(String issuer) {
 
-        String keyManagerName = issuerNameMap.get(issuer);
-        if (StringUtils.isNotEmpty(keyManagerName)) {
+        Set<String> keyManagerNames = issuerNameMap.get(issuer);
+        if (keyManagerNames != null && !keyManagerNames.isEmpty()) {
+            String keyManagerName = keyManagerNames.iterator().next();
             KeyManagerDto keyManagerDto = keyManagerMap.get(keyManagerName);
             if (keyManagerDto != null) {
                 return keyManagerDto.getJwtValidator();
@@ -65,11 +86,15 @@ public class OrganizationKeyManagerDto {
         return null;
     }
 
-    public KeyManagerDto getKeyManagerDtoByIssuer(String issuer) {
+    public List<KeyManagerDto> getKeyManagerDtoByIssuer(String issuer) {
 
-        String keyManagerName = issuerNameMap.get(issuer);
-        if (StringUtils.isNotEmpty(keyManagerName)) {
-            return keyManagerMap.get(keyManagerName);
+        List<KeyManagerDto> dtoList = new ArrayList<KeyManagerDto>();
+        Set<String> keyManagerNames = issuerNameMap.get(issuer);
+        if (keyManagerNames != null && !keyManagerNames.isEmpty()) {
+            for (String keyManagerName : keyManagerNames) {
+                dtoList.add(keyManagerMap.get(keyManagerName));
+            }
+            return dtoList;
         }
         return null;
     }

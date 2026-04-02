@@ -18,12 +18,15 @@
 
 package org.wso2.carbon.apimgt.keymgt.model.entity;
 
+import org.wso2.carbon.apimgt.api.model.OperationPolicy;
+import org.wso2.carbon.apimgt.api.model.VHost;
 import org.wso2.carbon.apimgt.api.model.subscription.CacheableEntity;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 
 /**
  * Entity for keeping API related information.
@@ -35,10 +38,22 @@ public class API implements CacheableEntity<String> {
     private String name = null;
     private String version = null;
     private String context = null;
+    private String contextTemplate = null;
     private String policy = null;
     private String apiType = null;
     private String status;
+    private String organization;
+    private boolean deployed = false;
     private boolean isDefaultVersion = false;
+    private String securityScheme;
+    private String revisionId;
+    private Map<String, String> apiProperties = new HashMap<>();
+    private List<OperationPolicy> apiPolicies = new ArrayList<>();
+    private boolean isSubscriptionValidationDisabled = false;
+    private Boolean isEgress = null;
+    private String subtype = null;
+    private List<VHost> vhosts = new ArrayList<>();
+    private String lastUpdatedEventId = null;
 
     public API() {
     }
@@ -69,7 +84,34 @@ public class API implements CacheableEntity<String> {
         this.status = status;
         this.isDefaultVersion = isDefaultVersion;
     }
-
+    /**
+     *
+     * @param uuid
+     * @param apiId
+     * @param provider
+     * @param name
+     * @param version
+     * @param context
+     * @param policy
+     * @param apiType
+     * @param status
+     * @param isDefaultVersion
+     * @param isDeployed
+     */
+    public API(String uuid, Integer apiId, String provider, String name, String version, String context,
+               String policy, String apiType, String status, boolean isDefaultVersion,boolean isDeployed) {
+        this.uuid = uuid;
+        this.apiId = apiId;
+        this.provider = provider;
+        this.name = name;
+        this.version = version;
+        this.context = context;
+        this.policy = policy;
+        this.apiType = apiType;
+        this.status = status;
+        this.isDefaultVersion = isDefaultVersion;
+        this.deployed = isDeployed;
+    }
     private List<URLMapping> urlMappings = new ArrayList<>();
 
 
@@ -95,6 +137,16 @@ public class API implements CacheableEntity<String> {
     public void setContext(String context) {
 
         this.context = context;
+    }
+
+    public String getContextTemplate() {
+
+        return contextTemplate;
+    }
+
+    public void setContextTemplate(String contextTemplate) {
+
+        this.contextTemplate = contextTemplate;
     }
 
     public String getApiTier() {
@@ -172,11 +224,15 @@ public class API implements CacheableEntity<String> {
                 ", name='" + name + '\'' +
                 ", version='" + version + '\'' +
                 ", context='" + context + '\'' +
+                ", contextTemplate='" + contextTemplate + '\'' +
                 ", policy='" + policy + '\'' +
                 ", apiType='" + apiType + '\'' +
                 ", status='" + status + '\'' +
+                ", securityScheme='" + securityScheme + '\'' +
+                ", isSubscriptionValidationDisabled='" + isSubscriptionValidationDisabled + '\'' +
                 ", isDefaultVersion=" + isDefaultVersion +
                 ", urlMappings=" + urlMappings +
+                ", apiPolicies=" + apiPolicies +
                 '}';
     }
 
@@ -206,5 +262,139 @@ public class API implements CacheableEntity<String> {
     public void setStatus(String status) {
 
         this.status = status;
+    }
+
+    public void setApiId(Integer apiId) {
+        this.apiId = apiId;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public String getPolicy() {
+        return policy;
+    }
+
+    public void setPolicy(String policy) {
+        this.policy = policy;
+    }
+
+    public String getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(String organization) {
+        this.organization = organization;
+    }
+
+    public List<URLMapping> getUrlMappings() {
+        return urlMappings;
+    }
+
+    public void setUrlMappings(List<URLMapping> urlMappings) {
+        this.urlMappings = urlMappings;
+    }
+
+    public boolean isDeployed() {
+        return deployed;
+    }
+
+    public void setDeployed(boolean deployed) {
+        this.deployed = deployed;
+    }
+
+    public String getRevisionId() {
+        return revisionId;
+    }
+
+    public void setRevisionId(String revisionId) {
+        this.revisionId = revisionId;
+    }
+
+    public String getSecurityScheme() {
+        return securityScheme;
+    }
+
+    public void setSecurityScheme(String securityScheme) {
+        this.securityScheme = securityScheme;
+    }
+    
+    public void setApiPolicies(List<OperationPolicy> apiPolicies) {
+        this.apiPolicies = apiPolicies;
+    }
+
+    public List<OperationPolicy> getApiPolicies() {
+        return apiPolicies;
+    }
+
+    public boolean isSubscriptionValidationDisabled() {
+        return isSubscriptionValidationDisabled;
+    }
+
+    public void setSubscriptionValidationDisabled(boolean subscriptionValidationDisabled) {
+        isSubscriptionValidationDisabled = subscriptionValidationDisabled;
+    }
+
+    public Boolean getEgress() {
+        return isEgress;
+    }
+
+    public void setEgress(Boolean egress) {
+        isEgress = egress;
+    }
+
+    public String getSubtype() {
+        return subtype;
+    }
+
+    public void setSubtype(String subtype) {
+        this.subtype = subtype;
+    }
+
+    public Map<String, String> getApiProperties() {
+        return apiProperties;
+    }
+
+    public void setApiProperties(Map<String, String> apiProperties) {
+        this.apiProperties = apiProperties;
+    }
+
+    public List<VHost> getVhosts() {
+        return vhosts;
+    }
+
+    public void setVhosts(List<VHost> vhosts) {
+        if (vhosts != null) {
+            this.vhosts = vhosts;
+        }
+    }
+
+    public String getLastUpdatedEventId() {
+        return lastUpdatedEventId;
+    }
+
+    public void setLastUpdatedEventId(String lastUpdatedEventId) {
+        this.lastUpdatedEventId = lastUpdatedEventId;
     }
 }

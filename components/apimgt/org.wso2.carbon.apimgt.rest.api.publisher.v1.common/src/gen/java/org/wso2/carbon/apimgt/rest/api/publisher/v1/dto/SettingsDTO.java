@@ -7,7 +7,9 @@ import io.swagger.annotations.ApiModelProperty;
 import java.util.ArrayList;
 import java.util.List;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.EnvironmentDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.GatewayFeatureCatalogDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MonetizationAttributeDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.SettingsCustomPropertiesDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.SubscriberContactAttributeDTO;
 import javax.validation.constraints.*;
 
@@ -27,14 +29,28 @@ public class SettingsDTO   {
   
     private String devportalUrl = null;
     private List<EnvironmentDTO> environment = new ArrayList<EnvironmentDTO>();
+    private List<String> gatewayTypes = new ArrayList<String>();
+    private GatewayFeatureCatalogDTO gatewayFeatureCatalog = null;
     private List<String> scopes = new ArrayList<String>();
     private List<MonetizationAttributeDTO> monetizationAttributes = new ArrayList<MonetizationAttributeDTO>();
     private List<SubscriberContactAttributeDTO> subscriberContactAttributes = new ArrayList<SubscriberContactAttributeDTO>();
     private Object securityAuditProperties = null;
     private Boolean externalStoresEnabled = null;
     private Boolean docVisibilityEnabled = null;
+    private Boolean portalConfigurationOnlyModeEnabled = false;
+    private Boolean retryCallWithNewOAuthTokenEnabled = true;
     private Boolean crossTenantSubscriptionEnabled = false;
+    private String defaultAdvancePolicy = null;
+    private String defaultSubscriptionPolicy = null;
     private String authorizationHeader = null;
+    private Boolean isJWTEnabledForLoginTokens = false;
+    private Boolean orgAccessControlEnabled = null;
+    private Boolean allowSubscriptionValidationDisabling = true;
+    private Boolean designAssistantEnabled = true;
+    private Boolean aiAuthTokenProvided = false;
+    private Boolean isGatewayNotificationEnabled = false;
+    private Boolean isMCPSupportEnabled = true;
+    private List<SettingsCustomPropertiesDTO> customProperties = new ArrayList<SettingsCustomPropertiesDTO>();
 
   /**
    * The Developer Portal URL
@@ -70,6 +86,41 @@ public class SettingsDTO   {
   }
   public void setEnvironment(List<EnvironmentDTO> environment) {
     this.environment = environment;
+  }
+
+  /**
+   **/
+  public SettingsDTO gatewayTypes(List<String> gatewayTypes) {
+    this.gatewayTypes = gatewayTypes;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "[\"Regular\",\"APK\",\"AWS\"]", value = "")
+  @JsonProperty("gatewayTypes")
+  public List<String> getGatewayTypes() {
+    return gatewayTypes;
+  }
+  public void setGatewayTypes(List<String> gatewayTypes) {
+    this.gatewayTypes = gatewayTypes;
+  }
+
+  /**
+   **/
+  public SettingsDTO gatewayFeatureCatalog(GatewayFeatureCatalogDTO gatewayFeatureCatalog) {
+    this.gatewayFeatureCatalog = gatewayFeatureCatalog;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("GatewayFeatureCatalog")
+  public GatewayFeatureCatalogDTO getGatewayFeatureCatalog() {
+    return gatewayFeatureCatalog;
+  }
+  public void setGatewayFeatureCatalog(GatewayFeatureCatalogDTO gatewayFeatureCatalog) {
+    this.gatewayFeatureCatalog = gatewayFeatureCatalog;
   }
 
   /**
@@ -180,6 +231,42 @@ public class SettingsDTO   {
   }
 
   /**
+   * Is Portal Configuration Only Mode enabled 
+   **/
+  public SettingsDTO portalConfigurationOnlyModeEnabled(Boolean portalConfigurationOnlyModeEnabled) {
+    this.portalConfigurationOnlyModeEnabled = portalConfigurationOnlyModeEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "Is Portal Configuration Only Mode enabled ")
+  @JsonProperty("portalConfigurationOnlyModeEnabled")
+  public Boolean isPortalConfigurationOnlyModeEnabled() {
+    return portalConfigurationOnlyModeEnabled;
+  }
+  public void setPortalConfigurationOnlyModeEnabled(Boolean portalConfigurationOnlyModeEnabled) {
+    this.portalConfigurationOnlyModeEnabled = portalConfigurationOnlyModeEnabled;
+  }
+
+  /**
+   * Is Retry Call With New OAuth Token Enabled 
+   **/
+  public SettingsDTO retryCallWithNewOAuthTokenEnabled(Boolean retryCallWithNewOAuthTokenEnabled) {
+    this.retryCallWithNewOAuthTokenEnabled = retryCallWithNewOAuthTokenEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Is Retry Call With New OAuth Token Enabled ")
+  @JsonProperty("retryCallWithNewOAuthTokenEnabled")
+  public Boolean isRetryCallWithNewOAuthTokenEnabled() {
+    return retryCallWithNewOAuthTokenEnabled;
+  }
+  public void setRetryCallWithNewOAuthTokenEnabled(Boolean retryCallWithNewOAuthTokenEnabled) {
+    this.retryCallWithNewOAuthTokenEnabled = retryCallWithNewOAuthTokenEnabled;
+  }
+
+  /**
    * Is Cross Tenant Subscriptions Enabled 
    **/
   public SettingsDTO crossTenantSubscriptionEnabled(Boolean crossTenantSubscriptionEnabled) {
@@ -195,6 +282,42 @@ public class SettingsDTO   {
   }
   public void setCrossTenantSubscriptionEnabled(Boolean crossTenantSubscriptionEnabled) {
     this.crossTenantSubscriptionEnabled = crossTenantSubscriptionEnabled;
+  }
+
+  /**
+   * Default Advance Policy.
+   **/
+  public SettingsDTO defaultAdvancePolicy(String defaultAdvancePolicy) {
+    this.defaultAdvancePolicy = defaultAdvancePolicy;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Default Advance Policy.")
+  @JsonProperty("defaultAdvancePolicy")
+  public String getDefaultAdvancePolicy() {
+    return defaultAdvancePolicy;
+  }
+  public void setDefaultAdvancePolicy(String defaultAdvancePolicy) {
+    this.defaultAdvancePolicy = defaultAdvancePolicy;
+  }
+
+  /**
+   * Default Subscription Policy.
+   **/
+  public SettingsDTO defaultSubscriptionPolicy(String defaultSubscriptionPolicy) {
+    this.defaultSubscriptionPolicy = defaultSubscriptionPolicy;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Default Subscription Policy.")
+  @JsonProperty("defaultSubscriptionPolicy")
+  public String getDefaultSubscriptionPolicy() {
+    return defaultSubscriptionPolicy;
+  }
+  public void setDefaultSubscriptionPolicy(String defaultSubscriptionPolicy) {
+    this.defaultSubscriptionPolicy = defaultSubscriptionPolicy;
   }
 
   /**
@@ -215,6 +338,149 @@ public class SettingsDTO   {
     this.authorizationHeader = authorizationHeader;
   }
 
+  /**
+   **/
+  public SettingsDTO isJWTEnabledForLoginTokens(Boolean isJWTEnabledForLoginTokens) {
+    this.isJWTEnabledForLoginTokens = isJWTEnabledForLoginTokens;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("IsJWTEnabledForLoginTokens")
+  public Boolean isIsJWTEnabledForLoginTokens() {
+    return isJWTEnabledForLoginTokens;
+  }
+  public void setIsJWTEnabledForLoginTokens(Boolean isJWTEnabledForLoginTokens) {
+    this.isJWTEnabledForLoginTokens = isJWTEnabledForLoginTokens;
+  }
+
+  /**
+   * Is Organization-based access control configuration enabled 
+   **/
+  public SettingsDTO orgAccessControlEnabled(Boolean orgAccessControlEnabled) {
+    this.orgAccessControlEnabled = orgAccessControlEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Is Organization-based access control configuration enabled ")
+  @JsonProperty("orgAccessControlEnabled")
+  public Boolean isOrgAccessControlEnabled() {
+    return orgAccessControlEnabled;
+  }
+  public void setOrgAccessControlEnabled(Boolean orgAccessControlEnabled) {
+    this.orgAccessControlEnabled = orgAccessControlEnabled;
+  }
+
+  /**
+   * Allow subscription validation disabling for OAuth tokens 
+   **/
+  public SettingsDTO allowSubscriptionValidationDisabling(Boolean allowSubscriptionValidationDisabling) {
+    this.allowSubscriptionValidationDisabling = allowSubscriptionValidationDisabling;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Allow subscription validation disabling for OAuth tokens ")
+  @JsonProperty("allowSubscriptionValidationDisabling")
+  public Boolean isAllowSubscriptionValidationDisabling() {
+    return allowSubscriptionValidationDisabling;
+  }
+  public void setAllowSubscriptionValidationDisabling(Boolean allowSubscriptionValidationDisabling) {
+    this.allowSubscriptionValidationDisabling = allowSubscriptionValidationDisabling;
+  }
+
+  /**
+   * Specifies whether Design Assistant enabled 
+   **/
+  public SettingsDTO designAssistantEnabled(Boolean designAssistantEnabled) {
+    this.designAssistantEnabled = designAssistantEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Specifies whether Design Assistant enabled ")
+  @JsonProperty("designAssistantEnabled")
+  public Boolean isDesignAssistantEnabled() {
+    return designAssistantEnabled;
+  }
+  public void setDesignAssistantEnabled(Boolean designAssistantEnabled) {
+    this.designAssistantEnabled = designAssistantEnabled;
+  }
+
+  /**
+   * Checks if the auth token is provided for AI service usage.
+   **/
+  public SettingsDTO aiAuthTokenProvided(Boolean aiAuthTokenProvided) {
+    this.aiAuthTokenProvided = aiAuthTokenProvided;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Checks if the auth token is provided for AI service usage.")
+  @JsonProperty("aiAuthTokenProvided")
+  public Boolean isAiAuthTokenProvided() {
+    return aiAuthTokenProvided;
+  }
+  public void setAiAuthTokenProvided(Boolean aiAuthTokenProvided) {
+    this.aiAuthTokenProvided = aiAuthTokenProvided;
+  }
+
+  /**
+   * Is Gateway Notification Enabled
+   **/
+  public SettingsDTO isGatewayNotificationEnabled(Boolean isGatewayNotificationEnabled) {
+    this.isGatewayNotificationEnabled = isGatewayNotificationEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Is Gateway Notification Enabled")
+  @JsonProperty("isGatewayNotificationEnabled")
+  public Boolean isIsGatewayNotificationEnabled() {
+    return isGatewayNotificationEnabled;
+  }
+  public void setIsGatewayNotificationEnabled(Boolean isGatewayNotificationEnabled) {
+    this.isGatewayNotificationEnabled = isGatewayNotificationEnabled;
+  }
+
+  /**
+   * This indicates whether the MCP support is enabled or not.
+   **/
+  public SettingsDTO isMCPSupportEnabled(Boolean isMCPSupportEnabled) {
+    this.isMCPSupportEnabled = isMCPSupportEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "This indicates whether the MCP support is enabled or not.")
+  @JsonProperty("isMCPSupportEnabled")
+  public Boolean isIsMCPSupportEnabled() {
+    return isMCPSupportEnabled;
+  }
+  public void setIsMCPSupportEnabled(Boolean isMCPSupportEnabled) {
+    this.isMCPSupportEnabled = isMCPSupportEnabled;
+  }
+
+  /**
+   **/
+  public SettingsDTO customProperties(List<SettingsCustomPropertiesDTO> customProperties) {
+    this.customProperties = customProperties;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("customProperties")
+  public List<SettingsCustomPropertiesDTO> getCustomProperties() {
+    return customProperties;
+  }
+  public void setCustomProperties(List<SettingsCustomPropertiesDTO> customProperties) {
+    this.customProperties = customProperties;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -227,19 +493,33 @@ public class SettingsDTO   {
     SettingsDTO settings = (SettingsDTO) o;
     return Objects.equals(devportalUrl, settings.devportalUrl) &&
         Objects.equals(environment, settings.environment) &&
+        Objects.equals(gatewayTypes, settings.gatewayTypes) &&
+        Objects.equals(gatewayFeatureCatalog, settings.gatewayFeatureCatalog) &&
         Objects.equals(scopes, settings.scopes) &&
         Objects.equals(monetizationAttributes, settings.monetizationAttributes) &&
         Objects.equals(subscriberContactAttributes, settings.subscriberContactAttributes) &&
         Objects.equals(securityAuditProperties, settings.securityAuditProperties) &&
         Objects.equals(externalStoresEnabled, settings.externalStoresEnabled) &&
         Objects.equals(docVisibilityEnabled, settings.docVisibilityEnabled) &&
+        Objects.equals(portalConfigurationOnlyModeEnabled, settings.portalConfigurationOnlyModeEnabled) &&
+        Objects.equals(retryCallWithNewOAuthTokenEnabled, settings.retryCallWithNewOAuthTokenEnabled) &&
         Objects.equals(crossTenantSubscriptionEnabled, settings.crossTenantSubscriptionEnabled) &&
-        Objects.equals(authorizationHeader, settings.authorizationHeader);
+        Objects.equals(defaultAdvancePolicy, settings.defaultAdvancePolicy) &&
+        Objects.equals(defaultSubscriptionPolicy, settings.defaultSubscriptionPolicy) &&
+        Objects.equals(authorizationHeader, settings.authorizationHeader) &&
+        Objects.equals(isJWTEnabledForLoginTokens, settings.isJWTEnabledForLoginTokens) &&
+        Objects.equals(orgAccessControlEnabled, settings.orgAccessControlEnabled) &&
+        Objects.equals(allowSubscriptionValidationDisabling, settings.allowSubscriptionValidationDisabling) &&
+        Objects.equals(designAssistantEnabled, settings.designAssistantEnabled) &&
+        Objects.equals(aiAuthTokenProvided, settings.aiAuthTokenProvided) &&
+        Objects.equals(isGatewayNotificationEnabled, settings.isGatewayNotificationEnabled) &&
+        Objects.equals(isMCPSupportEnabled, settings.isMCPSupportEnabled) &&
+        Objects.equals(customProperties, settings.customProperties);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(devportalUrl, environment, scopes, monetizationAttributes, subscriberContactAttributes, securityAuditProperties, externalStoresEnabled, docVisibilityEnabled, crossTenantSubscriptionEnabled, authorizationHeader);
+    return Objects.hash(devportalUrl, environment, gatewayTypes, gatewayFeatureCatalog, scopes, monetizationAttributes, subscriberContactAttributes, securityAuditProperties, externalStoresEnabled, docVisibilityEnabled, portalConfigurationOnlyModeEnabled, retryCallWithNewOAuthTokenEnabled, crossTenantSubscriptionEnabled, defaultAdvancePolicy, defaultSubscriptionPolicy, authorizationHeader, isJWTEnabledForLoginTokens, orgAccessControlEnabled, allowSubscriptionValidationDisabling, designAssistantEnabled, aiAuthTokenProvided, isGatewayNotificationEnabled, isMCPSupportEnabled, customProperties);
   }
 
   @Override
@@ -249,14 +529,28 @@ public class SettingsDTO   {
     
     sb.append("    devportalUrl: ").append(toIndentedString(devportalUrl)).append("\n");
     sb.append("    environment: ").append(toIndentedString(environment)).append("\n");
+    sb.append("    gatewayTypes: ").append(toIndentedString(gatewayTypes)).append("\n");
+    sb.append("    gatewayFeatureCatalog: ").append(toIndentedString(gatewayFeatureCatalog)).append("\n");
     sb.append("    scopes: ").append(toIndentedString(scopes)).append("\n");
     sb.append("    monetizationAttributes: ").append(toIndentedString(monetizationAttributes)).append("\n");
     sb.append("    subscriberContactAttributes: ").append(toIndentedString(subscriberContactAttributes)).append("\n");
     sb.append("    securityAuditProperties: ").append(toIndentedString(securityAuditProperties)).append("\n");
     sb.append("    externalStoresEnabled: ").append(toIndentedString(externalStoresEnabled)).append("\n");
     sb.append("    docVisibilityEnabled: ").append(toIndentedString(docVisibilityEnabled)).append("\n");
+    sb.append("    portalConfigurationOnlyModeEnabled: ").append(toIndentedString(portalConfigurationOnlyModeEnabled)).append("\n");
+    sb.append("    retryCallWithNewOAuthTokenEnabled: ").append(toIndentedString(retryCallWithNewOAuthTokenEnabled)).append("\n");
     sb.append("    crossTenantSubscriptionEnabled: ").append(toIndentedString(crossTenantSubscriptionEnabled)).append("\n");
+    sb.append("    defaultAdvancePolicy: ").append(toIndentedString(defaultAdvancePolicy)).append("\n");
+    sb.append("    defaultSubscriptionPolicy: ").append(toIndentedString(defaultSubscriptionPolicy)).append("\n");
     sb.append("    authorizationHeader: ").append(toIndentedString(authorizationHeader)).append("\n");
+    sb.append("    isJWTEnabledForLoginTokens: ").append(toIndentedString(isJWTEnabledForLoginTokens)).append("\n");
+    sb.append("    orgAccessControlEnabled: ").append(toIndentedString(orgAccessControlEnabled)).append("\n");
+    sb.append("    allowSubscriptionValidationDisabling: ").append(toIndentedString(allowSubscriptionValidationDisabling)).append("\n");
+    sb.append("    designAssistantEnabled: ").append(toIndentedString(designAssistantEnabled)).append("\n");
+    sb.append("    aiAuthTokenProvided: ").append(toIndentedString(aiAuthTokenProvided)).append("\n");
+    sb.append("    isGatewayNotificationEnabled: ").append(toIndentedString(isGatewayNotificationEnabled)).append("\n");
+    sb.append("    isMCPSupportEnabled: ").append(toIndentedString(isMCPSupportEnabled)).append("\n");
+    sb.append("    customProperties: ").append(toIndentedString(customProperties)).append("\n");
     sb.append("}");
     return sb.toString();
   }

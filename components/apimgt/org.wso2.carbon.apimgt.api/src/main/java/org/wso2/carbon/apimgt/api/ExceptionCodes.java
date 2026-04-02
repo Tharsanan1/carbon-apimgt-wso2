@@ -34,7 +34,9 @@ public enum ExceptionCodes implements ErrorHandler {
     API_VERSION_ALREADY_EXISTS(900252, "The API version already exists.", 409, "An API with version '%s' already exists for API '%s'"),
 
     API_PRODUCT_CONTEXT_ALREADY_EXISTS(900275, "The API Product context already exists.", 409, "An API Product with context '%s' already exists"),
+    API_PRODUCT_VERSION_ALREADY_EXISTS(900276, "The API Product version already exists.", 409, "An API Product with version '%s' already exists for API Product '%s'"),
 
+    API_CONTEXT_MALFORMED_EXCEPTION(900253, "The API context is malformed.", 400, "'%s'"),
     API_ALREADY_EXISTS(900300, "The API already exists.", 409, "The API already exists"),
     APPLICATION_ALREADY_EXISTS(900301, "The application already exists.", 409, "The application already exists"),
     APIMGT_DAO_EXCEPTION(900302, "Internal server error.", 500, "Error occurred while persisting/retrieving data"),
@@ -45,7 +47,8 @@ public enum ExceptionCodes implements ErrorHandler {
     APPLICATION_NOT_FOUND(900307, "Application not found", 404, "Application not found"),
     API_NOT_FOUND(900308, "API Not Found", 404, "Requested API with id '%s' not found"),
     APPLICATION_INACTIVE(900309, "Application is not active", 400, "Application is not active"),
-    SUBSCRIPTION_NOT_FOUND(900310, "Subscription not found", 404, "Couldn't retrieve Subscriptions for API"),
+    SUBSCRIPTION_NOT_FOUND(900310, "Subscription not found", 404,
+            "The requested subscription with ID '%s' was not found."),
     UPDATE_STATE_CHANGE(900311, "API fields have state changes", 400, "Couldn't Update as API have changes can't be done"),
     DOCUMENT_ALREADY_EXISTS(900312, "Document already exists", 409, "Document already exists"),
     COULD_NOT_UPDATE_API(900313, "Error has occurred. Could not update the API", 500, "Error has occurred. Could not "
@@ -90,13 +93,20 @@ public enum ExceptionCodes implements ErrorHandler {
     API_PRODUCT_USED_RESOURCES(900344,
             "Cannot remove the resource paths because they are used by one or more API Products",
             409, "Cannot update API: %s:%s, due to the resources to remove are used by one or more API Products"),
+    API_PRODUCT_USED_RESOURCES_DURING_RESTORE(900364,
+            "Cannot remove the resource paths because they are used by one or more API Products",
+            400, "Cannot restore API %s:%s, as some resources used by one or more API Products will be removed"),
+    API_PRODUCT_MISSING_RESOURCES_DURING_RESTORE(900365,
+            "Cannot restore revision as one or more resources are missing from the associated APIs",
+            400, "Cannot restore API Product %s:%s, as one or more resources are missing from the associated APIs"),
     API_CATEGORY_INVALID(
-            900345, "The API category is invalid.", 400, " The API category is invalid for API: %s:%s"),
+            900345, "The API category is invalid.", 400, " The API category is invalid for API: %s"),
     INVALID_ADDITIONAL_PROPERTIES(900346, "Invalid additional properties", 400,
             "Invalid additional properties for API: %s:%s"),
     INVALID_CONTEXT(900346, "Invalid context provided", 400, "Invalid context provided for API: %s:%s"),
     INVALID_ENDPOINT_URL(900346, "Endpoint URL(s) is(are) not valid", 400, "Endpoint URL(s) is(are) not valid"),
-    USER_ROLES_CANNOT_BE_NULL(900610, "User roles cannot be found", 400, "User roles cannot be found"),
+    USER_ROLES_CANNOT_BE_NULL(900610, "Access control roles cannot be empty", 400, "Access control roles cannot be empty when visibility is restricted"),
+    ORGS_CANNOT_BE_NULL(900610, "Access control organizatoins cannot be empty", 400, "Access control organizations cannot be empty when visibility is restricted"),
     API_REVISION_NOT_FOUND(900347, "API Revision Not Found", 404, "Requested API Revision with id %s not found"),
     EXISTING_API_REVISION_DEPLOYMENT_FOUND(900348, "Can not delete API Revision ", 400, "Couldn't delete API revision since API revision is currently deployed to a gateway. " +
             "You need to undeploy the API Revision from the gateway before attempting deleting API Revision: %s "),
@@ -115,6 +125,10 @@ public enum ExceptionCodes implements ErrorHandler {
     API_OR_API_PRODUCT_NOT_FOUND(900359, "API or API Product Not Found", 404, "Requested API or API Product with id '%s' not found"),
     API_PRODUCT_NOT_FOUND(900360, "API Product Not Found", 404, "Requested API Product with id '%s' not found"),
     SUB_ORGANIZATION_NOT_IDENTIFIED(900361, "User's Organization Not Identified", 403, "User's Organization is not identified"),
+    CANNOT_CREATE_API_VERSION(900362, "New API Version cannot be created from a different provider", 409, "Initial provider of an API must be preserved in all versions of that API"),
+    INTERNAL_ERROR_WHILE_UPDATING_API(900363, "Internal Server Error occurred while updating the API", 500, "Internal Server Error. '%s'"),
+    ERROR_WHILE_UPDATING_MANDATORY_PROPERTIES(903010, "Error while updating required properties", 400, "Error while updating required properties."),
+    ERROR_WHILE_VALIDATING_MANDATORY_PROPERTIES(903015, "Error while validating required properties", 400, "Error while validating required properties."),
 
     //Lifecycle related codes
     API_UPDATE_FORBIDDEN_PER_LC(900380, "Insufficient permission to update the API", 403,
@@ -157,12 +171,26 @@ public enum ExceptionCodes implements ErrorHandler {
             "A Gateway Environment with %s already exists"),
     READONLY_GATEWAY_ENVIRONMENT(900508, "Gateway Environment is read only", 400,
             "A Gateway Environment with %s is read only"),
+    READ_ONLY_MODE_GATEWAY_ENVIRONMENT(900515, "Gateway environment mode is read only", 400,
+            "Cannot deploy revision in gateway environment %s with read only mode."),
     GATEWAY_ENVIRONMENT_DUPLICATE_VHOST_FOUND(900509, "Gateway Environment with duplicate virtual hosts",
             400, "A Gateway Environment cannot exists with duplicate virtual hosts"),
     READONLY_GATEWAY_ENVIRONMENT_NAME(900510, "Names of Gateway Environment cannot be changed",
             400, "Name of the gateway is read only"),
     GATEWAY_ENVIRONMENT_VHOST_NOT_PROVIDED(900511, "Gateway Environment virtual hosts name not provided",
             400, "Gateway Environment VHOST name not provided"),
+    INVALID_VHOST(900512, "Invalid virtual host name provided",
+            400, "Virtual host with provided vhost name does not exist"),
+    FEDERATED_GATEWAY_VALIDATION_FAILED(900513, "API Validation Failed with Federated Gateway",
+            400, "API Validation Failed with %s Gateway. %s", false),
+    GATEWAY_ENVIRONMENT_ACTIVE_DEPLOYMENTS_EXIST(900516, "Active Gateway Policy Deployments Exist", 409,
+            "Cannot delete the environment with UUID %s as active gateway policy deployment exist"),
+    GATEWAY_ENVIRONMENT_API_REVISIONS_EXIST(900515, "API Revisions Deployed to Gateway Environment Exist", 409,
+            "Cannot delete the environment with UUID %s as API revisions are deployed to it"),
+    UNIVERSAL_GATEWAY_NAME_ALREADY_EXISTS(900518, "Universal gateway name already exists", 409,
+            "A universal gateway with name '%s' already exists in the organization"),
+    UNIVERSAL_GATEWAY_NOT_FOUND(900519, "Universal gateway not found", 404,
+            "Universal gateway not found"),
 
     // Workflow related codes
     WORKFLOW_EXCEPTION(900550, "Workflow error", 500,
@@ -172,7 +200,7 @@ public enum ExceptionCodes implements ErrorHandler {
     WORKFLOW_ALREADY_COMPLETED(900552, "Workflow error", 400,
             "Workflow is already completed"),
     WORKFLOW_PENDING(900553, "Workflow exception", 409,
-            "Pending workflow task exists for the seleted API"),
+            "Pending workflow task exists for the selected API/Application"),
     WORKFLOW_INVALID_WFTYPE(900554, "Workflow error", 500, "Invalid workflow type specified"),
     WORKFLOW_INV_STORE_WFTYPE(900555, "Workflow error", 500, "Invalid workflow type for store workflows"),
     WORKFLOW_STATE_MISSING(900556, "Workflow error", 400, "Workflow status is not defined"),
@@ -213,16 +241,13 @@ public enum ExceptionCodes implements ErrorHandler {
 
 
     // Labels related codes
-    LABEL_INFORMATION_CANNOT_BE_NULL(900650, "Label information cannot be null", 400, "Label information cannot be " +
-            "null"),
-    LABEL_EXCEPTION(900651, "Label Error", 500, "Error occurred while retrieving label information"),
-    LABEL_NOT_FOUND(900652, "Label Not Found", 404, "Label with specified name cannot be found."),
-    LABEL_NOT_FOUND_IN_API(900653, "Label Not Found In API", 404, "Label with specified name"
-            + " cannot be found in the API."),
-    LABEL_ADDING_FAILED(900654, "Label Error", 500, "Error occurred while trying to add label"),
-    LABEL_UPDATE_FAILED(900655, "Label Error", 500, "Error occurred while trying to update label"),
-    LABEL_DELETION_FAILED(900656, "Label Error", 500, "Error occurred while trying to delete label"),
-
+    LABEL_NAME_ALREADY_EXISTS(900650, "Label Name Already Exists", 409, "Label with name '%s' already exists", false),
+    LABEL_NOT_FOUND(900651, "Label Not Found", 404, "Label not found for the given label ID: %s", false),
+    LABEL_ADDING_FAILED(900652, "Failed To Create Label", 400, "Error occurred while trying to add label. %s", false),
+    LABEL_UPDATE_FAILED(900653, "Failed To Update Label", 400, "Error occurred while trying to update label. %s", false),
+    LABEL_CANNOT_DELETE_ASSOCIATED(900654, "Label Deletion Failed", 409, "The label cannot be deleted as it is associated with API(s).", false),
+    LABEL_ATTACHMENT_FAILED(900655, "Label Attachment Failed", 400, "Error occurred while attaching label(s) to API. %s", false),
+    LABEL_DETACHMENT_FAILED(900656, "Label Detachment Failed", 400, "Error occurred while detaching label(s) from API. %s", false),
 
     //WSDL related codes
     INVALID_WSDL_URL_EXCEPTION(900675, "Invalid WSDL", 400, "Invalid WSDL URL"),
@@ -237,7 +262,9 @@ public enum ExceptionCodes implements ErrorHandler {
     NO_WSDL_AVAILABLE_FOR_API(900684, "WSDL Not Found", 404, "No WSDL Available for the API %s:%s"),
     CORRUPTED_STORED_WSDL(900685, "Corrupted Stored WSDL", 500, "The WSDL of the API %s is corrupted."),
     UNSUPPORTED_WSDL_FILE_EXTENSION(900686, "Unsupported WSDL File Extension", 400, "Unsupported extension. Only supported extensions are .wsdl and .zip"),
-
+    UNSUPPORTED_RESOURCE_TYPE(900687, "Unsupported resource type", 400, "Cannot generate URL for the unsupported resource type %s."),
+    API_TYPE_INCOMPATIBLE_WITH_RESOURCE(902057, "Resource type incompatible with API type", 400,
+            "Resource type '%s' is not supported for API type '%s'"),
 
     //OpenAPI/Swagger related codes [900750 900???)
     MALFORMED_OPENAPI_DEFINITON(900758, "Malformed OpenAPI Definition", 400, "The provided OpenAPI definition is not parsable as a valid JSON or YAML."),
@@ -258,8 +285,12 @@ public enum ExceptionCodes implements ErrorHandler {
     //AsyncApi related error codes
     ASYNCAPI_URL_MALFORMED(900756, "AsyncAPI specification retrieval from URL failed", 400, "Exception occurred while retrieving the AsyncAPI Specification from URL"),
     ASYNCAPI_URL_NO_200(900757, "AsyncAPI specification retrieval from URL failed", 400, "Response didn't return a 200 OK status"),
+    ERROR_MCP_TOOL_GENERATION_NOT_SUPPORTED(900767, "MCP tool generation not supported", 400,
+            "MCP tool generation is not supported for Async API definitions"),
 
     ERROR_READING_ASYNCAPI_SPECIFICATION(900765, "AsyncAPI specification read error", 500, "Exception occurred while reading the AsyncAPI Specification file"),
+    ERROR_VALIDATING_ASYNCAPI_SPECIFICATION(900768, "AsyncAPI specification validation error", 500, "Exception occurred while validating the AsyncAPI Specification file"),
+    ERROR_RETRIEVE_KM_INFORMATION(900766, "Failed to retrieve key manager information", 500, "Couldn't get the key manager information by name or UUID"),
 
     // REST API related codes
     PARAMETER_NOT_PROVIDED(900700, "Parameter value missing", 400,
@@ -278,12 +309,17 @@ public enum ExceptionCodes implements ErrorHandler {
     INVALID_SORT_CRITERIA(900707, "Invalid sort criteria", 400, "Sort criteria contain a non-allowable value"),
 
     //GraphQL API related codes
-    API_NOT_GRAPHQL(900800, "This API is not a GraphQL API", 400, "This API is not a GraphQL API"),
-    GRAPHQL_SCHEMA_CANNOT_BE_NULL(900801, "GraphQL Schema cannot be empty or nul", 400,
+    API_NOT_GRAPHQL(900870, "This API is not a GraphQL API", 400, "This API is not a GraphQL API"),
+    GRAPHQL_SCHEMA_CANNOT_BE_NULL(900871, "GraphQL Schema cannot be empty or nul", 400,
             "GraphQL Schema cannot be empty or null"),
-    UNSUPPORTED_GRAPHQL_FILE_EXTENSION(900802, "Unsupported GraphQL Schema File Extension", 400,
+    UNSUPPORTED_GRAPHQL_FILE_EXTENSION(900872, "Unsupported GraphQL Schema File Extension", 400,
             "Unsupported extension. Only supported extensions are .graphql, .txt and .sdl"),
-
+    INVALID_GRAPHQL_FILE(900873, "GraphQL filename cannot be null or invalid", 400,
+            "GraphQL filename cannot be null or invalid"),
+    GENERATE_GRAPHQL_SCHEMA_FROM_INTROSPECTION_ERROR(900874, "Error while generating GraphQL schema from introspection",
+            400, "Error while generating GraphQL schema from introspection"),
+    RETRIEVE_GRAPHQL_SCHEMA_FROM_URL_ERROR(900875, "Error while retrieving GraphQL schema from URL", 400,
+            "Error while retrieving GraphQL schema from URL"),
 
     // Oauth related codes
     AUTH_GENERAL_ERROR(900900, "Authorization Error", 403, " Error in authorization"),
@@ -293,6 +329,7 @@ public enum ExceptionCodes implements ErrorHandler {
     ACCESS_TOKEN_INACTIVE(900904, "Access Token Error", 401, " Access token is inactive."),
     USER_NOT_AUTHENTICATED(900905, "User is not Authenticated", 401, " User is not authenticated."),
     ACCESS_TOKEN_INVALID(900906, "Invalid Credentials", 401, " Access token is invalid."),
+    WSDL_URL_INVALID(900916, "Authorization Error", 401, " WSDL access URL is invalid."),
 
     INVALID_SCOPE(900910, "Invalid Scope", 403, " You are not authorized to access the resource."),
     INVALID_AUTHORIZATION_HEADER(900911, "Invalid Authorization header", 401,
@@ -318,6 +355,7 @@ public enum ExceptionCodes implements ErrorHandler {
     INVALID_TOKEN_REQUEST(900965, "Key Management Error", 400, "Invalid access token request."),
     ACCESS_TOKEN_REVOKE_FAILED(900966, "Key Management Error", 500, "Error while revoking the access token."),
     INTERNAL_ERROR(900967, "General Error", 500, "Server Error Occurred"),
+    SUBSCRIPTION_POLICY_UPDATE_TYPE_BAD_REQUEST(900974, "Bad Request", 400, "Subscription quota type can not be changed for AI Subscription policies."),
     INTERNAL_ERROR_WITH_SPECIFIC_MESSAGE(903006, "%s", 500, "Server Error Occurred"),
 
     POLICY_LEVEL_NOT_SUPPORTED(900968, "Throttle Policy level invalid", 400, "Specified Throttle policy level is not "
@@ -338,6 +376,30 @@ public enum ExceptionCodes implements ErrorHandler {
             "Throttling Policy cannot be empty or null", 400, "Throttling Policy cannot be empty or null"),
     ALREADY_ASSIGNED_ADVANCED_POLICY_DELETE_ERROR(900971, "Cannot delete the advanced throttling policy", 403,
             "Cannot delete the advanced policy with the name %s because it is already assigned to an API/Resource"),
+
+    // Multiple client secret related codes
+    OPERATION_NOT_SUPPORTED_FOR_SINGLE_CLIENT_SECRET_MODE(900916,
+            "The requested operation is not supported", 400,
+            "This operation is not supported as the multiple client secret support is disabled" +
+                    " by server configuration."),
+    OPERATION_NOT_SUPPORTED_FOR_MULTIPLE_CLIENT_SECRET_MODE(900917,
+            "The requested operation is not supported", 400,
+            "This operation is not supported as the multiple client secret support is enabled" +
+                    " by server configuration. Use the client secret creation API" +
+                    " (POST /applications/{applicationId}/oauth-keys/{keyMappingId}/generate-secret) to generate" +
+                    " new client secrets."),
+    CLIENT_SECRET_GENERATION_FAILED(900918,
+            "Client secret generation failed", 500,
+            "Error occurred while generating a new client secret for the application with " +
+                    "consumer key %s."),
+    CLIENT_SECRET_DELETION_FAILED(900919,
+            "Client secret deletion failed", 500,
+            "Error occurred while deleting the client secret for the application with " +
+                    "consumer key %s."),
+    CLIENT_SECRET_RETRIEVAL_FAILED(900920,
+            "Client secret retrieval failed", 500,
+            "Error occurred while retrieving the client secret for the application with " +
+                    "consumer key %s."),
 
     //Throttle related codes
     THROTTLE_TEMPLATE_EXCEPTION(900969, "Policy Generating Error", 500, " Error while generate policy configuration"),
@@ -365,6 +427,12 @@ public enum ExceptionCodes implements ErrorHandler {
     SCOPE_VALIDATION_FAILED(900986, "Scope validation failed", 412, "Scope validation failed"),
     SHARED_SCOPE_DISPLAY_NAME_NOT_SPECIFIED(900987, "Shared Scope display name not specified", 400,
             "Shared Scope display name not specified"),
+    BLOCK_CONDITION_RETRIEVE_PARAMS_EXCEPTION(900254, "Block conditions retrieval error", 400,
+            "Provided query parameters are not valid"),
+    BLOCK_CONDITION_RETRIEVE_FAILED(900255, "Failed to get Block conditions", 500,
+            "Failed to retrieve Block conditions from the database"),
+    INVALID_BLOCK_CONDITION_VALUES(900256, "Error while retrieving Block Conditions", 500,
+            "Invalid format for condition values"),
     SCOPE_ALREADY_ASSIGNED(900988, "Scope already assigned locally by another API", 400,
             "Scope already assigned locally by another API"),
 
@@ -390,6 +458,14 @@ public enum ExceptionCodes implements ErrorHandler {
     DEDICATED_GATEWAY_DETAILS_NOT_FOUND(900999, "Dedicated gateway details not found for the API", 404, "Dedicated " +
             "gateway details not found for the API"),
 
+    //Thumbnail image processing related codes
+    THUMBNAIL_IMAGE_EMPTY(901003, "Thumbnail image is empty", 400,
+            "The provided thumbnail image is empty"),
+    THUMBNAIL_IMAGE_EXCEEDS_MAX_SIZE(901001, "Thumbnail image exceeds maximum allowed size", 400,
+            "Thumbnail image exceeds maximum allowed size of 1MB"),
+    THUMBNAIL_IMAGE_EXCEEDS_MAX_DIMENSIONS(901002, "Thumbnail dimensions exceed maximum allowed limits", 400,
+            "Thumbnail dimensions exceed maximum allowed limits"),
+
     //Comments related Codes
     NEED_COMMENT_MODERATOR_PERMISSION(901100, "Comment moderator permission needed", 403,
             "This user is not a comment moderator"),
@@ -408,6 +484,10 @@ public enum ExceptionCodes implements ErrorHandler {
 
     // Tenant related
     INVALID_TENANT(901300,"Tenant Not Found", 400, "Tenant Not Found"),
+    
+    // Organization related
+    INVALID_ORGANINATION(901301,"Organization Not Found", 404, "Organization Not Found"),
+    MISSING_ORGANINATION(901302,"Organization Not Found", 403, "User does not belong to any organization"),
     // Key Manager Related
     INVALID_KEY_MANAGER_TYPE(901400, "Key Manager Type not configured", 400, "Key Manager Type not configured"),
     REQUIRED_KEY_MANAGER_CONFIGURATION_MISSING(901401,"Required Key Manager configuration missing",400,"Missing " +
@@ -417,6 +497,9 @@ public enum ExceptionCodes implements ErrorHandler {
     KEY_MANAGER_NOT_FOUND(901411, "Key Manager not Found", 404, "Key Manager not found"),
     KEY_MANAGER_NAME_EMPTY(901404,
             "Key Manager name cannot be empty", 400,"Key Manager name cannot be empty"),
+    KEY_MANAGER_UPDATE_VIOLATION(901412,
+            "Key Manager Update restricted. Certain additional fields in the Key Manager configuration cannot be modified",
+            400,"Key Manager Update restricted. Certain additional fields in the Key Manager configuration cannot be modified"),
     KEY_MANAGER_NOT_SUPPORT_OAUTH_APP_CREATION(901405, "Key Manager doesn't support generating OAuth applications", 400,
             "Key Manager doesn't support generating OAuth applications"),
     KEY_MANAGER_NOT_SUPPORTED_TOKEN_GENERATION(901405, "Key Manager doesn't support token generation", 400,
@@ -430,6 +513,10 @@ public enum ExceptionCodes implements ErrorHandler {
     TENANT_MISMATCH(901409,"Tenant mismatch", 400, "Tenant mismatch"),
     INVALID_APPLICATION_PROPERTIES(901410, "Invalid additional properties", 400,
             "Invalid additional properties given for application"),
+    OPERATION_NOT_IMPLEMENTED_FOR_CUSTOM_KM(901413, "Operation not implemented for custom Key Manager for Out-of-Band type",
+            501, "Operation not implemented for custom Key Manager for Out-of-Band type"),
+    INVALID_CLIENT_ID_FOR_OOB_MODE(901414, "Invalid client id for Out-of-Band mode", 400,
+            "Client id cannot be empty for Out-of-Band mode"),
 
     //Scope related
     SCOPE_NOT_FOUND_FOR_USER(901500, "Scope does not belong to this user", 404, "Scope not found"),
@@ -456,6 +543,22 @@ public enum ExceptionCodes implements ErrorHandler {
     TENANT_THEME_IMPORT_NOT_ALLOWED(901702, "Super Tenant not allowed to import tenant theme", 400,
             "Super Tenant %s is not allowed to import a tenant theme"),
 
+    ORG_THEME_IMPORT_FAILED(901703, "Failed to import organization theme of organization %s", 500,
+            "%s"),
+    ORG_THEME_STATUS_UPDATE_FAILED(901704, "Failed to update status of theme of organization %s", 500,
+            "%s"),
+    ORG_THEME_DELETE_FAILED(901705, "Failed to delete organization theme of organization %s", 500,
+            "%s"),
+    ORG_THEME_EXPORT_FAILED(901706, "Failed to export org theme of organization %s", 500,
+            "%s"),
+    ID_CANNOT_BE_FOUND_IN_DRAFTED_STATE(901707, "ID cannot be found in drafted state", 404,
+            "ID cannot be found in drafted state"),
+    ID_CANNOT_BE_FOUND_IN_PUBLISHED_STATE(901708, "ID cannot be found in published state", 404,
+            "ID cannot be found in published state"),
+    USER_DOES_NOT_HAVE_THE_THEME(901709, "User does not use the theme", 400,
+            "User does not use the theme"),
+    USER_DOES_NOT_HAVE_ANY_PUBLISHED_OR_DRAFTED_THEMES(901710, "User does not have any drafted or published themes", 404,
+            "User does not have any drafted or published themes"),
     INVALID_API_IDENTIFIER(900851, "Provided API identifier (%s) is invalid", 400,
             "Provided API identifier (%s) is invalid"),
     API_NAME_OR_VERSION_NOT_NULL(900852, "name or version couldn't be null", 400, "name or version couldn't be null"),
@@ -464,10 +567,13 @@ public enum ExceptionCodes implements ErrorHandler {
             "{apiName}#{apiVersion}#{tenantDomain}"),
     INVALID_API_NAME(900854, "Invalid API Name",400 ,"Invalid API Name"),
     ALIAS_CANNOT_BE_EMPTY(900855, "The alias cannot be empty", 400, "The alias cannot be empty"),
-
+    KEY_TYPE_CANNOT_BE_EMPTY(900856, "The key type cannot be empty", 400, "The key type cannot be empty"),
     // API import/export related codes
     ERROR_READING_META_DATA(900907, "Error while reading meta information from the definition", 400,
             "Error while reading meta information from the definition"),
+
+    ERROR_READING_CUSTOM_SEQUENCE(900908, "Error while reading Custom Sequence from the API Endpoint Configuration",
+            400, "Error while reading Custom Sequence from the API Endpoint Configuration"),
     ERROR_READING_PARAMS_FILE(900908, "Error while reading meta information from the params file", 400,
             "Error while reading meta information from the params file"),
     ERROR_FETCHING_DEFINITION_FILE(900909, "Cannot find the definition file of the project", 400,
@@ -494,7 +600,10 @@ public enum ExceptionCodes implements ErrorHandler {
     LOGGING_API_NOT_FOUND(901400, "Requested Resource Not Found", 404, "Request API Not Found for context: %s"),
     LOGGING_API_INCORRECT_LOG_LEVEL(901401, "Bad Request", 400, "Log level should be either OFF, BASIC, STANDARD or FULL"),
     LOGGING_API_MISSING_DATA(901402, "Missing data", 400, "API context or log level is missing"),
-
+    LOGGING_API_RESOURCE_NOT_FOUND(901403, "Requested Resource Not Found", 404, "Requested API Resource Not Found"),
+    LOGGING_API_NOT_FOUND_IN_TENANT(901404, "Requested API Not Found", 404, "Requested API Not Found"),
+    CORRELATION_CONFIG_BAD_REQUEST(902020, "Bad Request", 400, "Request body can not have empty elements"),
+    CORRELATION_CONFIG_BAD_REQUEST_INVALID_NAME(902021, "Bad Request", 400, "Request body contains invalid correlation component name"),
     //Service Catalog related error codes
     SERVICE_VERSION_NOT_FOUND(901900, "Cannot find the service version", 404, "Cannot find a service that matches the given version"),
     INVALID_ENDPOINT_CREDENTIALS(902000, "Invalid Endpoint Security credentials", 400,
@@ -502,28 +611,33 @@ public enum ExceptionCodes implements ErrorHandler {
     INVALID_TENANT_CONFIG(902001, "Invalid tenant-config found", 400, "Invalid tenant-config found with error %s", false),
 
     //Operation Policies related error codes
-    INVALID_OPERATION_POLICY(902005, "Cannot find the selected operation policy", 400,
-            "Selected operation policy is not found"),
-    INVALID_OPERATION_POLICY_SPECIFICATION(902006, "Invalid operation policy specification found", 400,
-            "Invalid operation policy specification. %s", false),
+    INVALID_OPERATION_POLICY(902005, "Cannot find the selected api policy", 400,
+            "Selected api policy is not found"),
+    INVALID_OPERATION_POLICY_SPECIFICATION(902006, "Invalid api policy specification found", 400,
+            "Invalid api policy specification. %s", false),
 
-    INVALID_OPERATION_POLICY_PARAMETERS(902007, "Missing required parameters for operation policy specification", 400,
-            "Required parameter(s) %s for operation policy specification %s are either missing or empty"),
-    OPERATION_POLICY_NOT_ALLOWED_IN_THE_APPLIED_FLOW(902008, "Operation policy is not allowed in the applied flow", 400,
+    MISSING_OPERATION_POLICY_PARAMETERS(902007, "Missing required parameters for policy specification", 400,
+            "Required parameter(s) %s for policy specification %s are either missing or empty"),
+    OPERATION_POLICY_NOT_ALLOWED_IN_THE_APPLIED_FLOW(902008, "API policy is not allowed in the applied flow", 400,
             "%s policy is not allowed in response flow"),
-    MISSING_MANDATORY_POLICY_ATTRIBUTES(902009, "Missing mandatory operation policy attribute", 400,
-            "Required attributes(s) %s for operation policy specification %s are either missing or empty"),
-    OPERATION_POLICY_NOT_FOUND(902010, "Operation Policy Not Found", 404,
-            "Requested operation policy with id '%s' not found"),
+    MISSING_MANDATORY_POLICY_ATTRIBUTES(902009, "Missing mandatory api policy attribute", 400,
+            "Required attributes(s) %s for api policy specification %s are either missing or empty"),
+    OPERATION_POLICY_NOT_FOUND(902010, "API Policy Not Found", 404,
+            "Requested api policy with id '%s' not found"),
+    CUSTOM_BACKEND_NOT_FOUND(903250, "Sequence Backend not found",
+            404, "Requested Sequence Backend of API '%s' not found"),
 
-    OPERATION_POLICY_ALREADY_EXISTS(903001, "The Operation Policy already exists.", 409, "An Operation Policy with name '%s' and version '%s' already exists"),
+    OPERATION_POLICY_ALREADY_EXISTS(903001, "The API Policy already exists.", 409, "An Operation Policy with name '%s' and version '%s' already exists"),
 
-    OPERATION_POLICY_NOT_FOUND_WITH_NAME_AND_VERSION(903004, "Operation Policy Not Found with given name and version", 404,
-            "Requested operation policy with name '%s' and version '%s not found"),
+    OPERATION_POLICY_NOT_FOUND_WITH_NAME_AND_VERSION(903004, "API Policy Not Found with given name and version", 404,
+            "Requested api policy with name '%s' and version '%s not found"),
+
+    OPERATION_POLICY_NOT_FOUND_WITH_NAME(903007, "API Policy Not Found with given name", 404,
+            "Requested api policy with name '%s' not found"),
 
     OPERATION_POLICY_GATEWAY_ERROR(903008,
             "Either Synapse or Choreo Gateway Definition files or both should be present", 400,
-            "Operation Policy cannot be imported due to the missing Gateway files."),
+            "API Policy cannot be imported due to the missing Gateway files."),
     ERROR_VALIDATING_API_POLICY(902011, "Error while validating API policies enforced for the API", 400,
             "Error while validating the API policies enforced for the API"),
 
@@ -533,8 +647,287 @@ public enum ExceptionCodes implements ErrorHandler {
     INTERNAL_SERVER_ERROR_FROM_KEY_MANAGER(902004, "Internal Server Error from Key Manager", 500, "Internal Server Error from Key Manager.Error from Backend : %s", true),
     REVISION_ALREADY_DEPLOYED(902005, "Revision deployment state conflicted", 409,
             "Revision deployment request conflicted with the current deployment state of the revision %s. Please try again later", false),
-    INVALID_API_ID(902006, "Invalid API ID", 404, "The provided API ID is not found %s", false);
+    INVALID_API_ID(902006, "Invalid API ID", 404, "The provided API ID is not found %s", false),
+    INVALID_GATEWAY_TYPE(902007, "Invalid Gateway Type", 400, "Invalid Gateway Type. %s", false),
+    INVALID_ENDPOINT_CONFIG(902012, "Endpoint config value(s) is(are) not valid", 400, "Endpoint config value(s) is(are) not valid"),
+    ARTIFACT_SYNC_HTTP_REQUEST_FAILED(903009, "Error while retrieving from remote endpoint", 500, "Error while executing HTTP request to retrieve from remote endpoint"),
+    KEY_MANAGER_RESTRICTED_FOR_USER(902013, "Unauthorized Access to Key Manager", 403, "Key Manager is Restricted for this user"),
+    // Admin portal get apis and api provider change related errors
+    CHANGE_API_PROVIDER_FAILED(903011, "Error while changing the API provider", 500, "Error while changing the API provider in the registry or DB"),
+    GET_SEARCH_APIS_IN_ADMIN_FAILED(903012, "Error while getting the apis", 500, "Error while getting/searching the apis from registry"),
+    KEY_MANAGER_DELETE_FAILED(902015, "Key Manager Delete error", 412,"Error while deleting the Key Manager. %s", false),
+    KEYS_DELETE_FAILED(902014, "Key Delete error", 412,"Error while deleting Keys. %s", false),
 
+    // AI service invocation related exceptions
+    AI_SERVICE_INVALID_RESPONSE(903100, "Invalid response from AI service", 500, "Error while invoking AI service. %s", false),
+    AI_SERVICE_INVALID_ACCESS_TOKEN(903101, "Invalid access token provided for AI service", 401, "Invalid access token provided for AI service"),
+    AI_SERVICE_QUOTA_EXCEEDED(903102, "Quota exceeded for AI service", 429, "Quota exceeded for AI service"),
+    AI_SERVICE_PROVIDER_NOT_FOUND(903103,"AI Service Provider Not found for %s in organization" ,404 ,"AI Service Provider Not found for %s in organization" ,false ),
+
+    DOCUMENT_NAME_ILLEGAL_CHARACTERS(902016, "Document name cannot contain illegal characters", 400, "Document name contains one or more illegal characters"),
+
+    // Compliance related errors
+    COMPLIANCE_VIOLATION_ERROR(903300, "Request does not adhere to governance standards", 400, "%s", false),
+    ERROR_WHILE_EXECUTING_COMPLIANCE_DRY_RUN(903301, "Error while performing compliance dry run", 500, "%s"),
+    // Subscriptions related
+    SUBSCRIPTION_ID_NOT_SPECIFIED(902017, "Subscription ID not specified.", 400,
+            "Subscription ID not specified."),
+    BUSINESS_PLAN_NOT_SPECIFIED(902018, "Business plan not specified.", 400,
+            "Business plan not specified."),
+    BUSINESS_PLAN_NOT_ALLOWED(902019, "The Business plan is not allowed.", 400,
+            "Business plan '%s' is not allowed for the API.", false),
+    INVALID_STATE_FOR_BUSINESS_PLAN_CHANGE(902022, "Cannot change the business plan of the subscription.",
+            409, "Cannot change the business plan of the subscription with ID '%s' as the " +
+            "subscription is in '%s' state.", false),
+    NOT_ALLOWED_TIER_FOR_SUBSCRIBER(902023, "Cannot change the business plan of the subscription.",
+            403, "Cannot change the business plan of the subscription with ID '%s' as the " +
+            "subscriber does not have permission to access the specified business plan.", false),
+
+    HTTP_METHOD_INVALID(903201,
+            "Invalid HTTP method provided for API resource", 400,
+            "The HTTP method '%s' provided for resource '%s' is invalid", false),
+
+    OPERATION_TYPE_INVALID(903202, "Invalid operation type provided for API operation", 400,
+            "The '%s' API operation type '%s' provided for operation '%s' is invalid", false),
+
+    KEYMANAGERS_VALUE_NOT_ARRAY(903203, "KeyManagers value needs to be an array", 400,
+            "Value of the KeyManagers config should be an array", false),
+
+    SCOPE_ALREADY_ASSIGNED_FOR_DIFFERENT_API(903204, "Invalid scopes provided for API", 400,
+            "Error while adding local scopes for API %s. Scope: %s already assigned locally for a different API.",
+            false),
+
+    UNSUPPORTED_TRANSPORT(903205, "Unsupported transport", 400,
+            "Unsupported transport '%s' provided for the API", false),
+
+    OAS_DEFINITION_VERSION_NOT_FOUND(903206, "Invalid OAS definition", 400,
+            "Could not determine the OAS version as the version element of the definition is not found", false),
+
+    API_NAME_PROVIDER_ORG_EMPTY(903207, "API name, provider or organization cannot be empty", 400,
+            "API name, provider or organization cannot be empty. Provided values: name: %s, provider: %s, org: %s",
+            false),
+
+    ANONYMOUS_USER_NOT_PERMITTED(903208, "Anonymous user not permitted", 401,
+            "Attempt to execute privileged operation as the anonymous user", false),
+
+    GLOBAL_MEDIATION_POLICIES_NOT_FOUND(903209, "Global mediation policies not found", 404,
+            "Global mediation policies not found", false),
+
+    ENDPOINT_URL_NOT_PROVIDED(903210, "Endpoint url not provided", 400,
+            "Url is not provided for the endpoint type %s in the endpoint config", false),
+
+    OPERATION_POLICY_NAME_VERSION_INVALID(903211, "Invalid operation policy name or version", 400,
+            "policyName and/or policyVersion provided for the applied policy %s_%s does not match the policy " +
+            "specification identified by the given policyId %s",
+            false),
+
+    INVALID_OPERATION_POLICY_PARAMS(903212, "Invalid operation policy parameters", 400,
+            "Invalid value provided for the operation policy parameter %s", false),
+
+    INVALID_ENDPOINT_SECURITY_CONFIG(903213, "Invalid endpoint security configuration", 400,
+            "Invalid values provided for %s endpoint security configuration", false),
+
+    ENDPOINT_SECURITY_TYPE_NOT_DEFINED(903214, "Endpoint security type not defined", 400,
+            "Endpoint security type not defined for the %s endpoint", false),
+
+    ADDITIONAL_PROPERTIES_CANNOT_BE_NULL(903215, "'additionalProperties' is required and should " +
+            "not be null", 400,
+            "The field 'additionalProperties' is required and should not be null"),
+
+    ADDITIONAL_PROPERTIES_PARSE_ERROR(903216, "Error while parsing 'additionalProperties'", 400,
+            "Error while parsing 'additionalProperties'", true),
+
+    ENDPOINT_SECURITY_CRYPTO_EXCEPTION(903217, "Error while encrypting the secret key of API", 500,
+            "%s"),
+
+    OPENAPI_RETRIEVAL_ERROR(903218, "Error while retrieving the OAS definition", 500,
+            "Error while retrieving the OAS definition for API with UUID %s"),
+
+    ASYNCAPI_RETRIEVAL_ERROR(903219, "Error while retrieving the Async API definition", 500,
+            "Error while retrieving the Async API definition for API with UUID %s"),
+
+    ERROR_RETRIEVING_API(903220, "Failed to get API", 500, "Failed to get API with UUID %s"),
+
+    ERROR_CHANGING_REGISTRY_LIFECYCLE_STATE(903221, "Error changing registry lifecycle state", 500,
+            "Error changing registry lifecycle state for API/API Product with UUID %s"),
+
+    UN_AUTHORIZED_TO_VIEW_MODIFY_API(903222, "User is not authorized to view or modify the api",
+            403, "User %s is not authorized to view or modify the api"),
+
+    FAILED_PUBLISHING_API_NO_ENDPOINT_SELECTED(903223, "Failed to publish service to API store. No endpoint selected",
+            400, "Failed to publish service to API store. No endpoint selected for API with UUID %s"),
+
+    FAILED_PUBLISHING_API_NO_TIERS_SELECTED(903224, "Failed to publish service to API store. No Tiers selected",
+            400, "Failed to publish service to API store. No Tiers selected for API with UUID %s"),
+
+    THIRD_PARTY_API_REVISION_CREATION_UNSUPPORTED(903225, "Creating API Revisions is not supported " +
+            "for third party APIs", 400,"Creating API Revisions is not supported for third party APIs: %s"),
+
+    THIRD_PARTY_API_REVISION_DEPLOYMENT_UNSUPPORTED(903226, "Deploying API Revisions is not supported " +
+            "for third party APIs", 400,"Deploying API Revisions is not supported for third party APIs: %s"),
+
+    RETIRED_API_REVISION_DEPLOYMENT_UNSUPPORTED(903227, "Deploying API Revisions is not supported for retired APIs",
+            400, "Deploying API Revisions is not supported for retired APIs. ApiId: %s"),
+    ACTION_NOT_ALLOWED_FOR_API_INITIATED_FROM_GATEWAY(900517, "Retire action is not allowed for the API " +
+            "which is initiated from the Gateway", 400,
+            "Retire action is not allowed for the API which is initiated from the Gateway. ApiId: %s", false ),
+
+    REVISION_NOT_FOUND_FOR_REVISION_NUMBER(903228, "No revision found", 404,
+            "No revision found for revision number %s"),
+
+    ERROR_PROCESSING_DIRECTORY_TO_IMPORT(903229, "Error extracting and processing the directory", 500,
+            "Error extracting and processing the directory to be imported", true),
+
+    IMPORT_ERROR_INVALID_GRAPHQL_SCHEMA(903230, "Error occurred while importing the API. Invalid " +
+            "GraphQL schema definition found", 400, "Invalid GraphQL schema definition " +
+            "found. %s"),
+
+    IMPORT_ERROR_INVALID_ASYNC_API_SCHEMA(903231, "Error occurred while importing the API. " +
+            "Invalid AsyncAPI definition found.", 400, "Invalid AsyncAPI definition found. %s"),
+
+    NO_VHOSTS_DEFINED_FOR_ENVIRONMENT(903232, "No VHosts defined for the environment", 400,
+            "No VHosts defined for the environment: %s"),
+
+    PROVIDED_GATEWAY_ENVIRONMENT_NOT_FOUND(903233, "Gateway environment not found", 400,
+            "Provided gateway environment %s is not found"),
+
+    UNSUPPORTED_AND_ALLOWED_LIFECYCLE_ACTIONS(903234, "Unsupported state change action", 400,
+            "Lifecycle state change action %s is not allowed for this API. Allowed actions are %s"),
+
+    NO_CORRESPONDING_RESOURCE_FOUND_IN_API(903235, "No corresponding resource found in API", 400,
+            "API with id %s does not have a resource %s with http method %s"),
+
+    ERROR_PARSING_MONETIZATION_PROPERTIES(903237, "Error when parsing monetization properties",
+            400, "Error when parsing monetization properties"),
+
+    API_NAME_CANNOT_BE_NULL(903238, "API name is required", 400,
+            "API name is required and cannot be null"),
+
+    API_NAME_ILLEGAL_CHARACTERS(903239, "API name contains illegal characters", 400,
+            "API name %s contains one or more illegal characters from (%s)"),
+
+    API_VERSION_CANNOT_BE_NULL(903240, "API version is required", 400,
+            "API version is required and cannot be null"),
+
+    API_VERSION_ILLEGAL_CHARACTERS(903241, "API version contains illegal characters", 400,
+            "API version %s contains one or more illegal characters from (%s)"),
+
+    UNSUPPORTED_CONTEXT(903242, "Unsupported context", 400,
+            "Unsupported context %s"),
+
+    ERROR_PARSING_ENDPOINT_CONFIG(903243, "Error when parsing endpoint configuration",
+            400, "Error when parsing endpoint configuration"),
+
+    NOT_IN_OPEN_API_FORMAT(903244, "Not in Open API format",
+            400, "The API definition is not in Open API format"),
+
+    PARAMETER_NOT_PROVIDED_FOR_DOCUMENTATION(903245, "Parameter value missing", 400,
+            "Some of the mandatory parameter values were missing. %s"),
+
+    INVALID_API_RESOURCES_FOR_API_PRODUCT(903246, "Cannot find API resources for some API Product " +
+            "resources.", 404, "Some of the resources in the API Product are not found as API resources. %s"),
+
+    INVALID_ADDITIONAL_PROPERTIES_WITH_ERROR(903247, "Invalid additional properties", 400,
+            "Invalid additional properties for API: %s:%s Error: %s"),
+
+    TIER_NAME_INVALID_WITH_TIER_INFO(903248, "The tier name is invalid.", 400,
+            "The tier name(s) %s are invalid"),
+
+    LENGTH_EXCEEDS_ERROR(903249, "Character length exceeds the allowable limit", 400, "%s"),
+
+    ROLE_OF_SCOPE_DOES_NOT_EXIST(903250, "Role does not exist", 404,
+            "Role %s does not exist"),
+
+    OPERATION_OR_RESOURCE_TYPE_OR_METHOD_NOT_DEFINED(902031,
+            "Operation type/http method is not specified for the operation/resource", 400,
+            "Operation type/http method is not specified for the operation/resource: %s", false),
+
+    FAILED_TO_RETRIEVE_WORKFLOW_BY_EXTERNAL_REFERENCE_ID(902033, "Failed to rettrieve workflow request by the " +
+            "external workflow reference", 500,
+            "Failed to retrieve workflow request by the external workflow reference"),
+    FAILED_TO_RETRIEVE_WORKFLOWS(902034, "Error while retrieving workflow requests.", 500,
+            "Error while retrieving workflow requests."),
+    WORKFLOW_PAYLOAD_MISSING(902035, "Payload is missing", 400,
+            "Payload is missing in the workflow request"),
+    WORKFLOW_STATUS_NOT_DEFINED(902036, "Workflow status not defined", 400,
+            "Workflow status is not defined"),
+    RESOURCE_URI_TEMPLATE_NOT_DEFINED(902032, "Resource URI template value not defined", 400,
+            "Resource URI template value (target) not defined", false),
+    API_ENDPOINT_NOT_FOUND(902040, "Cannot find the required API endpoint details.", 404,
+            "Requested API endpoint with id '%s' not found."),
+    ERROR_UPDATING_API_ENDPOINT(902041, "Error while updating the API endpoint.", 500,
+            "Error while updating the API endpoint."),
+    ENDPOINT_READONLY(902042, "API endpoint is read only", 400,
+            "API endpoint with UUID %s is read only"),
+    ERROR_ADDING_API_ENDPOINT(902043, "Failed to add endpoint to API.", 500,
+            "Error while adding API endpoint."),
+    ERROR_MISSING_ENDPOINT_CONFIG_OF_API_ENDPOINT_API(902044, "Mandatory endpoint config is missing " +
+            "in endpoint", 500, "Mandatory endpoint config is either missing or empty"),
+    ERROR_READING_API_ENDPOINTS_FILE(902045, "Error while reading API endpoints from the endpoints file",
+            400, "Error while reading API endpoints from the endpoints file"),
+    ERROR_ADDING_API_ENDPOINTS(902046, "Error while adding API Endpoints to the API", 500,
+            "Error while adding API Endpoint to the API"),
+    ERROR_DELETING_API_ENDPOINT(902047, "Error while deleting API endpoint", 500,
+            "Error while deleting API endpoint with UUID '%s'."),
+    ERROR_DELETING_PRIMARY_API_ENDPOINT(902048, "Failed to delete API endpoint since endpoint is " +
+            "defined as a primary endpoint", 400,
+            "Failed to delete API endpoint with UUID '%s' since it is defined as a primary endpoint."),
+    API_ENDPOINT_URL_INVALID(902049, "Endpoint URL is invalid", 400,
+            "Endpoint URL is invalid"),
+    INVALID_MEDIA_TYPE_VALIDATION(902050, "Invalid or mismatched media type detected.", 415,
+            "File extension '%s' does not match detected MIME type '%s'"),
+    ERROR_ENCRYPTING_ENDPOINT_SECURITY(902055, "Error while encrypting the endpoint security details", 500,
+            "Error while encrypting the endpoint security details. %s", true),
+    INVALID_API_ENDPOINT_PAYLOAD(902056, "Invalid API endpoint request payload", 400,
+            "The API endpoint request payload is malformed or missing required fields."),
+
+    // Guardrail related codes
+    GUARDRAIL_VIOLATION(900514, "Guardrail intervened.", 446,
+            "Guardrail constraint violation detected."),
+
+    // MCP server related codes
+    MCP_SERVER_TOOL_LIST_GENERATION_FAILED(904000, "Failed to generate tool list", 400,
+            "The MCP server returned an invalid or empty response when generating the tool list."),
+    API_UPDATE_FORBIDDEN_PER_MCP_USAGE(904001, "API update not allowed due to MCP server usage", 403,
+            "Updating this API's resources is forbidden because it is used to generate one or more MCP servers."),
+    MCP_REQUEST_BODY_CANNOT_BE_NULL(904002, "MCP request body cannot be null", 400,
+            "The request body is required and cannot be null or empty."),
+    MCP_REQUEST_URL_CANNOT_BE_NULL(904003, "Server URL cannot be null", 400,
+            "Server URL is required and cannot be null or empty."),
+    MCP_BACKENDS_NOT_FOUND(904004, "No backends found for MCP Server subtype", 400,
+            "No backends are defined in backends.yaml or backends.json for the specified MCP Server subtype."),
+    MCP_SERVER_NOT_FOUND(904005, "MCP Server Not Found", 404,
+            "Requested MCP Server with id '%s' not found"),
+    MCP_SERVER_REVISION_NOT_FOUND(904006, "MCP Server Revision Not Found", 404,
+            "Requested MCP Server Revision with id %s not found"),
+    MCP_SERVER_VERSION_ALREADY_EXISTS(904007, "The MCP Server version already exists.", 409,
+            "A MCP Server with version '%s' already exists for MCP Server '%s'"),
+    RETIRED_MCP_SERVER_REVISION_DEPLOYMENT_UNSUPPORTED(904008,
+            "Deploying MCP Server Revisions is not supported for retired MCP Servers", 400,
+            "Deploying MCP Server Revisions is not supported for retired MCP Servers. MCP Server UUID: %s"),
+    NO_MCP_SERVER_ARTIFACT_FOUND(904009, "No MCP Server artifacts found for given criteria", 404,
+            "No MCP Server artifacts found for given criteria"),
+    MCP_SERVER_UPDATE_FORBIDDEN_PER_LC(904010, "Insufficient permission to update the MCP Server", 403,
+            "Updating the MCP Server is restricted as as it is %s."),
+    INVALID_MCP_SERVER_ID(904011, "Invalid MCP Server ID", 404,
+            "The provided MCP SERVER ID is not found %s", false),
+    INVALID_REFERENCE_API(904012, "Invalid reference API", 400,
+            "Referenced API is not supported for MCP Server."),
+    DUPLICATE_MCP_TOOLS(904013, "Duplicate MCP tools", 400,
+            "One or more MCP tools are duplicated."),
+
+    // gateway notification related codes
+    GATEWAY_NOTIFICATION_BAD_REQUEST(902052, "Invalid request for gateway notification", 400,
+            "Invalid request for gateway notification. %s"),
+    GATEWAY_NOTIFICATION_INTERNAL_SERVER_ERROR(902053, "Internal server error while processing gateway notification",
+            500, "Error occurred while processing gateway notification."),
+    GATEWAY_DEPLOYMENT_STATUS_ACKNOWLEDGMENT_LIST_EMPTY(902051, "Invalid request: Empty or null acknowledgment list", 400,
+            "Invalid request: Empty or null acknowledgment list"),
+    GATEWAY_DEPLOYMENT_STATUS_INTERNAL_SERVER_ERROR(902054, "Internal server error.", 500,
+                                                    "Error occurred while retrieving/persisting deployment status "
+                                                            + "acknowledgment"),
+    API_DEPLOYMENT_ERROR(902060, "Error while deploying API to Gateway", 207,
+            "Error while deploying API to Gateway. %s");
     private final long errorCode;
     private final String errorMessage;
     private final int httpStatusCode;

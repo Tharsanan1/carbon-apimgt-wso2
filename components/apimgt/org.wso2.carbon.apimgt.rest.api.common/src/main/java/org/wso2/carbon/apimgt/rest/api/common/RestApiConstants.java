@@ -32,12 +32,15 @@ public final class RestApiConstants {
     public static final String HEADER_CONTENT_DISPOSITION = "Content-Disposition";
     public static final String CONTENT_DISPOSITION_FILENAME = "filename";
     public static final String APPLICATION_JSON = "application/json";
+    public static final String TEXT_PLAIN = "text/plain";
     public static final String APPLICATION_ZIP = "application/zip";
     public static final String APPLICATION_OCTET_STREAM = "application/octet-stream";
     public static final String APPLICATION_XML = "application/xml";
     public static final String AUTHENTICATION_REQUIRED = "authentication_required";
     public static final String HEADER_X_WSO2_TENANT = "x-wso2-tenant";
+    public static final String QUERY_PARAM_X_WSO2_TENANT = "X-WSO2-Tenant-Q";
     public static final String ORGANIZATION = "organization";
+    public static final String ORGANIZATION_INFO = "organization_info";
     public static final String SUB_ORGANIZATION = "sub_organization";
     public static final String MASKED_TOKEN = "maskedToken";
 
@@ -45,6 +48,8 @@ public final class RestApiConstants {
     public static final String OPAQUE_AUTHENTICATION = "oauth2";
     public static final String BASIC_AUTHENTICATION = "basic_auth";
     public static final String JWT_AUTHENTICATION = "jwt";
+    /** Set when request is authenticated via platform gateway api-key (Internal Data Service only). */
+    public static final String PLATFORM_GATEWAY_API_KEY = "platform_gateway_apikey";
     public static final String JWT_TOKEN = "JWT_TOKEN";
     public static final String DOT = ".";
     public static final long TIMESTAMP_SKEW_INSECONDS = 0;
@@ -56,12 +61,16 @@ public final class RestApiConstants {
     public static final String CREATOR_SCOPE = "apim:api_create";
     public static final String ADMIN_SCOPE = "apim:admin";
     public static final String PUBLISHER_SCOPE = "apim:api_publish";
+    public static final String MCP_SERVER_PUBLISHER_SCOPE = "apim:mcp_server_publish";
+    public static final String MCP_SERVER_IMPORT_EXPORT_SCOPE = "apim:mcp_server_import_export";
+    public static final String MCP_SERVER_MANAGE_SCOPE = "apim:mcp_server_manage";
 
 
     public static final String DEFAULT_RESPONSE_CONTENT_TYPE = APPLICATION_JSON;
 
     public static final String RESOURCE = "resource";
     public static final String RESOURCE_API = "API";
+    public static final String RESOURCE_MCP_SERVER = "MCP_SERVER";
     public static final String RESOURCE_API_PRODUCT = "API Product";
     public static final String RESOURCE_PRODUCT_DOCUMENTATION = "product documentation";
     public static final String RESOURCE_RATING = "Rating";
@@ -84,12 +93,14 @@ public final class RestApiConstants {
     public static final String RESOURCE_COMMENTS = "comments";
     public static final String RESOURCE_MEDIATION_POLICY = "mediation-policy";
     public static final String RESOURCE_API_CATEGORY = "API Category";
+    public static final String RESOURCE_LABEL = "Label";
 
     public static final String API_ID_DELIMITER = "-";
     public static final String QUERY_PARAM = "{query}";
     public static final String ALIAS_PARAM = "{alias}";
     public static final String LIMIT_PARAM = "{limit}";
     public static final String OFFSET_PARAM = "{offset}";
+    public static final String KEYTYPE_PARAM = "{keyType}";
     public static final String SORTBY_PARAM = "{sortBy}";
     public static final String SORTORDER_PARAM = "{sortOrder}";
     public static final String TYPE_PARAM = "{type}";
@@ -100,6 +111,7 @@ public final class RestApiConstants {
     public static final String APIPRODUCTID_PARAM = "{apiProductId}";
     public static final String APPLICATIONID_PARAM = "{applicationId}";
     public static final String DOCUMENTID_PARAM = "{documentId}";
+    public static final String MCP_SERVER_ID_PARAM = "{mcpServerId}";
     public static final String APICATEGORYID_PARAM = "{apiCategoryId}";
     public static final String API_VERSION_PARAM="{version}";
     public static final String SHARED_SCOPE_ID_PARAM = "{scopeId}";
@@ -108,12 +120,14 @@ public final class RestApiConstants {
 
     //todo better to take from cxf level
     public static final String RESOURCE_PATH_APIS = "/apis";
+    public static final String RESOURCE_PATH_MCP_SERVERS = "/mcp-servers";
     public static final String RESOURCE_PATH_ENDPOINT_CERTIFICATE_USAGE = "/endpoint-certificates/"
             + ALIAS_PARAM + "/usage";
     public static final String RESOURCE_PATH_API_PRODUCTS = "/api-products";
     public static final String RESOURCE_PATH_APPLICATIONS = "/applications";
     public static final String RESOURCE_PATH_THROTTLING = "/throttling";
     public static final String RESOURCE_PATH_ENVIRONMENT = "/environments";
+    public static final String RESOURCE_PATH_PLATFORM_GATEWAYS = "/gateways";
     public static final String RESOURCE_PATH_SHARED_SCOPES =  "/scopes";
     public static final String RESOURCE_PATH_REVISIONS = "/revisions";
     public static final String RESOURCE_PATH_SHARED_SCOPES_SCOPE_ID =
@@ -130,7 +144,10 @@ public final class RestApiConstants {
     public static final String RESOURCE_PATH_THROTTLING_POLICIES_GLOBAL = RESOURCE_PATH_THROTTLING_POLICIES
             + "/custom";
     public static final String RESOURCE_PATH_CATEGORY = "/categories";
+    public static final String RESOURCE_PATH_LABEL = "/labels";
+    public static final String RESOURCE_PATH_LLM_PROVIDER = "/llm-providers";
     public static final String KEY_MANAGERS = "/key-managers";
+    public static final String ORGANIZATIONS_PATH= "/organizations";
 
     // Used in XACML authentication interceptor: Deprecated
     public static final String SERVER_URL = "server_url";
@@ -145,43 +162,58 @@ public final class RestApiConstants {
     public static final String RESOURCE_PATH_TAGS = "/tags";
     public static final String RESOURCE_PATH_RATINGS = "/ratings";
     public static final String RESOURCE_PATH_THUMBNAIL = RESOURCE_PATH_APIS + "/" + APIID_PARAM + "/thumbnail";
+    public static final String RESOURCE_PATH_MCP_SERVER_THUMBNAIL = RESOURCE_PATH_MCP_SERVERS + "/"
+            + MCP_SERVER_ID_PARAM + "/thumbnail";
     public static final String RESOURCE_PATH_API_MEDIATION = RESOURCE_PATH_APIS + "/" + APIID_PARAM + "/mediation-policies";
     public static final String RESOURCE_PATH_DOCUMENTS = RESOURCE_PATH_APIS + "/" + APIID_PARAM + "/documents";
+    public static final String RESOURCE_PATH_MCP_SERVER_DOCUMENTS =
+            RESOURCE_PATH_MCP_SERVERS + "/" + MCP_SERVER_ID_PARAM + "/documents";
     public static final String RESOURCE_PATH_PRODUCT_DOCUMENTS = RESOURCE_PATH_API_PRODUCTS + "/" + APIPRODUCTID_PARAM + "/documents";
     public static final String RESOURCE_PATH_THUMBNAIL_API_PRODUCT = RESOURCE_PATH_API_PRODUCTS + "/"
             + APIPRODUCTID_PARAM + "/thumbnail";
     public static final String RESOURCE_PATH_DOCUMENTS_API_PRODUCT = RESOURCE_PATH_API_PRODUCTS + "/"
             + APIPRODUCTID_PARAM + "/documents";
     public static final String RESOURCE_PATH_DOCUMENTS_DOCUMENT_ID = RESOURCE_PATH_DOCUMENTS + "/" + DOCUMENTID_PARAM;
+    public static final String RESOURCE_PATH_MCP_SERVER_DOCUMENTS_DOCUMENT_ID =
+            RESOURCE_PATH_MCP_SERVER_DOCUMENTS + "/" + DOCUMENTID_PARAM;
     public static final String RESOURCE_PATH_PRODUCT_DOCUMENTS_DOCUMENT_ID = RESOURCE_PATH_PRODUCT_DOCUMENTS + "/" + DOCUMENTID_PARAM;
     public static final String RESOURCE_PATH_DOCUMENT_CONTENT = RESOURCE_PATH_DOCUMENTS_DOCUMENT_ID + "/content";
+    public static final String RESOURCE_PATH_MCP_SERVER_DOCUMENT_CONTENT =
+            RESOURCE_PATH_MCP_SERVER_DOCUMENTS_DOCUMENT_ID + "/content";
     public static final String RESOURCE_PATH_PRODUCT_DOCUMENT_CONTENT = RESOURCE_PATH_PRODUCT_DOCUMENTS_DOCUMENT_ID + "/content";
     public static final String RESOURCE_PATH_RESOURCE_PATHS = "/resource-paths";
     public static final String RESOURCE_PATH_COMMENTS = "/comments";
+    public static final String RESOURCE_PATH_API_ENDPOINT = "/endpoints";
     public static final String RESOURCE_PATH_SWAGGER= "/swagger.yaml";
     public static final String REST_API_STORE_VERSION_0 ="v0.16";
     public static final String RESOURCE_PATH_API_CATEGORIES = "/api-categories";
     public static final String RESOURCE_PATH_CATEGORY_THUMBNAIL = RESOURCE_PATH_API_CATEGORIES + "/" + APICATEGORYID_PARAM + "/thumbnail";
-    public static final String REST_API_DEVELOPER_PORTAL_VERSION ="v2";
+    public static final String REST_API_DEVELOPER_PORTAL_VERSION ="v3";
     public static final String REST_API_STORE_CONTEXT="/api/am/store/";
     public static final String REST_API_DEVELOPER_PORTAL_CONTEXT = "api/am/devportal";
     public static final String REST_API_DEVELOPER_PORTAL_RESOURCE_PATH_SETTINGS = "/settings";
     public static final String REST_API_DEVELOPER_PORTAL_RESOURCE_PATH_TENANTS = "/tenants";
     public static final String REST_API_STORE_CONTEXT_FULL_0 = REST_API_STORE_CONTEXT + REST_API_STORE_VERSION_0;
-    public static final String REST_API_DEVELOPER_PORTAL_CONTEXT_FULL = REST_API_DEVELOPER_PORTAL_CONTEXT +
+    public static final String REST_API_DEVELOPER_PORTAL_CONTEXT_FULL = REST_API_DEVELOPER_PORTAL_CONTEXT + "/" +
             REST_API_DEVELOPER_PORTAL_VERSION;
     public static final String REST_API_PUBLISHER_VERSION_0 ="v0.16";
-    public static final String REST_API_PUBLISHER_VERSION = "v3";
+    public static final String REST_API_PUBLISHER_VERSION = "v4";
     public static final String REST_API_PUBLISHER_CONTEXT = "/api/am/publisher/";
     public static final String REST_API_PUBLISHER_CONTEXT_FULL_0 =
             REST_API_PUBLISHER_CONTEXT + REST_API_PUBLISHER_VERSION_0;
     public static final String REST_API_PUBLISHER_CONTEXT_FULL =
             REST_API_PUBLISHER_CONTEXT + REST_API_PUBLISHER_VERSION;
     public static final String REST_API_ADMIN_CONTEXT = "/api/am/admin/";
+    public static final String REST_API_GOVERNANCE_CONTEXT = "api/am/governance/";
+    public static final String REST_API_GOVERNANCE_VERSION = "v1";
     public static final String REST_API_ADMIN_VERSION_0 = "v0.16";
-    public static final String REST_API_ADMIN_VERSION = "v3";
+    public static final String REST_API_ADMIN_VERSION = "v4";
+    public static final String REST_API_DCR_CONTEXT_FULL = "/client-registration/v0.17";
+    public static final String REST_API_DCR_CONTEXT = "/client-registration";
+    public static final String REST_API_DCR_VERSION = "v0.17";
     public static final String REST_API_ADMIN_CONTEXT_FULL_0 = REST_API_ADMIN_CONTEXT + REST_API_ADMIN_VERSION_0;
     public static final String REST_API_ADMIN_CONTEXT_FULL = REST_API_ADMIN_CONTEXT + REST_API_ADMIN_VERSION;
+    public static final String REST_API_GOVERNANCE_CONTEXT_FULL = REST_API_GOVERNANCE_CONTEXT + REST_API_GOVERNANCE_VERSION;
     public static final String REST_API_SERVICE_CATALOG_CONTEXT_FULL = "/api/am/service-catalog";
     public static final String REST_API_PROVIDER = "admin";
     public static final String REST_API_WEB_APP_AUTHENTICATOR_IMPL_CLASS_NAME = "org.wso2.carbon.apimgt.rest.api.util.impl.WebAppAuthenticatorImpl";
@@ -190,6 +222,9 @@ public final class RestApiConstants {
     public static final Pattern REGEX_BEARER_PATTERN = Pattern.compile("Bearer\\s");
     public static final String COOKIE_HEADER_NAME = "cookie";
     public static final String AUTH_COOKIE_NAME = "AM_ACC_TOKEN_DEFAULT_P2"; // This cookie name should be used when setting the cookie for SPA app in SPA app user authentication response to REST API context as path directive
+    public static final String REFERER_COOKIE_NAME = "referer";
+    public static final String GOVERNANCE_ADMIN_AUTH_COOKIE_NAME = "AM_ADMIN_ACC_TOKEN_DEFAULT_P2";
+    public static final String GOVERNANCE_PUBLISHER_AUTH_COOKIE_NAME = "AM_PUBLISHER_ACC_TOKEN_DEFAULT_P2";
 
     public static final String API_VERSION = "API_VERSION";
     public static final String REQUEST_URL = "org.apache.cxf.request.uri";
@@ -200,6 +235,7 @@ public final class RestApiConstants {
     public static final String ORG_ID = "ORG_ID";
 
     public static final int PAGINATION_LIMIT_DEFAULT = 25;
+    public static final String PIZZASHACK_SEARCH_QUERY = "name:PizzaShackAPI version:1.0 context:pizzashack";
     public static final int PAGINATION_OFFSET_DEFAULT = 0;
     public static final String PAGINATION_NEXT_OFFSET = "next_offset";
     public static final String PAGINATION_NEXT_LIMIT = "next_limit";
@@ -272,6 +308,7 @@ public final class RestApiConstants {
     public static final String STATUS_BAD_REQUEST_MESSAGE_DEFAULT = "Bad Request";
     public static final String STATUS_CONFLICT_MESSAGE_RESOURCE_ALREADY_EXISTS = "Resource Already Exists";
     public static final String STATUS_CONFLICT_MESSAGE_DEFAULT = "Conflict";
+    public static final String STATUS_PRECONDITION_FAILED_MESSAGE_DEFAULT = "Precondition Failed";
 
     public static final String STATUS_INTERNAL_SERVER_ERROR_DESCRIPTION_DEFAULT = "The server encountered "
             + "an internal error. Please contact administrator.";
@@ -296,11 +333,11 @@ public final class RestApiConstants {
     public static final String MIGRATION_MODE = "migrationMode";
 
     public static final String CERTS_BASE_PATH = "/certificates";
-    public static final String CLIENT_CERTS_BASE_PATH = "/clientCertificates";
+    public static final String CLIENT_CERTS_BASE_PATH = "/client-certs/";
     public static final String CERTS_GET_PAGINATED_URL =
             CERTS_BASE_PATH + "?limit=" + LIMIT_PARAM + "&offset=" + OFFSET_PARAM + QUERY_PARAM;
     public static final String CLIENT_CERTS_GET_PAGINATED_URL =
-            CLIENT_CERTS_BASE_PATH + "?limit=" + LIMIT_PARAM + "&offset=" + OFFSET_PARAM + QUERY_PARAM;
+            CLIENT_CERTS_BASE_PATH + KEYTYPE_PARAM + "?limit=" + LIMIT_PARAM + "&offset=" + OFFSET_PARAM + QUERY_PARAM;
 
     public static final String IN_SEQUENCE = "in";
     public static final String OUT_SEQUENCE = "out";
@@ -316,6 +353,7 @@ public final class RestApiConstants {
 
     public static final String OAS_VERSION_2 = "v2";
     public static final String OAS_VERSION_3 = "v3";
+    public static final String OAS_VERSION_31 = "v31";
 
     public static final String MESSAGE_EXCHANGE_TOKEN_INFO = "message_exchange_token_info";
 
@@ -330,10 +368,20 @@ public final class RestApiConstants {
     public static final Set<String> ALLOWED_THUMBNAIL_EXTENSIONS = new HashSet<String>(
             Arrays.asList("jpg", "png", "jpeg", "gif", "svg"));
 
+    public static final Set<String> ALLOWED_THUMBNAIL_MEDIA_TYPES = new HashSet<String>(
+            Arrays.asList("image/jpeg", "image/png", "image/gif", "image/svg+xml"));
+
+    public static final String SVG_MEDIA_TYPE = "image/svg+xml";
+    public static final String JPEG_MEDIA_TYPE = "image/jpeg";
+    public static final String PNG_MEDIA_TYPE = "image/png";
+    public static final String GIF_MEDIA_TYPE = "image/gif";
+
     public static final int TAG_LIMIT_DEFAULT = 1000;
     public static final int TAG_OFFSET_DEFAULT = 0;
 
     public static final String RESOURCE_PATH_OPERATION_POLICIES = "operation-policies";
+    public static final String RESOURCE_PATH_API_ENDPOINTS = "api-endpoints";
+    public static final String RESOURCE_PATH_GATEWAY_POLICIES = "gateway-policies";
 
     public static final String AUTH_TOKEN_INFO = "AUTH_TOKEN_INFO";
 }

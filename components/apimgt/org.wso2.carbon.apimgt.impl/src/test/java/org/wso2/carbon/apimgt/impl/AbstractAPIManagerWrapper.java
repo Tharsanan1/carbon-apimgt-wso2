@@ -127,14 +127,21 @@ public class AbstractAPIManagerWrapper extends AbstractAPIManager {
     }
 
     @Override
+    public ApiTypeWrapper getAPIorAPIProductByUUID(String uuid, String organization, String apiType)
+            throws APIManagementException {
+
+        return null;
+    }
+
+    @Override
     public API getLightweightAPIByUUID(String uuid, String organization) throws APIManagementException {
         // TODO Auto-generated method stub
         return null;
     }
 
     @Override
-    public Map<String, Object> searchPaginatedAPIs(String searchQuery, String organization, int start, int end,
-            String sortBy, String sortOrder) throws APIManagementException {
+    public Map<String, Object> searchPaginatedAPIs(String searchQuery, String organization, int start, int end)
+            throws APIManagementException {
         // TODO Auto-generated method stub
         return null;
     }

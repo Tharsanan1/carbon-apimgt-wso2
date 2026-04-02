@@ -35,6 +35,7 @@ import org.wso2.carbon.apimgt.api.model.policy.JWTClaimsCondition;
 import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
 import org.wso2.carbon.apimgt.api.model.policy.QueryParameterCondition;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.dto.DistributedThrottleConfig;
 import org.wso2.carbon.apimgt.impl.template.APITemplateException;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.throttle.policy.deployer.dto.APIPolicyConditionGroup;
@@ -43,6 +44,7 @@ import org.wso2.carbon.apimgt.throttle.policy.deployer.dto.ApplicationPolicy;
 import org.wso2.carbon.apimgt.throttle.policy.deployer.dto.Condition;
 import org.wso2.carbon.apimgt.throttle.policy.deployer.dto.GlobalPolicy;
 import org.wso2.carbon.apimgt.throttle.policy.deployer.dto.SubscriptionPolicy;
+import org.wso2.carbon.apimgt.throttle.policy.deployer.internal.ServiceReferenceHolder;
 import org.wso2.carbon.utils.CarbonUtils;
 
 import java.io.File;
@@ -67,6 +69,7 @@ public class ThrottlePolicyTemplateBuilder {
     private static final String POLICY_VELOCITY_APP = "throttle_policy_template_app";
     private static final String POLICY_VELOCITY_SUB = "throttle_policy_template_sub";
     private static final String POLICY_VELOCITY_ASYNC_SUB = "throttle_policy_template_async_sub";
+    private static final String POLICY_VELOCITY_AI_SUB = "throttle_policy_template_ai_sub";
     private final String policyTemplateLocation = "repository" + File.separator + "resources" + File.separator
             + "policy_templates" + File.separator;
 
@@ -80,6 +83,11 @@ public class ThrottlePolicyTemplateBuilder {
         StringBuilder conditionString = new StringBuilder();
         int i = 0;
         for (Condition condition : conditions) {
+            if ("Header".equals(
+                    condition.getConditionType())) {
+                // set the header name of header based conditions, to lower case to make the condition case-insensitive
+                condition.setName(condition.getName().toLowerCase(Locale.ENGLISH));
+            }
             org.wso2.carbon.apimgt.api.model.policy.Condition mappedCondition =
                     PolicyMappingUtil.mapCondition(condition);
             if (i == 0) {
@@ -263,6 +271,7 @@ public class ThrottlePolicyTemplateBuilder {
                     setConstantContext(context);
                     context.put("policy", policy);
                     context.put("quotaPolicy", conditionGroup.getDefaultLimit());
+                    context.put("isDistributed", getDistributedStatus());
                     context.put("pipeline", "condition_" + conditionGroup.getConditionGroupId());
 
                     String conditionString = getPolicyCondition(conditionGroup.getCondition());
@@ -335,6 +344,7 @@ public class ThrottlePolicyTemplateBuilder {
             setConstantContext(context);
             context.put("policy", policy);
             context.put("quotaPolicy", policy.getDefaultLimit());
+            context.put("isDistributed", getDistributedStatus());
             context.put("evaluatedConditions",
                     new String(Base64.encodeBase64(policyConditionJson.toJSONString()
                             .getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
@@ -421,6 +431,7 @@ public class ThrottlePolicyTemplateBuilder {
             setConstantContext(context);
             context.put("policy", policy);
             context.put("quotaPolicy", policy.getDefaultLimit());
+            context.put("isDistributed", getDistributedStatus());
             template.merge(context, writer);
             if (log.isDebugEnabled()) {
                 log.debug("Policy : " + writer.toString());
@@ -457,6 +468,8 @@ public class ThrottlePolicyTemplateBuilder {
             Template template;
             if (PolicyConstants.EVENT_COUNT_TYPE.equals(policy.getDefaultLimit().getQuotaType())) {
                 template = velocityengine.getTemplate(getTemplatePathForAsyncSubscription());
+            } else if (PolicyConstants.AI_API_QUOTA_TYPE.equals(policy.getDefaultLimit().getQuotaType())) {
+                template = velocityengine.getTemplate(getTemplatePathForAISubscription());
             } else {
                 template = velocityengine.getTemplate(getTemplatePathForSubscription());
             }
@@ -464,6 +477,7 @@ public class ThrottlePolicyTemplateBuilder {
             setConstantContext(context);
             context.put("policy", policy);
             context.put("quotaPolicy", policy.getDefaultLimit());
+            context.put("isDistributed", getDistributedStatus());
             template.merge(context, writer);
             if (log.isDebugEnabled()) {
                 log.debug("Policy : " + writer.toString());
@@ -497,5 +511,21 @@ public class ThrottlePolicyTemplateBuilder {
 
     private String getTemplatePathForAsyncSubscription() {
         return policyTemplateLocation + ThrottlePolicyTemplateBuilder.POLICY_VELOCITY_ASYNC_SUB + ".xml";
+    }
+
+    private String getTemplatePathForAISubscription() {
+        return policyTemplateLocation + ThrottlePolicyTemplateBuilder.POLICY_VELOCITY_AI_SUB + ".xml";
+    }
+
+    private boolean getDistributedStatus() {
+        try {
+            DistributedThrottleConfig dtConfig =  ServiceReferenceHolder.getInstance()
+                    .getAPIMConfiguration()
+                    .getDistributedThrottleConfig();
+            return dtConfig.isEnabled();
+        } catch (Exception e) {
+            log.warn("Failed to load distributed throttle configuration from API Manager config. Using defaults.", e);
+            return false;
+        }
     }
 }

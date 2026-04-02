@@ -1,0 +1,169 @@
+/*
+ * Copyright (c) 2024 WSO2 LLC. (http://www.wso2.org) All Rights Reserved.
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.wso2.carbon.apimgt.api;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
+
+public class LLMProviderConfiguration {
+
+    @JsonProperty("connectorType")
+    private String connectorType;
+
+    @JsonProperty("metadata")
+    private List<LLMProviderMetadata> metadata;
+
+    @JsonProperty("authHeader")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String authHeader;
+
+    @JsonProperty("authQueryParameter")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String authQueryParameter;
+
+    @JsonProperty("authenticationConfiguration")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    LLMProviderAuthenticationConfiguration authenticationConfiguration;
+
+    @JsonProperty(APIConstants.AIAPIConstants.LLM_PROVIDER_DEPRECATED)
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    private boolean deprecated = false;
+
+    public LLMProviderConfiguration() {
+    }
+
+    @JsonCreator
+    public LLMProviderConfiguration(
+            @JsonProperty("connectorType") String connectorType,
+            @JsonProperty("metadata") List<LLMProviderMetadata> metadata,
+            @JsonProperty("authHeader") String authHeader,
+            @JsonProperty("authQueryParameter") String authQueryParameter,
+            @JsonProperty("authenticationConfiguration")
+            LLMProviderAuthenticationConfiguration authenticationConfiguration,
+            @JsonProperty("deprecated") Boolean deprecated) {
+
+        this.connectorType = connectorType;
+        this.metadata = metadata;
+        this.authHeader = authHeader;
+        this.authQueryParameter = authQueryParameter;
+        this.authenticationConfiguration = authenticationConfiguration;
+        if (deprecated != null) {
+            this.deprecated = deprecated;
+        }
+    }
+
+    public void setAuthQueryParameter(String authQueryParameter) {
+        this.authQueryParameter = authQueryParameter;
+    }
+
+    public LLMProviderAuthenticationConfiguration getAuthenticationConfiguration() {
+        if (authenticationConfiguration == null) {
+            LLMProviderAuthenticationConfiguration authenticationConfiguration =
+                    new LLMProviderAuthenticationConfiguration();
+            if (StringUtils.isNotEmpty(authQueryParameter) || StringUtils.isNotEmpty(authHeader)) {
+                authenticationConfiguration.setEnabled(true);
+                authenticationConfiguration.setType(APIConstants.AIAPIConstants.API_KEY_AUTHENTICATION_TYPE);
+                Map<String,Object> parameters = new HashMap<>();
+                if (StringUtils.isNotEmpty(authHeader)) {
+                    parameters.put(APIConstants.AIAPIConstants.API_KEY_HEADER_ENABLED, true);
+                    parameters.put(APIConstants.AIAPIConstants.API_KEY_HEADER_NAME, authHeader);
+                }else if (StringUtils.isNotEmpty(authQueryParameter)){
+                    parameters.put(APIConstants.AIAPIConstants.API_KEY_QUERY_PARAMETER_ENABLED, true);
+                    parameters.put(APIConstants.AIAPIConstants.API_KEY_QUERY_PARAMETER_NAME, authQueryParameter);
+                }
+                authenticationConfiguration.setParameters(parameters);
+            } else {
+                authenticationConfiguration.setEnabled(false);
+            }
+            return authenticationConfiguration;
+        }
+        return authenticationConfiguration;
+    }
+
+    public void setAuthenticationConfiguration(
+            LLMProviderAuthenticationConfiguration authenticationConfiguration) {
+        this.authenticationConfiguration = authenticationConfiguration;
+    }
+
+    public String getConnectorType() {
+
+        return connectorType;
+    }
+
+    public void setConnectorType(String connectorType) {
+
+        this.connectorType = connectorType;
+    }
+
+    public List<LLMProviderMetadata> getMetadata() {
+
+        return metadata;
+    }
+
+    public void setMetadata(List<LLMProviderMetadata> metadata) {
+
+        this.metadata = metadata;
+    }
+
+    public String getAuthHeader() {
+
+        return authHeader;
+    }
+
+    public void setAuthHeader(String authHeader) {
+
+        this.authHeader = authHeader;
+    }
+
+    public String getAuthQueryParameter() {
+
+        return authQueryParameter;
+    }
+
+    public void setAuthQueryParam(String authQueryParameter) {
+
+        this.authQueryParameter = authQueryParameter;
+    }
+
+    public boolean isDeprecated() {
+        return deprecated;
+    }
+
+    public void setDeprecated(boolean deprecated) {
+        this.deprecated = deprecated;
+    }
+
+    public String toJsonString() throws APIManagementException {
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.writeValueAsString(this);
+        } catch (IOException e) {
+            throw new APIManagementException("Error occurred while parsing LLM Provider configuration");
+        }
+    }
+}

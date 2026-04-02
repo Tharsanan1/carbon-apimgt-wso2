@@ -25,6 +25,7 @@ import org.wso2.carbon.apimgt.api.model.Comment;
 import org.wso2.carbon.apimgt.api.model.Identifier;
 import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
 import org.wso2.carbon.apimgt.api.model.SubscriptionResponse;
+import org.wso2.carbon.apimgt.api.model.ApplicationResponse;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 
 /**
@@ -94,8 +95,8 @@ public class UserAwareAPIConsumer extends APIConsumerImpl {
     }
 
     @Override
-    public void updateApplication(Application application) throws APIManagementException {
-        super.updateApplication(application);
+    public ApplicationResponse updateApplication(Application application) throws APIManagementException {
+        return super.updateApplication(application);
     }
 
     @Override
@@ -135,10 +136,17 @@ public class UserAwareAPIConsumer extends APIConsumerImpl {
     }
 
     @Override
+    public ApiTypeWrapper getAPIorAPIProductByUUID(String uuid, String organization, String apiType)
+            throws APIManagementException {
+        ApiTypeWrapper apiTypeWrapper = super.getAPIorAPIProductByUUID(uuid, organization, apiType);
+        return apiTypeWrapper;
+    }
+
+    @Override
     public API getLightweightAPI(APIIdentifier identifier, String orgId) throws APIManagementException {
         API api = super.getLightweightAPI(identifier, orgId);
         checkVisibilityPermission(userNameWithoutChange, api.getVisibility(),
-                api.getVisibleRoles());
+                api.getVisibleRoles(), api.getAccessControl(), api.getAccessControlRoles());
         return api;
     }
 }

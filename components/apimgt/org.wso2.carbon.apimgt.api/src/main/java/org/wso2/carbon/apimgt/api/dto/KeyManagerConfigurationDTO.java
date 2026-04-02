@@ -19,7 +19,9 @@
 package org.wso2.carbon.apimgt.api.dto;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,9 +44,11 @@ public class KeyManagerConfigurationDTO implements Serializable {
     private String tokenType;
     private String externalReferenceId = null;
     private String alias = null;
+    private KeyManagerPermissionConfigurationDTO permissions = new KeyManagerPermissionConfigurationDTO();
+    private Boolean isUsed = null;
+    private List<String> allowedOrganizations = new ArrayList<String>();
 
     public KeyManagerConfigurationDTO() {
-
     }
 
     public KeyManagerConfigurationDTO(KeyManagerConfigurationDTO keyManagerConfigurationDTO) {
@@ -60,6 +64,8 @@ public class KeyManagerConfigurationDTO implements Serializable {
         this.tokenType = keyManagerConfigurationDTO.getTokenType();
         this.externalReferenceId = keyManagerConfigurationDTO.getExternalReferenceId();
         this.endpoints = keyManagerConfigurationDTO.getEndpoints();
+        this.setPermissions(keyManagerConfigurationDTO.getPermissions());
+        this.allowedOrganizations = keyManagerConfigurationDTO.getAllowedOrganizations();
     }
     public String getName() {
 
@@ -183,5 +189,34 @@ public class KeyManagerConfigurationDTO implements Serializable {
     public void setEndpoints(Map<String, String> endpoints) {
 
         this.endpoints = endpoints;
+    }
+
+    public KeyManagerPermissionConfigurationDTO getPermissions () {
+        return permissions;
+    }
+
+    public void setPermissions (KeyManagerPermissionConfigurationDTO permissions) {
+        if (permissions == null) {
+            permissions = new KeyManagerPermissionConfigurationDTO();
+        }
+        this.permissions = permissions;
+    }
+
+    public Boolean getIsUsed() {
+
+        return this.isUsed;
+    }
+
+    public void setUsed(Boolean isUsed) {
+
+        this.isUsed = isUsed;
+    }
+
+    public List<String> getAllowedOrganizations() {
+        return allowedOrganizations;
+    }
+
+    public void setAllowedOrganizations(List<String> allowedOrganizations) {
+        this.allowedOrganizations = allowedOrganizations;
     }
 }

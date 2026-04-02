@@ -2,22 +2,32 @@ package org.wso2.carbon.apimgt.internal.service.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+import javax.validation.constraints.*;
 
 
 import io.swagger.annotations.*;
 import java.util.Objects;
 
 import javax.xml.bind.annotation.*;
+import org.wso2.carbon.apimgt.rest.api.common.annotations.Scope;
+import com.fasterxml.jackson.annotation.JsonCreator;
+
+import javax.validation.Valid;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 
 public class KeyManagerDTO   {
   
+    private String uuid = null;
     private String name = null;
     private String type = null;
     private Boolean enabled = null;
-    private String tenantDomain = null;
-    private Object _configuration = null;
+    private String organization = null;
+    private Object additionalProperties = null;
 
     @XmlType(name="TokenTypeEnum")
     @XmlEnum(String.class)
@@ -51,6 +61,23 @@ return null;
         }
     }
     private TokenTypeEnum tokenType = TokenTypeEnum.DIRECT;
+
+  /**
+   **/
+  public KeyManagerDTO uuid(String uuid) {
+    this.uuid = uuid;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("uuid")
+  public String getUuid() {
+    return uuid;
+  }
+  public void setUuid(String uuid) {
+    this.uuid = uuid;
+  }
 
   /**
    **/
@@ -105,36 +132,37 @@ return null;
 
   /**
    **/
-  public KeyManagerDTO tenantDomain(String tenantDomain) {
-    this.tenantDomain = tenantDomain;
+  public KeyManagerDTO organization(String organization) {
+    this.organization = organization;
     return this;
   }
 
   
   @ApiModelProperty(value = "")
-  @JsonProperty("tenantDomain")
-  public String getTenantDomain() {
-    return tenantDomain;
+  @JsonProperty("organization")
+  public String getOrganization() {
+    return organization;
   }
-  public void setTenantDomain(String tenantDomain) {
-    this.tenantDomain = tenantDomain;
+  public void setOrganization(String organization) {
+    this.organization = organization;
   }
 
   /**
    **/
-  public KeyManagerDTO _configuration(Object _configuration) {
-    this._configuration = _configuration;
+  public KeyManagerDTO additionalProperties(Object additionalProperties) {
+    this.additionalProperties = additionalProperties;
     return this;
   }
 
   
   @ApiModelProperty(value = "")
-  @JsonProperty("configuration")
-  public Object getConfiguration() {
-    return _configuration;
+      @Valid
+  @JsonProperty("additionalProperties")
+  public Object getAdditionalProperties() {
+    return additionalProperties;
   }
-  public void setConfiguration(Object _configuration) {
-    this._configuration = _configuration;
+  public void setAdditionalProperties(Object additionalProperties) {
+    this.additionalProperties = additionalProperties;
   }
 
   /**
@@ -165,17 +193,18 @@ return null;
       return false;
     }
     KeyManagerDTO keyManager = (KeyManagerDTO) o;
-    return Objects.equals(name, keyManager.name) &&
+    return Objects.equals(uuid, keyManager.uuid) &&
+        Objects.equals(name, keyManager.name) &&
         Objects.equals(type, keyManager.type) &&
         Objects.equals(enabled, keyManager.enabled) &&
-        Objects.equals(tenantDomain, keyManager.tenantDomain) &&
-        Objects.equals(_configuration, keyManager._configuration) &&
+        Objects.equals(organization, keyManager.organization) &&
+        Objects.equals(additionalProperties, keyManager.additionalProperties) &&
         Objects.equals(tokenType, keyManager.tokenType);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, type, enabled, tenantDomain, _configuration, tokenType);
+    return Objects.hash(uuid, name, type, enabled, organization, additionalProperties, tokenType);
   }
 
   @Override
@@ -183,11 +212,12 @@ return null;
     StringBuilder sb = new StringBuilder();
     sb.append("class KeyManagerDTO {\n");
     
+    sb.append("    uuid: ").append(toIndentedString(uuid)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    type: ").append(toIndentedString(type)).append("\n");
     sb.append("    enabled: ").append(toIndentedString(enabled)).append("\n");
-    sb.append("    tenantDomain: ").append(toIndentedString(tenantDomain)).append("\n");
-    sb.append("    _configuration: ").append(toIndentedString(_configuration)).append("\n");
+    sb.append("    organization: ").append(toIndentedString(organization)).append("\n");
+    sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
     sb.append("    tokenType: ").append(toIndentedString(tokenType)).append("\n");
     sb.append("}");
     return sb.toString();

@@ -1,5 +1,6 @@
 package org.wso2.carbon.apimgt.rest.api.admin.v1.impl;
 
+import com.google.gson.Gson;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -10,6 +11,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.impl.APIAdminImpl;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.caching.CacheProvider;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 import org.apache.cxf.jaxrs.ext.MessageContext;
@@ -77,9 +79,15 @@ public class SystemScopesApiServiceImpl implements SystemScopesApiService {
             throws APIManagementException {
         JSONObject newScopeRoleJson = SystemScopesMappingUtil.createJsonObjectOfScopeMapping(body);
         APIUtil.updateTenantConfOfRoleScopeMapping(newScopeRoleJson, RestApiCommonUtil.getLoggedInUsername());
-        Map<String, String> scopeRoleMapping = APIUtil.getRESTAPIScopesForTenantWithoutRoleMappings(MultitenantUtils
-                .getTenantDomain(RestApiCommonUtil.getLoggedInUsername()));
+        String tenantDomain = MultitenantUtils.getTenantDomain(RestApiCommonUtil.getLoggedInUsername());
+        CacheProvider.getRESTAPIScopeCache().remove(tenantDomain);
+        if (log.isDebugEnabled()) {
+            log.debug("REST API scope cache removed for tenant: " + tenantDomain);
+        }
+        Map<String, String> scopeRoleMapping = APIUtil.getRESTAPIScopesForTenantWithoutRoleMappings(tenantDomain);
         ScopeListDTO scopeListDTO = SystemScopesMappingUtil.fromScopeListToScopeListDTO(scopeRoleMapping);
+        APIUtil.logAuditMessage(APIConstants.AuditLogConstants.ROLES_FOR_SCOPE, APIConstants.AuditLogConstants.ROLES_FOR_SCOPE_INFO,
+                APIConstants.AuditLogConstants.UPDATED, RestApiCommonUtil.getLoggedInUsername());
         return Response.ok().entity(scopeListDTO).build();
     }
 
@@ -110,6 +118,8 @@ public class SystemScopesApiServiceImpl implements SystemScopesApiService {
             roleAliasListDTO = SystemScopesMappingUtil.fromRoleAliasListToRoleAliasListDTO(
                     SystemScopesMappingUtil.createMapOfRoleMapping((roleMapping)));
         }
+        APIUtil.logAuditMessage(APIConstants.AuditLogConstants.SYSTEM_SCOPE_ROLE_ALIASES, new Gson().toJson(roleAliasListDTO),
+                APIConstants.AuditLogConstants.UPDATED, RestApiCommonUtil.getLoggedInUsername());
         return Response.ok().entity(roleAliasListDTO).build();
     }
 }

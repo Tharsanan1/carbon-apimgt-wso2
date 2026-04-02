@@ -17,12 +17,15 @@
 package org.wso2.carbon.apimgt.impl.token;
 
 import com.nimbusds.jwt.JWTClaimsSet;
+import net.minidev.json.JSONObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.json.JSONObject;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.dto.JwtTokenInfoDTO;
+import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.impl.utils.APIKeyUtils;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.base.api.ServerConfigurationService;
 import org.wso2.carbon.core.util.KeyStoreManager;
@@ -33,9 +36,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
 
+import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -89,9 +97,18 @@ public class DefaultApiKeyGenerator implements ApiKeyGenerator {
         if (expireIn != -1) {
             jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.EXPIRY_TIME, expireIn);
         }
-        jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.SUBSCRIBED_APIS, jwtTokenInfoDTO.getSubscribedApiDTOList());
-        jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.TIER_INFO, jwtTokenInfoDTO.getSubscriptionPolicyDTOList());
-        jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.APPLICATION, jwtTokenInfoDTO.getApplication());
+        if (APIKeyUtils.isLightweightAPIKeyGenerationEnabled()) {
+            JSONObject application = new JSONObject();
+            application.put(APIConstants.JwtTokenConstants.APPLICATION_ID, jwtTokenInfoDTO.getApplication().getId());
+            application.put(APIConstants.JwtTokenConstants.APPLICATION_UUID, jwtTokenInfoDTO.getApplication().getUuid());
+            jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.APPLICATION, application);
+        } else {
+            jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.SUBSCRIBED_APIS,
+                    jwtTokenInfoDTO.getSubscribedApiDTOList());
+            jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.TIER_INFO,
+                    jwtTokenInfoDTO.getSubscriptionPolicyDTOList());
+            jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.APPLICATION, jwtTokenInfoDTO.getApplication());
+        }
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.KEY_TYPE, jwtTokenInfoDTO.getKeyType());
         jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.TOKEN_TYPE,
                 APIConstants.JwtTokenConstants.API_KEY_TOKEN_TYPE);
@@ -102,24 +119,76 @@ public class DefaultApiKeyGenerator implements ApiKeyGenerator {
         if (jwtTokenInfoDTO.getPermittedReferer() != null) {
             jwtClaimsSetBuilder.claim(APIConstants.JwtTokenConstants.PERMITTED_REFERER, jwtTokenInfoDTO.getPermittedReferer());
         }
+        Map<String, Object> claimSet = jwtClaimsSetBuilder.build().toJSONObject();
 
-        return jwtClaimsSetBuilder.build().toJSONObject().toJSONString();
+        return new JSONObject(claimSet).toJSONString();
     }
 
     protected String buildHeader() throws APIManagementException {
-        Certificate publicCert;
+        Certificate publicCert = null;
         JSONObject headerWithKid;
         try {
             KeyStoreManager tenantKSM = KeyStoreManager.getInstance(MultitenantConstants.SUPER_TENANT_ID);
-            publicCert = tenantKSM.getDefaultPrimaryCertificate();
-            String headerWithoutKid = APIUtil.generateHeader(publicCert, APIConstants.SIGNATURE_ALGORITHM_SHA256_WITH_RSA);
-            headerWithKid = new JSONObject(headerWithoutKid);
+            KeyStore apiKeySignKeyStore = getApiKeySignKeyStore(tenantKSM);
+            String apiKeySignKeyStoreName = APIUtil.getApiKeySignKeyStoreName();
+            if (apiKeySignKeyStore != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Using API key sign keystore: " + apiKeySignKeyStoreName);
+                }
+                ServerConfigurationService config =  tenantKSM.getServerConfigService();
+                String apiKeySignAlias = config.getFirstProperty(APIConstants.KeyStoreManagement
+                        .SERVER_APIKEYSIGN_KEYSTORE_KEY_ALIAS.replaceFirst(APIConstants.KeyStoreManagement.KeyStoreName,
+                                apiKeySignKeyStoreName));
+                publicCert = apiKeySignKeyStore.getCertificate(apiKeySignAlias);
+            }
+            if (publicCert == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Using default primary certificate as no specific certificate found" +
+                            "in the API key sign keystore: " + apiKeySignKeyStoreName);
+                }
+                publicCert = tenantKSM.getDefaultPrimaryCertificate();
+            }
+            headerWithKid = generateHeader(publicCert, APIConstants.SIGNATURE_ALGORITHM_SHA256_WITH_RSA);
             headerWithKid.put("kid", APIUtil.getApiKeyAlias());
-
         } catch (Exception e) {
             throw new APIManagementException("Error while building Api key header", e);
         }
         return headerWithKid.toString();
+    }
+
+    /**
+     * Utility method to generate JWT header with public certificate thumbprint for signature verification.
+     *
+     * @param publicCert         The public certificate which needs to include in the header as thumbprint
+     * @param signatureAlgorithm signature algorithm which needs to include in the header
+     */
+    private JSONObject generateHeader(Certificate publicCert, String signatureAlgorithm) throws APIManagementException {
+        try {
+            //generate the SHA-256 thumbprint of the certificate
+            MessageDigest digestValue = MessageDigest.getInstance("SHA-256");
+            byte[] der = publicCert.getEncoded();
+            digestValue.update(der);
+            byte[] digestInBytes = digestValue.digest();
+            String publicCertThumbprint = APIUtil.hexify(digestInBytes);
+            String base64UrlEncodedThumbPrint;
+            base64UrlEncodedThumbPrint = java.util.Base64.getUrlEncoder()
+                    .encodeToString(publicCertThumbprint.getBytes(StandardCharsets.UTF_8));
+
+            /*
+             * Sample header
+             * {"typ":"JWT", "alg":"SHA256withRSA", "x5t#S256":"a_jhNus21KVuoFx65LmkW2O_l10",
+             * "kid":"a_jhNus21KVuoFx65LmkW2O_l10_RS256"}
+             * {"typ":"JWT", "alg":"[2]", "x5t#S256":"[1]", "kid":"gateway_certificate_alias"}
+             * */
+            JSONObject jwtHeader = new JSONObject();
+            jwtHeader.put("typ", "JWT");
+            jwtHeader.put("alg", APIUtil.getJWSCompliantAlgorithmCode(signatureAlgorithm));
+            jwtHeader.put("x5t#S256", base64UrlEncodedThumbPrint);
+            return jwtHeader;
+
+        } catch (NoSuchAlgorithmException | CertificateEncodingException e) {
+            throw new APIManagementException("Error in generating public certificate thumbprint", e);
+        }
     }
 
     protected byte[] buildSignature(String assertion) throws APIManagementException {

@@ -21,8 +21,12 @@ package org.wso2.carbon.apimgt.internal.service.utils;
 import edu.emory.mathcs.backport.java.util.Arrays;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.cxf.jaxrs.ext.MessageContext;
+import org.wso2.carbon.apimgt.api.APIConsumer;
+import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.APIProvider;
 import org.wso2.carbon.apimgt.api.dto.ConditionDTO;
-import org.wso2.carbon.apimgt.api.model.Scope;
+import org.wso2.carbon.apimgt.api.model.*;
+import org.wso2.carbon.apimgt.api.model.policy.AIAPIQuotaLimit;
 import org.wso2.carbon.apimgt.api.model.policy.BandwidthLimit;
 import org.wso2.carbon.apimgt.api.model.policy.EventCountLimit;
 import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
@@ -39,31 +43,7 @@ import org.wso2.carbon.apimgt.api.model.subscription.Policy;
 import org.wso2.carbon.apimgt.api.model.subscription.Subscription;
 import org.wso2.carbon.apimgt.api.model.subscription.SubscriptionPolicy;
 import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
-import org.wso2.carbon.apimgt.internal.service.dto.APIDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.APIListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApiPolicyConditionGroupDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApiPolicyDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApiPolicyListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApplicationDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApplicationKeyMappingDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApplicationKeyMappingListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApplicationListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApplicationPolicyDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ApplicationPolicyListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.BandwidthLimitDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.EventCountLimitDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.GlobalPolicyDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.GlobalPolicyListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.GroupIdDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.RequestCountLimitDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ScopeDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ScopesListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.SubscriptionDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.SubscriptionListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.SubscriptionPolicyDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.SubscriptionPolicyListDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.ThrottleLimitDTO;
-import org.wso2.carbon.apimgt.internal.service.dto.URLMappingDTO;
+import org.wso2.carbon.apimgt.internal.service.dto.*;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
@@ -74,9 +54,10 @@ import java.util.Set;
 
 public class SubscriptionValidationDataUtil {
 
-    private static APIDTO fromAPItoDTO(API model) {
+    private static APIDTO fromAPItoDTO(API model) throws APIManagementException {
 
         APIDTO apidto = null;
+        APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
         if (model != null) {
             apidto = new APIDTO();
             apidto.setUuid(model.getApiUUID());
@@ -84,12 +65,22 @@ public class SubscriptionValidationDataUtil {
             apidto.setVersion(model.getVersion());
             apidto.setName(model.getName());
             apidto.setContext(model.getContext());
+            apidto.setContextTemplate(model.getContextTemplate());
             apidto.setPolicy(model.getPolicy());
             apidto.setProvider(model.getProvider());
             apidto.setApiType(model.getApiType());
             apidto.setName(model.getName());
             apidto.setStatus(model.getStatus());
             apidto.setIsDefaultVersion(model.isDefaultVersion());
+            apidto.setOrganization(model.getOrganization());
+            // The security schema is necessary only for the websocket APIs. To prevent unnecessary registry calls,
+            // it has been excluded from other APIs, thus reducing operational costs.
+            if(model.getApiType() != null && model.getApiType().equals("WS")) {
+                apidto.setSecurityScheme(apiProvider.
+                        getSecuritySchemeOfAPI(model.getApiUUID(), model.getOrganization()));
+            }
+            apidto.setIsSubscriptionValidationDisabled(apiProvider
+                    .isSubscriptionValidationDisabled(model.getApiUUID()));
             Map<String, URLMapping> urlMappings = model.getAllResources();
             List<URLMappingDTO> urlMappingsDTO = new ArrayList<>();
             for (URLMapping urlMapping : urlMappings.values()) {
@@ -99,28 +90,96 @@ public class SubscriptionValidationDataUtil {
                 urlMappingDTO.setThrottlingPolicy(urlMapping.getThrottlingPolicy());
                 urlMappingDTO.setUrlPattern(urlMapping.getUrlPattern());
                 urlMappingDTO.setScopes(urlMapping.getScopes());
+                urlMappingDTO.setDescription(urlMapping.getDescription());
+                urlMappingDTO.setSchemaDefinition(urlMapping.getSchemaDefinition());
+
+                BackendOperationMapping backendOperationMapping = urlMapping.getBackendOperationMapping();
+                if (backendOperationMapping != null) {
+                    BackendOperation backendOperation = backendOperationMapping.getBackendOperation();
+                    if (backendOperation != null) {
+                        BackendOperationDTO backendOperationDTO = new BackendOperationDTO();
+                        backendOperationDTO.setVerb(backendOperation.getVerb().toString());
+                        backendOperationDTO.setTarget(backendOperation.getTarget());
+
+                        BackendOperationMappingDTO backendOperationMappingDTO = new BackendOperationMappingDTO();
+                        backendOperationMappingDTO.setBackendId(backendOperationMapping.getBackendId());
+                        backendOperationMappingDTO.setBackendOperation(backendOperationDTO);
+                        urlMappingDTO.setBackendOperationMapping(backendOperationMappingDTO);
+                    }
+                }
+
+                APIOperationMapping apiOperationMapping = urlMapping.getApiOperationMapping();
+                if (apiOperationMapping != null) {
+                    BackendOperation backendOperation = apiOperationMapping.getBackendOperation();
+                    if (backendOperation != null) {
+                        BackendOperationDTO backendOperationDTO = new BackendOperationDTO();
+                        backendOperationDTO.setVerb(backendOperation.getVerb().toString());
+                        backendOperationDTO.setTarget(backendOperation.getTarget());
+
+                        APIOperationMappingDTO apiOperationMappingDTO = new APIOperationMappingDTO();
+                        apiOperationMappingDTO.setApiUUID(apidto.getUuid());
+                        apiOperationMappingDTO.setApiName(apiOperationMapping.getApiName());
+                        apiOperationMappingDTO.setApiVersion(apiOperationMapping.getApiVersion());
+                        apiOperationMappingDTO.setApiContext(apiOperationMapping.getApiContext());
+                        apiOperationMappingDTO.setBackendOperation(backendOperationDTO);
+                        urlMappingDTO.setApiOperationMapping(apiOperationMappingDTO);
+                    }
+                }
+
+                List<OperationPolicyDTO> operationPolicyDTOList = new ArrayList<>();
+                for (OperationPolicy operationPolicy : urlMapping.getOperationPolicies()) {
+                    OperationPolicyDTO operationPolicyDTO = new OperationPolicyDTO();
+                    operationPolicyDTO.setPolicyId(operationPolicy.getPolicyId());
+                    operationPolicyDTO.setPolicyName(operationPolicy.getPolicyName());
+                    operationPolicyDTO.setPolicyVersion(operationPolicy.getPolicyVersion());
+                    operationPolicyDTO.setDirection(operationPolicy.getDirection());
+                    operationPolicyDTO.setParameters(operationPolicy.getParameters());
+                    operationPolicyDTO.setOrder(operationPolicy.getOrder());
+                    operationPolicyDTOList.add(operationPolicyDTO);
+                }
+                urlMappingDTO.setOperationPolicies(operationPolicyDTOList);
                 urlMappingsDTO.add(urlMappingDTO);
             }
+            List<OperationPolicyDTO> apiPolicies = new ArrayList<>();
+            for (OperationPolicy apiPolicy : model.getApiPolicies()) {
+                OperationPolicyDTO operationPolicyDTO = new OperationPolicyDTO();
+                operationPolicyDTO.setPolicyId(apiPolicy.getPolicyId());
+                operationPolicyDTO.setPolicyName(apiPolicy.getPolicyName());
+                operationPolicyDTO.setPolicyVersion(apiPolicy.getPolicyVersion());
+                operationPolicyDTO.setDirection(apiPolicy.getDirection());
+                operationPolicyDTO.setOrder(apiPolicy.getOrder());
+                operationPolicyDTO.setParameters(apiPolicy.getParameters());
+                apiPolicies.add(operationPolicyDTO);
+            }
+            apidto.setApiPolicies(apiPolicies);
             apidto.setUrlMappings(urlMappingsDTO);
+            apidto.setIsEgress(model.isEgress() != 0);
+            apidto.setSubtype(model.getSubtype());
         }
         return apidto;
     }
 
-    public static APIListDTO fromAPIToAPIListDTO(API model) {
+    public static APIListDTO fromAPIToAPIListDTO(API model) throws APIManagementException {
 
         APIListDTO apiListdto = new APIListDTO();
+        APIProvider apiProvider = RestApiCommonUtil.getLoggedInUserProvider();
         if (model != null) {
             APIDTO apidto = new APIDTO();
             apidto.setUuid(model.getApiUUID());
             apidto.setApiId(model.getApiId());
             apidto.setVersion(model.getVersion());
             apidto.setContext(model.getContext());
+            apidto.setContextTemplate(model.getContextTemplate());
             apidto.setPolicy(model.getPolicy());
             apidto.setProvider(model.getProvider());
             apidto.setApiType(model.getApiType());
             apidto.setName(model.getName());
             apidto.setStatus(model.getStatus());
             apidto.setIsDefaultVersion(model.isDefaultVersion());
+            apidto.setOrganization(model.getOrganization());
+            apidto.setSecurityScheme(apiProvider.getSecuritySchemeOfAPI(model.getApiUUID(), model.getOrganization()));
+            apidto.setIsSubscriptionValidationDisabled(apiProvider
+                    .isSubscriptionValidationDisabled(model.getApiUUID()));
             Map<String, URLMapping> urlMappings = model.getAllResources();
             List<URLMappingDTO> urlMappingsDTO = new ArrayList<>();
             for (URLMapping urlMapping : urlMappings.values()) {
@@ -130,9 +189,71 @@ public class SubscriptionValidationDataUtil {
                 urlMappingDTO.setThrottlingPolicy(urlMapping.getThrottlingPolicy());
                 urlMappingDTO.setUrlPattern(urlMapping.getUrlPattern());
                 urlMappingDTO.setScopes(urlMapping.getScopes());
+                urlMappingDTO.setDescription(urlMapping.getDescription());
+                urlMappingDTO.setSchemaDefinition(urlMapping.getSchemaDefinition());
+
+                BackendOperationMapping backendOperationMapping = urlMapping.getBackendOperationMapping();
+                if (backendOperationMapping != null) {
+                    BackendOperation backendOperation = backendOperationMapping.getBackendOperation();
+                    if (backendOperation != null) {
+                        BackendOperationDTO backendOperationDTO = new BackendOperationDTO();
+                        backendOperationDTO.setVerb(backendOperation.getVerb().toString());
+                        backendOperationDTO.setTarget(backendOperation.getTarget());
+
+                        BackendOperationMappingDTO backendOperationMappingDTO = new BackendOperationMappingDTO();
+                        backendOperationMappingDTO.setBackendId(backendOperationMapping.getBackendId());
+                        backendOperationMappingDTO.setBackendOperation(backendOperationDTO);
+                        urlMappingDTO.setBackendOperationMapping(backendOperationMappingDTO);
+                    }
+                }
+
+                APIOperationMapping apiOperationMapping = urlMapping.getApiOperationMapping();
+                if (apiOperationMapping != null) {
+                    BackendOperation backendOperation = apiOperationMapping.getBackendOperation();
+                    if (backendOperation != null) {
+                        BackendOperationDTO backendOperationDTO = new BackendOperationDTO();
+                        backendOperationDTO.setVerb(backendOperation.getVerb().toString());
+                        backendOperationDTO.setTarget(backendOperation.getTarget());
+
+                        APIOperationMappingDTO apiOperationMappingDTO = new APIOperationMappingDTO();
+                        apiOperationMappingDTO.setApiUUID(apidto.getUuid());
+                        apiOperationMappingDTO.setApiName(apiOperationMapping.getApiName());
+                        apiOperationMappingDTO.setApiVersion(apiOperationMapping.getApiVersion());
+                        apiOperationMappingDTO.setApiContext(apiOperationMapping.getApiContext());
+                        apiOperationMappingDTO.setBackendOperation(backendOperationDTO);
+                        urlMappingDTO.setApiOperationMapping(apiOperationMappingDTO);
+                    }
+                }
+
+                List<OperationPolicyDTO> operationPolicyDTOList = new ArrayList<>();
+                for (OperationPolicy operationPolicy : urlMapping.getOperationPolicies()) {
+                    OperationPolicyDTO operationPolicyDTO = new OperationPolicyDTO();
+                    operationPolicyDTO.setPolicyId(operationPolicy.getPolicyId());
+                    operationPolicyDTO.setPolicyName(operationPolicy.getPolicyName());
+                    operationPolicyDTO.setPolicyVersion(operationPolicy.getPolicyVersion());
+                    operationPolicyDTO.setDirection(operationPolicy.getDirection());
+                    operationPolicyDTO.setOrder(operationPolicy.getOrder());
+                    operationPolicyDTO.setParameters(operationPolicy.getParameters());
+                    operationPolicyDTOList.add(operationPolicyDTO);
+                }
+                urlMappingDTO.setOperationPolicies(operationPolicyDTOList);
                 urlMappingsDTO.add(urlMappingDTO);
             }
+            List<OperationPolicyDTO> apiPolicies = new ArrayList<>();
+            for (OperationPolicy apiPolicy : model.getApiPolicies()) {
+                OperationPolicyDTO operationPolicyDTO = new OperationPolicyDTO();
+                operationPolicyDTO.setPolicyId(apiPolicy.getPolicyId());
+                operationPolicyDTO.setPolicyName(apiPolicy.getPolicyName());
+                operationPolicyDTO.setPolicyVersion(apiPolicy.getPolicyVersion());
+                operationPolicyDTO.setDirection(apiPolicy.getDirection());
+                operationPolicyDTO.setParameters(apiPolicy.getParameters());
+                operationPolicyDTO.setOrder(apiPolicy.getOrder());
+                apiPolicies.add(operationPolicyDTO);
+            }
+            apidto.setApiPolicies(apiPolicies);
             apidto.setUrlMappings(urlMappingsDTO);
+            apidto.setIsEgress(model.isEgress() != 0);
+            apidto.setSubtype(model.getSubtype());
             apiListdto.setCount(1);
             apiListdto.getList().add(apidto);
         } else {
@@ -141,7 +262,7 @@ public class SubscriptionValidationDataUtil {
         return apiListdto;
     }
 
-    public static APIListDTO fromAPIListToAPIListDTO(List<API> apiList) {
+    public static APIListDTO fromAPIListToAPIListDTO(List<API> apiList) throws APIManagementException {
 
         APIListDTO apiListDTO = new APIListDTO();
 
@@ -204,7 +325,10 @@ public class SubscriptionValidationDataUtil {
                 subscriptionDTO.setSubscriptionId(subsModel.getSubscriptionId());
                 subscriptionDTO.setPolicyId(subsModel.getPolicyId());
                 subscriptionDTO.setSubscriptionState(subsModel.getSubscriptionState());
-
+                subscriptionDTO.setApiName(subsModel.getApiName());
+                subscriptionDTO.setApiVersion(subsModel.getApiVersion());
+                subscriptionDTO.setApiOrganization(subsModel.getApiOrganization());
+                subscriptionDTO.setApplicationOrganization(subsModel.getAppOrganization());
                 subscriptionListDTO.getList().add(subscriptionDTO);
 
             }
@@ -265,6 +389,9 @@ public class SubscriptionValidationDataUtil {
         } else if (PolicyConstants.EVENT_COUNT_TYPE.equals(quotaPolicy.getType())) {
             EventCountLimit eventCountLimit = (EventCountLimit) quotaPolicy.getLimit();
             defaultLimit.setEventCount(fromEventCountLimitToDTO(eventCountLimit));
+        } else if (PolicyConstants.AI_API_QUOTA_TYPE.equals(quotaPolicy.getType())) {
+            AIAPIQuotaLimit AIAPIQuotaLimit = (AIAPIQuotaLimit) quotaPolicy.getLimit();
+            defaultLimit.setAiApiQuota(fromAIAPIQuotaLimitToDTO(AIAPIQuotaLimit));
         }
         return defaultLimit;
     }
@@ -342,6 +469,24 @@ public class SubscriptionValidationDataUtil {
         return dto;
     }
 
+    /**
+     * Converts a AI API Quota Limit model object into a AI API Quota Limit DTO object.
+     *
+     * @param AIAPIQuotaLimit AI APIQuota Limit model object
+     * @return AI API Quota Limit DTO object derived from model
+     */
+    private static AIAPIQuotaLimitDTO fromAIAPIQuotaLimitToDTO(AIAPIQuotaLimit AIAPIQuotaLimit) {
+
+        AIAPIQuotaLimitDTO dto = new AIAPIQuotaLimitDTO();
+        dto.setTimeUnit(AIAPIQuotaLimit.getTimeUnit());
+        dto.setUnitTime(AIAPIQuotaLimit.getUnitTime());
+        dto.setRequestCount(AIAPIQuotaLimit.getRequestCount());
+        dto.setTotalTokenCount(AIAPIQuotaLimit.getTotalTokenCount());
+        dto.setPromptTokenCount(AIAPIQuotaLimit.getPromptTokenCount());
+        dto.setCompletionTokenCount(AIAPIQuotaLimit.getCompletionTokenCount());
+        return dto;
+    }
+
     public static ApplicationPolicyListDTO fromApplicationPolicyToApplicationPolicyListDTO(List<ApplicationPolicy> model) {
 
         ApplicationPolicyListDTO applicationPolicyListDTO = new ApplicationPolicyListDTO();
@@ -354,7 +499,10 @@ public class SubscriptionValidationDataUtil {
                 applicationPolicyDTO.setTenantId(applicationPolicyModel.getTenantId());
                 applicationPolicyDTO.setTenantDomain(applicationPolicyModel.getTenantDomain());
                 applicationPolicyDTO.setDefaultLimit(getThrottleLimitDTO(applicationPolicyModel));
-
+                BurstLimitDTO burstLimitDTO = new BurstLimitDTO();
+                burstLimitDTO.setRateLimitCount(applicationPolicyModel.getRateLimitCount());
+                burstLimitDTO.setRateLimitTimeUnit(applicationPolicyModel.getRateLimitTimeUnit());
+                applicationPolicyDTO.setBurstLimit(burstLimitDTO);
                 applicationPolicyListDTO.getList().add(applicationPolicyDTO);
 
             }
@@ -503,5 +651,10 @@ public class SubscriptionValidationDataUtil {
             globalPolicyListDTO.setCount(0);
         }
         return globalPolicyListDTO;
+    }
+
+    public static ApiTypeWrapper getAPIOrAPIProduct(String uuid, String tenantDomain) throws APIManagementException {
+        APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+        return apiConsumer.getAPIorAPIProductByUUID(uuid, tenantDomain);
     }
 }

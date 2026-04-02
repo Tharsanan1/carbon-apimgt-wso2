@@ -19,7 +19,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -85,7 +85,7 @@
             <artifactId>commons-codec</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.ops4j.pax.logging</groupId>
+            <groupId>org.wso2.org.ops4j.pax.logging</groupId>
             <artifactId>pax-logging-api</artifactId>
         </dependency>
         <dependency>
@@ -169,6 +169,10 @@
             <artifactId>org.wso2.carbon.rest.api</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.wso2.carbon.mediation</groupId>
+            <artifactId>org.wso2.carbon.application.mgt.synapse</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.apache.axis2</groupId>
             <artifactId>axis2-kernel</artifactId>
         </dependency>
@@ -199,6 +203,10 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.orbit.com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
         </dependency>
         <dependency>
             <groupId>org.powermock</groupId>
@@ -246,9 +254,8 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>slf4j.wso2</groupId>
-            <artifactId>slf4j</artifactId>
-            <version>1.5.10.wso2v1</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -303,8 +310,8 @@
             <version>${graphql.java.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.wso2.orbit.com.amazonaws</groupId>
-            <artifactId>awslambda</artifactId>
+            <groupId>org.wso2.orbit.software.amazon.awssdk</groupId>
+            <artifactId>aws-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.servicemix.bundles</groupId>
@@ -321,6 +328,23 @@
         <dependency>
             <groupId>org.wso2.carbon.apimgt</groupId>
             <artifactId>org.wso2.carbon.apimgt.common.analytics</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon</groupId>
+            <artifactId>org.wso2.carbon.logging.correlation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>commons-validator</groupId>
+            <artifactId>commons-validator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.spec.parser</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.mcp.transformer</groupId>
+            <artifactId>mcp-transformer-java</artifactId>
         </dependency>
     </dependencies>
 
@@ -351,9 +375,28 @@
                     <argLine>
                         --add-opens=java.xml/jdk.xml.internal=ALL-UNNAMED
                         --add-opens=java.base/jdk.internal.loader=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED 
+                        --add-opens java.base/sun.net.www.protocol.jar=ALL-UNNAMED 
+                        --add-opens java.base/java.util=ALL-UNNAMED 
+                        --add-opens java.base/java.io=ALL-UNNAMED 
+                        --add-opens java.base/java.net=ALL-UNNAMED
+                        --add-opens java.base/sun.security.x509=ALL-UNNAMED
+                        --add-opens java.base/java.security.cert=ALL-UNNAMED
+                        --add-exports java.base/sun.security.x509=ALL-UNNAMED     
+                        --add-opens java.base/java.util.concurrent=ALL-UNNAMED
+                        --add-opens java.base/java.nio.charset=ALL-UNNAMED
+                        --add-opens java.base/java.security=ALL-UNNAMED  
+                        --add-opens java.base/java.math=ALL-UNNAMED
+                        --add-opens java.base/sun.nio.cs=ALL-UNNAMED
+                        --add-opens java.base/java.nio=ALL-UNNAMED
+                        --add-exports java.base/sun.nio.cs=ALL-UNNAMED          
+                        --add-opens java.base/java.util.regex=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.util.stream=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
                     </argLine>
                     <classpathDependencyExcludes>
-                        <classpathDependencyExclude>org.ops4j.pax.logging:pax-logging-api</classpathDependencyExclude>
+                        <classpathDependencyExclude>org.wso2.org.ops4j.pax.logging</classpathDependencyExclude>
                         <classpathDependencyExclude>org.wso2.orbit.com.fasterxml.jackson.core:jackson-core</classpathDependencyExclude>
                     </classpathDependencyExcludes>
                     <systemProperties>
@@ -420,6 +463,7 @@
                             org.apache.axis2.engine; version="${axis2.osgi.version.range}",
                             org.apache.axis2.rpc.receivers; version="${axis2.osgi.version.range}",
                             org.apache.axis2.context; version="${axis2.osgi.version.range}",
+                            org.apache.commons.io.*;version="${import.package.version.commons.io}",
                             org.apache.commons.logging.*; version="${import.package.version.commons.logging}",
                             org.apache.synapse,
                             org.apache.synapse.config,
@@ -438,7 +482,7 @@
                             org.wso2.carbon.apimgt.api.*; version="${carbon.apimgt.imp.pkg.version}",
                             edu.emory.mathcs.backport.*,
                             org.apache.axis2.*; version="${imp.pkg.version.axis2}",
-                            javax.activation.*; version="[0.0.0, 1.0.0)",
+                            javax.activation.*; version="[0.0.0, 1.0.0)"; resolution:=optional,
                             javax.cache,
                             javax.net.ssl,
                             javax.xml.namespace,
@@ -459,22 +503,54 @@
                             org.wso2.carbon.sequences.stub.types,
                             org.wso2.carbon.localentry.stub.*,
                             org.wso2.carbon.context,
+                            org.wso2.carbon.application.mgt.synapse.*; version="${carbon.mediation.imp.pkg.version}",
                             org.wso2.carbon.mediation.*; version="${carbon.mediation.imp.pkg.version}",
                             org.wso2.carbon.apimgt.tracing.*; version="${carbon.apimgt.imp.pkg.version}",
                             org.wso2.orbit.re2j.*; version="${re2j.version}",
-                            graphql.*; version="${graphql.java.version}",
-                            com.amazonaws.*; version="${com.amazonaws.version}",
+                            graphql.*; version="${graphql.java.version.range}",
+                            software.amazon.awssdk.services.sts.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
+                            software.amazon.awssdk.services.lambda.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
+                            software.amazon.awssdk.core.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
+                            software.amazon.awssdk.awscore.*; version="${org.wso2.orbit.com.amazonaws.version.range}"; resolution:=optional,
                             org.apache.servicemix.bundles.jedis.*; version="${servicemix.bundles.jedis.version}",
                             com.nimbusds.jwt.*,
                             org.apache.commons.codec.*,
                             org.wso2.carbon.apimgt.common.gateway.*,
                             org.wso2.carbon.apimgt.common.jms.*,
+                            org.wso2.carbon.apimgt.common.analytics.*,
                             org.wso2.carbon.apimgt.usage.publisher.*; version="${carbon.apimgt.imp.pkg.version}",
                             javax.annotation;version=0.0.0;resolution:=optional,
                             *;resolution:=optional
                         </Import-Package>
+                        <Provide-Capability>
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.api.GuardrailProviderService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.api.EmbeddingProviderService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.api.VectorDBProviderService,
+                            osgi.service;objectClass=org.wso2.carbon.apimgt.api.AILLMProviderService
+                        </Provide-Capability>
+                        <DynamicImport-Package>*</DynamicImport-Package>
                     </instructions>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>properties-maven-plugin</artifactId>
+                <version>1.0.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>set-system-properties</goal>
+                        </goals>
+                        <configuration>
+                            <properties>
+                                <property>
+                                    <name>org.aspectj.weaver.openarchives</name>
+                                    <value>1500</value>
+                                </property>
+                            </properties>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

@@ -39,6 +39,7 @@ import io.swagger.util.Json;
 import io.swagger.util.Yaml;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.xerces.impl.Constants;
 import org.json.JSONException;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -122,7 +123,7 @@ public class SequenceGenerator {
             Map<HttpMethod, Operation> operationMap = path.getOperationMap();
             for (HttpMethod httpMethod : operationMap.keySet()) {
                 boolean isResourceFromWSDL = false;
-                Map<String, String> parameterJsonPathMapping = new HashMap<>();
+                Map<String, String> parameterJsonPathMapping = new LinkedHashMap<>();
                 Map<String, String> queryParameters = new HashMap<>();
                 Operation operation = operationMap.get(httpMethod);
                 String operationId = operation.getOperationId();
@@ -163,10 +164,8 @@ public class SequenceGenerator {
                                 Example example = ExampleBuilder
                                         .fromModel(defName, model, definitions, new HashSet<String>());
                                 replaceNullWithStringExample(example);
-                                String jsonExample = Json.pretty(example);
                                 try {
-                                    org.json.JSONObject json = new org.json.JSONObject(jsonExample);
-                                    SequenceUtils.listJson(json, parameterJsonPathMapping);
+                                    SequenceUtils.listExamples(example, parameterJsonPathMapping);
                                 } catch (JSONException e) {
                                     log.error("Error occurred while generating json mapping for the definition", e);
                                 }
@@ -200,7 +199,7 @@ public class SequenceGenerator {
                     sequenceMap.put("sequence", payloadSequence.get(operationId));
                     RESTToSOAPMsgTemplate template = new RESTToSOAPMsgTemplate();
                     String inSequence = template.getMappingInSequence(sequenceMap, operationId, soapAction,
-                            namespace, soapNamespace, arraySequenceElements);
+                            namespace, soapNamespace, soapVersion, arraySequenceElements);
                     String outSequence = template.getMappingOutSequence();
                     if (isResourceFromWSDL) {
                         SOAPToRestSequence inSeq = new SOAPToRestSequence(httpMethod.toString().toLowerCase(), pathName,
@@ -270,11 +269,8 @@ public class SequenceGenerator {
                         String defName = $ref.substring("#/definitions/".length());
                         Model model = definitions.get(defName);
                         Example example = ExampleBuilder.fromModel(defName, model, definitions, new HashSet<String>());
-
-                        String jsonExample = Json.pretty(example);
                         try {
-                            org.json.JSONObject json = new org.json.JSONObject(jsonExample);
-                            SequenceUtils.listJson(json, parameterJsonPathMapping);
+                            SequenceUtils.listExamples(example, parameterJsonPathMapping);
                         } catch (JSONException e) {
                             log.error("Error occurred while generating json mapping for the definition: " + defName, e);
                         }
@@ -366,7 +362,7 @@ public class SequenceGenerator {
                                                                        Map<String, Model> definitions)
             throws APIManagementException {
 
-        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory docFactory = APIUtil.getSecuredDocumentBuilder();
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
         DocumentBuilder docBuilder;
         StringWriter stringWriter = new StringWriter();
@@ -376,6 +372,10 @@ public class SequenceGenerator {
         try {
             transformerFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
             Transformer transformer = transformerFactory.newTransformer();
+            docFactory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE,
+                    false);
+            docFactory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE,
+                    false);
             docBuilder = docFactory.newDocumentBuilder();
             Document doc = docBuilder.newDocument();
             Element rootElement = null;
@@ -576,7 +576,7 @@ public class SequenceGenerator {
      */
     private static String createParameterElements(String jsonPathElement, String type) throws APIManagementException {
 
-        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory docFactory = APIUtil.getSecuredDocumentBuilder();
         DocumentBuilder docBuilder;
         StringWriter stringWriter = new StringWriter();
         TransformerFactory transformerFactory = TransformerFactory.newInstance();
@@ -586,6 +586,10 @@ public class SequenceGenerator {
             transformerFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
             Transformer transformer = transformerFactory.newTransformer();
             docBuilder = docFactory.newDocumentBuilder();
+            docFactory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE,
+                    false);
+            docFactory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE,
+                    false);
             Document doc = docBuilder.newDocument();
             Element argElement = doc.createElement(SOAPToRESTConstants.SequenceGen.ARG_ELEMENT);
             Element propertyElement = doc.createElement(SOAPToRESTConstants.SequenceGen.PROPERTY_ELEMENT);

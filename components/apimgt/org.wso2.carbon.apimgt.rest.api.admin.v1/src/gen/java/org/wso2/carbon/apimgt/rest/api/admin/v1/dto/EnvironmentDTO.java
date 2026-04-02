@@ -1,14 +1,25 @@
 package org.wso2.carbon.apimgt.rest.api.admin.v1.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.AdditionalPropertyDTO;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.EnvironmentPermissionsDTO;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.GatewayEnvironmentProtocolURIDTO;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.VHostDTO;
 import javax.validation.constraints.*;
 
 
+import io.swagger.annotations.*;
 import java.util.Objects;
 
+import javax.xml.bind.annotation.*;
+import org.wso2.carbon.apimgt.rest.api.common.annotations.Scope;
+import com.fasterxml.jackson.annotation.JsonCreator;
 
 import javax.validation.Valid;
 
@@ -20,11 +31,82 @@ public class EnvironmentDTO   {
     private String name = null;
     private String displayName = null;
     private String provider = null;
+    private String type = "hybrid";
+    private String gatewayType = "Regular";
     private String description = null;
-    private Boolean isReadOnly = null;
+    private Boolean isReadOnly = false;
+
+    @XmlType(name="ModeEnum")
+    @XmlEnum(String.class)
+    public enum ModeEnum {
+        READ_ONLY("READ_ONLY"),
+        READ_WRITE("READ_WRITE"),
+        WRITE_ONLY("WRITE_ONLY");
+        private String value;
+
+        ModeEnum (String v) {
+            value = v;
+        }
+
+        public String value() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(value);
+        }
+
+        @JsonCreator
+        public static ModeEnum fromValue(String v) {
+            for (ModeEnum b : ModeEnum.values()) {
+                if (String.valueOf(b.value).equals(v)) {
+                    return b;
+                }
+            }
+return null;
+        }
+    }
+    private ModeEnum mode = ModeEnum.WRITE_ONLY;
+    private Integer apiDiscoveryScheduledWindow = 60;
     private List<VHostDTO> vhosts = new ArrayList<VHostDTO>();
     private List<GatewayEnvironmentProtocolURIDTO> endpointURIs = new ArrayList<GatewayEnvironmentProtocolURIDTO>();
     private List<AdditionalPropertyDTO> additionalProperties = new ArrayList<AdditionalPropertyDTO>();
+    private EnvironmentPermissionsDTO permissions = null;
+
+    @XmlType(name="StatusEnum")
+    @XmlEnum(String.class)
+    public enum StatusEnum {
+        ACTIVE("Active"),
+        INACTIVE("Inactive");
+        private String value;
+
+        StatusEnum (String v) {
+            value = v;
+        }
+
+        public String value() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(value);
+        }
+
+        @JsonCreator
+        public static StatusEnum fromValue(String v) {
+            for (StatusEnum b : StatusEnum.values()) {
+                if (String.valueOf(b.value).equals(v)) {
+                    return b;
+                }
+            }
+return null;
+        }
+    }
+    private StatusEnum status = StatusEnum.ACTIVE;
+    private URI vhost = null;
+    private String universalGatewayVersion = null;
 
   /**
    **/
@@ -97,6 +179,40 @@ public class EnvironmentDTO   {
 
   /**
    **/
+  public EnvironmentDTO type(String type) {
+    this.type = type;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "hybrid", value = "")
+  @JsonProperty("type")
+  public String getType() {
+    return type;
+  }
+  public void setType(String type) {
+    this.type = type;
+  }
+
+  /**
+   **/
+  public EnvironmentDTO gatewayType(String gatewayType) {
+    this.gatewayType = gatewayType;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Regular", value = "")
+  @JsonProperty("gatewayType")
+  public String getGatewayType() {
+    return gatewayType;
+  }
+  public void setGatewayType(String gatewayType) {
+    this.gatewayType = gatewayType;
+  }
+
+  /**
+   **/
   public EnvironmentDTO description(String description) {
     this.description = description;
     return this;
@@ -127,6 +243,42 @@ public class EnvironmentDTO   {
   }
   public void setIsReadOnly(Boolean isReadOnly) {
     this.isReadOnly = isReadOnly;
+  }
+
+  /**
+   * The mode of the environment. This indicates whether the environment is in read-only or read-write mode. **READ_ONLY:** The environment is in read-only mode. API cannot be deployed, only discovery is possible. **READ_WRITE:** The environment is in read-write mode. APIs can be deployed and discovered. **WRITE_ONLY:** The environment is in write-only mode/ APIs only can be deployed. 
+   **/
+  public EnvironmentDTO mode(ModeEnum mode) {
+    this.mode = mode;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "READ_WRITE", value = "The mode of the environment. This indicates whether the environment is in read-only or read-write mode. **READ_ONLY:** The environment is in read-only mode. API cannot be deployed, only discovery is possible. **READ_WRITE:** The environment is in read-write mode. APIs can be deployed and discovered. **WRITE_ONLY:** The environment is in write-only mode/ APIs only can be deployed. ")
+  @JsonProperty("mode")
+  public ModeEnum getMode() {
+    return mode;
+  }
+  public void setMode(ModeEnum mode) {
+    this.mode = mode;
+  }
+
+  /**
+   * The time window in minutes to schedule the API discovery task. This is used to discover APIs from the API Gateway and update the API list in the environment. 
+   **/
+  public EnvironmentDTO apiDiscoveryScheduledWindow(Integer apiDiscoveryScheduledWindow) {
+    this.apiDiscoveryScheduledWindow = apiDiscoveryScheduledWindow;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "The time window in minutes to schedule the API discovery task. This is used to discover APIs from the API Gateway and update the API list in the environment. ")
+  @JsonProperty("apiDiscoveryScheduledWindow")
+  public Integer getApiDiscoveryScheduledWindow() {
+    return apiDiscoveryScheduledWindow;
+  }
+  public void setApiDiscoveryScheduledWindow(Integer apiDiscoveryScheduledWindow) {
+    this.apiDiscoveryScheduledWindow = apiDiscoveryScheduledWindow;
   }
 
   /**
@@ -184,6 +336,78 @@ public class EnvironmentDTO   {
     this.additionalProperties = additionalProperties;
   }
 
+  /**
+   **/
+  public EnvironmentDTO permissions(EnvironmentPermissionsDTO permissions) {
+    this.permissions = permissions;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("permissions")
+  public EnvironmentPermissionsDTO getPermissions() {
+    return permissions;
+  }
+  public void setPermissions(EnvironmentPermissionsDTO permissions) {
+    this.permissions = permissions;
+  }
+
+  /**
+   * For platform gateway environments (gatewayType Universal), connection status to the control plane (Active or Inactive).
+   **/
+  public EnvironmentDTO status(StatusEnum status) {
+    this.status = status;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Active", value = "For platform gateway environments (gatewayType Universal), connection status to the control plane (Active or Inactive).")
+  @JsonProperty("status")
+  public StatusEnum getStatus() {
+    return status;
+  }
+  public void setStatus(StatusEnum status) {
+    this.status = status;
+  }
+
+  /**
+   * For platform gateway environments, the gateway URL (e.g. https://host:9443). Same as Platform Gateways API; only set when this environment represents a platform gateway.
+   **/
+  public EnvironmentDTO vhost(URI vhost) {
+    this.vhost = vhost;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "https://mg.wso2.com", value = "For platform gateway environments, the gateway URL (e.g. https://host:9443). Same as Platform Gateways API; only set when this environment represents a platform gateway.")
+  @JsonProperty("vhost")
+  public URI getVhost() {
+    return vhost;
+  }
+  public void setVhost(URI vhost) {
+    this.vhost = vhost;
+  }
+
+  /**
+   * Universal Gateway version from config (e.g. \&quot;0.11.0\&quot;). Set for deploy targets so UI can show quick-start version; from apim.universal_gateway.version.
+   **/
+  public EnvironmentDTO universalGatewayVersion(String universalGatewayVersion) {
+    this.universalGatewayVersion = universalGatewayVersion;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "0.11.0", value = "Universal Gateway version from config (e.g. \"0.11.0\"). Set for deploy targets so UI can show quick-start version; from apim.universal_gateway.version.")
+  @JsonProperty("universalGatewayVersion")
+  public String getUniversalGatewayVersion() {
+    return universalGatewayVersion;
+  }
+  public void setUniversalGatewayVersion(String universalGatewayVersion) {
+    this.universalGatewayVersion = universalGatewayVersion;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -198,16 +422,24 @@ public class EnvironmentDTO   {
         Objects.equals(name, environment.name) &&
         Objects.equals(displayName, environment.displayName) &&
         Objects.equals(provider, environment.provider) &&
+        Objects.equals(type, environment.type) &&
+        Objects.equals(gatewayType, environment.gatewayType) &&
         Objects.equals(description, environment.description) &&
         Objects.equals(isReadOnly, environment.isReadOnly) &&
+        Objects.equals(mode, environment.mode) &&
+        Objects.equals(apiDiscoveryScheduledWindow, environment.apiDiscoveryScheduledWindow) &&
         Objects.equals(vhosts, environment.vhosts) &&
         Objects.equals(endpointURIs, environment.endpointURIs) &&
-        Objects.equals(additionalProperties, environment.additionalProperties);
+        Objects.equals(additionalProperties, environment.additionalProperties) &&
+        Objects.equals(permissions, environment.permissions) &&
+        Objects.equals(status, environment.status) &&
+        Objects.equals(vhost, environment.vhost) &&
+        Objects.equals(universalGatewayVersion, environment.universalGatewayVersion);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, displayName, provider, description, isReadOnly, vhosts, endpointURIs, additionalProperties);
+    return Objects.hash(id, name, displayName, provider, type, gatewayType, description, isReadOnly, mode, apiDiscoveryScheduledWindow, vhosts, endpointURIs, additionalProperties, permissions, status, vhost, universalGatewayVersion);
   }
 
   @Override
@@ -219,11 +451,19 @@ public class EnvironmentDTO   {
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
+    sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    gatewayType: ").append(toIndentedString(gatewayType)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    isReadOnly: ").append(toIndentedString(isReadOnly)).append("\n");
+    sb.append("    mode: ").append(toIndentedString(mode)).append("\n");
+    sb.append("    apiDiscoveryScheduledWindow: ").append(toIndentedString(apiDiscoveryScheduledWindow)).append("\n");
     sb.append("    vhosts: ").append(toIndentedString(vhosts)).append("\n");
     sb.append("    endpointURIs: ").append(toIndentedString(endpointURIs)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
+    sb.append("    permissions: ").append(toIndentedString(permissions)).append("\n");
+    sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    vhost: ").append(toIndentedString(vhost)).append("\n");
+    sb.append("    universalGatewayVersion: ").append(toIndentedString(universalGatewayVersion)).append("\n");
     sb.append("}");
     return sb.toString();
   }

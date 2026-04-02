@@ -16,7 +16,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -47,6 +47,11 @@
             <artifactId>org.wso2.carbon.identity.oauth</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.apache.tomcat</groupId>
+            <artifactId>tomcat-juli</artifactId>
+            <version>${tomcat.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.wso2.carbon.extension.identity.oauth2.grantType.jwt</groupId>
             <artifactId>org.wso2.carbon.identity.oauth2.grant.jwt</artifactId>
             <version>${carbon.identity-oauth2-grant-jwt.version}</version>
@@ -74,7 +79,7 @@
             <artifactId>org.wso2.carbon.utils</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.ops4j.pax.logging</groupId>
+            <groupId>org.wso2.org.ops4j.pax.logging</groupId>
             <artifactId>pax-logging-api</artifactId>
         </dependency>
         <dependency>
@@ -128,9 +133,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>slf4j.wso2</groupId>
-            <artifactId>slf4j</artifactId>
-            <version>1.5.10.wso2v1</version>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
         </dependency>
         <dependency>
             <groupId>org.powermock</groupId>
@@ -158,6 +162,10 @@
         <dependency>
             <groupId>org.wso2.carbon.identity.framework</groupId>
             <artifactId>org.wso2.carbon.claim.mgt</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon</groupId>
+            <artifactId>org.wso2.carbon.logging.correlation</artifactId>
         </dependency>
     </dependencies>
 
@@ -196,6 +204,15 @@
                 <configuration>
                     <argLine>
                         --add-opens=java.xml/jdk.xml.internal=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED 
+                        --add-opens java.base/java.io=ALL-UNNAMED 
+                        --add-opens java.base/sun.net.www.protocol.jar=ALL-UNNAMED    
+                        --add-opens java.base/java.util=ALL-UNNAMED 
+                        --add-opens java.base/java.security=ALL-UNNAMED 
+                        --add-opens java.base/sun.security.x509=ALL-UNNAMED
+                        --add-opens java.base/java.security.cert=ALL-UNNAMED
+                        --add-opens java.base/java.util.regex=ALL-UNNAMED
+                        --add-opens java.base/java.lang=ALL-UNNAMED
                     </argLine>
                     <excludes>
                         <exclude>**/Abstract*</exclude>
@@ -211,7 +228,7 @@
                         </property>
                     </systemProperties>
                     <classpathDependencyExcludes>
-                        <classpathDependencyExclude>org.ops4j.pax.logging</classpathDependencyExclude>
+                        <classpathDependencyExclude>org.wso2.org.ops4j.pax.logging</classpathDependencyExclude>
                     </classpathDependencyExcludes>
                 </configuration>
                 <dependencies>

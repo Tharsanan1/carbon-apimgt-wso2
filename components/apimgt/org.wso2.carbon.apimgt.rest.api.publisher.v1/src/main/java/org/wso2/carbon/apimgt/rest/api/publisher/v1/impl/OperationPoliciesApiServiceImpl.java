@@ -18,6 +18,7 @@
 
 package org.wso2.carbon.apimgt.rest.api.publisher.v1.impl;
 
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -50,7 +51,6 @@ import java.io.File;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -94,10 +94,11 @@ public class OperationPoliciesApiServiceImpl implements OperationPoliciesApiServ
                 jsonContent = RestApiPublisherUtils.readInputStream(policySpecFileInputStream, policySpecFileDetail);
 
                 String fileName = policySpecFileDetail.getDataHandler().getName();
-                String fileContentType = URLConnection.guessContentTypeFromName(fileName);
+                String fileContentType = FilenameUtils.getExtension(fileName);
                 if (org.apache.commons.lang3.StringUtils.isBlank(fileContentType)) {
                     fileContentType = policySpecFileDetail.getContentType().toString();
                 }
+
                 if (APIConstants.YAML_CONTENT_TYPE.equals(fileContentType)) {
                     jsonContent = CommonUtil.yamlToJson(jsonContent);
                 }
@@ -107,6 +108,14 @@ public class OperationPoliciesApiServiceImpl implements OperationPoliciesApiServ
                         .prepareOperationPolicyData(policySpecification, organization);
 
                 if (synapsePolicyDefinitionFileInputStream != null) {
+                    String defFileName = synapsePolicyDefinitionFileDetail.getDataHandler().getName();
+                    String defFileContentType = FilenameUtils.getExtension(defFileName);
+                    if (org.apache.commons.lang3.StringUtils.isBlank(defFileContentType)) {
+                        defFileContentType = synapsePolicyDefinitionFileDetail.getContentType().toString();
+                    }
+                    if (!APIConstants.J2_CONTENT_TYPE.equals(defFileContentType)) {
+                        throw new APIManagementException("Unsupported file type for Operation Policy");
+                    }
                     String synapsePolicyDefinition =
                             RestApiPublisherUtils.readInputStream(synapsePolicyDefinitionFileInputStream,
                                     synapsePolicyDefinitionFileDetail);
@@ -117,6 +126,14 @@ public class OperationPoliciesApiServiceImpl implements OperationPoliciesApiServ
                 }
 
                 if (ccPolicyDefinitionFileInputStream != null) {
+                    String defFileName = ccPolicyDefinitionFileDetail.getDataHandler().getName();
+                    String defFileContentType = FilenameUtils.getExtension(defFileName);
+                    if (org.apache.commons.lang3.StringUtils.isBlank(defFileContentType)) {
+                        defFileContentType = ccPolicyDefinitionFileDetail.getContentType().toString();
+                    }
+                    if (!APIConstants.CC_POLICY_DEFINITION_EXTENSION.equals(defFileContentType)) {
+                        throw new APIManagementException("Unsupported file type for Operation Policy");
+                    }
                     String choreoConnectPolicyDefinition = RestApiPublisherUtils
                             .readInputStream(ccPolicyDefinitionFileInputStream, ccPolicyDefinitionFileDetail);
                     ccPolicyDefinition = new OperationPolicyDefinition();
@@ -170,7 +187,12 @@ public class OperationPoliciesApiServiceImpl implements OperationPoliciesApiServ
 
             OperationPolicyData existingPolicy =
                     apiProvider.getCommonOperationPolicyByPolicyId(operationPolicyId, organization, false);
-            if (existingPolicy != null) {
+            int policyUsageInGatewayPolicyMappings = apiProvider.getPolicyUsageByPolicyUUIDInGatewayPolicies(
+                    operationPolicyId);
+            if (policyUsageInGatewayPolicyMappings > 0) {
+                RestApiUtil.handleConflict("Common operation policy: " + operationPolicyId
+                        + " is already used in gateway policies. Cannot delete the policy", log);
+            } else if (existingPolicy != null) {
                 apiProvider.deleteOperationPolicyById(operationPolicyId, organization);
                 if (log.isDebugEnabled()) {
                     log.debug("The common operation policy " + operationPolicyId + " has been deleted");
@@ -224,22 +246,37 @@ public class OperationPoliciesApiServiceImpl implements OperationPoliciesApiServ
                 version = queryParamMap.get(ImportExportConstants.VERSION_ELEMENT);
 
                 apiManagementExceptionErrorMessage = "Error while retrieving the policy by name & version.";
-                OperationPolicyData policyData = apiProvider.getCommonOperationPolicyByPolicyName(name, version,
-                        organization, false);
-
-                // if not found, throw not found error
-                if (policyData != null) {
-                    List<OperationPolicyData> commonOperationPolicyLIst = new ArrayList<>();
-                    commonOperationPolicyLIst.add(policyData);
-                    policyListDTO = OperationPolicyMappingUtil.fromOperationPolicyDataListToDTO(
-                            commonOperationPolicyLIst, 0, 1);
+                if (StringUtils.isEmpty(version)) {
+                    List<OperationPolicyData> commonOperationPolicyLIst = apiProvider.getCommonOperationPolicyByPolicyName(name,
+                            organization, false);
+                    if (commonOperationPolicyLIst != null && commonOperationPolicyLIst.size() > 0) {
+                        limit = limit != null ? limit : commonOperationPolicyLIst.size();
+                        policyListDTO = OperationPolicyMappingUtil.fromOperationPolicyDataListToDTO(
+                                commonOperationPolicyLIst, 0, limit);
+                    } else {
+                        apiManagementExceptionErrorMessage =
+                                "Couldn't retrieve an existing common policy with Name: " + name;
+                        throw new APIMgtResourceNotFoundException(apiManagementExceptionErrorMessage,
+                                ExceptionCodes.from(ExceptionCodes.OPERATION_POLICY_NOT_FOUND_WITH_NAME, name));
+                    }
                 } else {
-                    apiManagementExceptionErrorMessage =
-                            "Couldn't retrieve an existing common policy with Name: " + name + " and Version: "
-                                    + version;
-                    throw new APIMgtResourceNotFoundException(apiManagementExceptionErrorMessage,
-                            ExceptionCodes.from(ExceptionCodes.OPERATION_POLICY_NOT_FOUND_WITH_NAME_AND_VERSION, name,
-                                    version));
+                    OperationPolicyData policyData = apiProvider.getCommonOperationPolicyByPolicyName(name, version,
+                            organization, false);
+
+                    // if not found, throw not found error
+                    if (policyData != null) {
+                        List<OperationPolicyData> commonOperationPolicyLIst = new ArrayList<>();
+                        commonOperationPolicyLIst.add(policyData);
+                        policyListDTO = OperationPolicyMappingUtil.fromOperationPolicyDataListToDTO(
+                                commonOperationPolicyLIst, 0, 1);
+                    } else {
+                        apiManagementExceptionErrorMessage =
+                                "Couldn't retrieve an existing common policy with Name: " + name + " and Version: "
+                                        + version;
+                        throw new APIMgtResourceNotFoundException(apiManagementExceptionErrorMessage,
+                                ExceptionCodes.from(ExceptionCodes.OPERATION_POLICY_NOT_FOUND_WITH_NAME_AND_VERSION, name,
+                                        version));
+                    }
                 }
             } else {
                 offset = offset != null ? offset : RestApiConstants.PAGINATION_OFFSET_DEFAULT;

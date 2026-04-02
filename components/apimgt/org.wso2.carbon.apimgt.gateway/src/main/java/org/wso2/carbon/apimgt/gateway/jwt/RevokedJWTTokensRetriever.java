@@ -22,14 +22,19 @@ import com.google.gson.Gson;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.util.EntityUtils;
+import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.gateway.dto.RevokedEventsDTO;
+import org.wso2.carbon.apimgt.gateway.dto.RevokedJWTConsumerKeyDTO;
+import org.wso2.carbon.apimgt.gateway.dto.RevokedJWTSubjectEntityDTO;
 import org.wso2.carbon.apimgt.gateway.dto.RevokedJWTTokenDTO;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
+import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.exception.DataLoadingException;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 import java.io.IOException;
@@ -38,14 +43,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import static org.wso2.carbon.apimgt.impl.APIConstants.DigestAuthConstants.CHARSET;
+
 /**
  * Class which is responsible to fetch the revoked JWT signatures via webservice database during startup
  */
 public class RevokedJWTTokensRetriever extends TimerTask {
 
     private static final Log log = LogFactory.getLog(RevokedJWTTokensRetriever.class);
-    private static final int revokedJWTTokensRetrievalTimeoutInSeconds = 15;
-    private static final int revokedJWTTokensRetrievalRetries = 15;
 
     @Override
     public void run() {
@@ -59,7 +64,7 @@ public class RevokedJWTTokensRetriever extends TimerTask {
      *
      * @return List of RevokedJWTTokensDTOs.
      */
-    private RevokedJWTTokenDTO[] retrieveRevokedJWTTokensData() {
+    private RevokedEventsDTO retrieveRevokedJWTTokensData() {
 
         try {
             // The resource resides in the throttle web app. Hence reading throttle configs
@@ -73,32 +78,17 @@ public class RevokedJWTTokensRetriever extends TimerTask {
             int keyMgtPort = keyMgtURL.getPort();
             String keyMgtProtocol = keyMgtURL.getProtocol();
             HttpClient httpClient = APIUtil.getHttpClient(keyMgtPort, keyMgtProtocol);
-            HttpResponse httpResponse = null;
-            int retryCount = 0;
-            boolean retry;
-            do {
-                try {
-                    httpResponse = httpClient.execute(method);
-                    retry = false;
-                } catch (IOException ex) {
-                    retryCount++;
-                    if (retryCount < revokedJWTTokensRetrievalRetries) {
-                        retry = true;
-                        log.warn("Failed retrieving revoked JWT token signatures from remote endpoint: " +
-                                ex.getMessage() + ". Retrying after " + revokedJWTTokensRetrievalTimeoutInSeconds +
-                                " seconds...");
-                        Thread.sleep(revokedJWTTokensRetrievalTimeoutInSeconds * 1000);
-                    } else {
-                        throw ex;
-                    }
-                }
-            } while (retry);
-
-            String responseString = EntityUtils.toString(httpResponse.getEntity(), "UTF-8");
-            if (responseString != null && !responseString.isEmpty()) {
-                return new Gson().fromJson(responseString, RevokedJWTTokenDTO[].class);
+            String responseString;
+            try (CloseableHttpResponse httpResponse = APIUtil.executeHTTPRequestWithRetries(method, httpClient)) {
+                responseString = EntityUtils.toString(httpResponse.getEntity(), CHARSET);
+            } catch (APIManagementException e) {
+                throw new DataLoadingException("Error while retrieving revoked JWT tokens", e);
             }
-        } catch (IOException | InterruptedException e) {
+
+            if (responseString != null && !responseString.isEmpty()) {
+                return new Gson().fromJson(responseString, RevokedEventsDTO.class);
+            }
+        } catch (IOException | DataLoadingException e) {
             log.error("Exception when retrieving revoked JWT tokens from remote endpoint ", e);
         }
         return null;
@@ -106,12 +96,26 @@ public class RevokedJWTTokensRetriever extends TimerTask {
 
     private void loadRevokedJWTTokensFromWebService() {
 
-        RevokedJWTTokenDTO[] revokedJWTTokenDTOS = retrieveRevokedJWTTokensData();
-        if(revokedJWTTokenDTOS != null) {
-            for (RevokedJWTTokenDTO revokedJWTToken : revokedJWTTokenDTOS) {
+        RevokedEventsDTO revokeConditionsDTO = retrieveRevokedJWTTokensData();
+        if (revokeConditionsDTO == null) {
+            log.error("Error while retrieving revoke conditions from web service");
+            return;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Retrieved revoke conditions from web service");
+        }
+        loadRevokedJWTTokens(revokeConditionsDTO);
+        loadRevokedConsumerKeys(revokeConditionsDTO);
+        loadRevokedUsers(revokeConditionsDTO);
+    }
+
+    private void loadRevokedJWTTokens(RevokedEventsDTO revokedEventsDTO) {
+
+        if (revokedEventsDTO.getRevokedJWTList() != null && !revokedEventsDTO.getRevokedJWTList().isEmpty()) {
+            for (RevokedJWTTokenDTO revokedJWTToken : revokedEventsDTO.getRevokedJWTList()) {
                 RevokedJWTDataHolder.getInstance().addRevokedJWTToMap(revokedJWTToken.getSignature(),
                         revokedJWTToken.getExpiryTime());
-                if(log.isDebugEnabled()) {
+                if (log.isDebugEnabled()) {
                     log.debug("JWT signature : " + revokedJWTToken.getSignature() + " added to the revoke map.");
                 }
             }
@@ -120,12 +124,53 @@ public class RevokedJWTTokensRetriever extends TimerTask {
         }
     }
 
+    private void loadRevokedConsumerKeys(RevokedEventsDTO revokedEventsDTO) {
+
+        if (revokedEventsDTO.getRevokedConsumerKeyList() != null && !revokedEventsDTO.getRevokedConsumerKeyList()
+                .isEmpty()) {
+            for (RevokedJWTConsumerKeyDTO revokedConKeyDTO : revokedEventsDTO.getRevokedConsumerKeyList()) {
+                RevokedJWTDataHolder.getInstance().addRevokedConsumerKeyToMap(
+                        revokedConKeyDTO.getConsumerKey(), revokedConKeyDTO.getRevocationTime());
+                if (log.isDebugEnabled()) {
+                    log.debug("Client ID : " + revokedConKeyDTO.getConsumerKey() + " added to the revoke map.");
+                }
+            }
+        } else {
+            log.debug("No revoked consumer keys are retrieved via web service");
+        }
+    }
+
+    private void loadRevokedUsers(RevokedEventsDTO revokedEventsDTO) {
+
+        if (revokedEventsDTO.getRevokedSubjectEntityList() != null
+                && !revokedEventsDTO.getRevokedSubjectEntityList().isEmpty()) {
+            for (RevokedJWTSubjectEntityDTO revokedSubjectEntity : revokedEventsDTO.getRevokedSubjectEntityList()) {
+                if ("USER_ID".equals(revokedSubjectEntity.getEntityType())) {
+                    RevokedJWTDataHolder.getInstance().addRevokedSubjectEntityUserToMap(
+                            revokedSubjectEntity.getEntityId(), revokedSubjectEntity.getRevocationTime());
+                    if (log.isDebugEnabled()) {
+                        log.debug("Subject Entity ID : " + revokedSubjectEntity.getEntityId()
+                                + " added to the revoke map.");
+                    }
+                } else if ("CLIENT_ID".equals(revokedSubjectEntity.getEntityType())) {
+                    RevokedJWTDataHolder.getInstance().addRevokedSubjectEntityConsumerAppToMap(
+                            revokedSubjectEntity.getEntityId(), revokedSubjectEntity.getRevocationTime());
+                    if (log.isDebugEnabled()) {
+                        log.debug("Client ID : " + revokedSubjectEntity.getEntityId() + " added to the revoke map.");
+                    }
+                }
+            }
+        } else {
+            log.debug("No revoked users are retrieved via web service");
+        }
+    }
+
     /**
      *  Initiates the timer task to fetch data from the web service.
      *  Timer task will not run after the retry count is completed.
      */
     public void startRevokedJWTTokensRetriever() {
-        //using same initDelay as in keytemplates,blocking conditions retriever
+        //using same initDelay as in key-templates,blocking conditions retriever
         new Timer().schedule(this, getEventHubConfiguration().getInitDelay());
     }
 

@@ -40,7 +40,10 @@ import org.wso2.carbon.apimgt.impl.importexport.ExportFormat;
 import org.wso2.carbon.apimgt.impl.importexport.ImportExportConstants;
 import org.wso2.carbon.apimgt.impl.importexport.utils.CommonUtil;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIInfoAdditionalPropertiesDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIInfoAdditionalPropertiesMapDTO;
 import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.APIProductDTO;
+import org.wso2.carbon.apimgt.rest.api.publisher.v1.dto.MCPServerDTO;
 
 import java.io.File;
 import java.io.IOException;
@@ -177,6 +180,65 @@ public class APIControllerUtil {
         if (policies != null && !policies.isJsonNull()) {
             handleSubscriptionPolicies(policies, importedApiDto, null);
         }
+
+        // handle available additional properties
+        JsonElement additionalProperties = envParams.get(ImportExportConstants.ADDITIONAL_PROPERTIES_FIELD);
+        if (additionalProperties != null && !additionalProperties.isJsonNull()) {
+            handleAdditionalProperties(additionalProperties, importedApiDto, null);
+        }
+        return importedApiDto;
+    }
+
+    public static MCPServerDTO injectEnvParamsToMCPServer(MCPServerDTO importedApiDto, JsonObject envParams)
+            throws APIManagementException {
+
+        if (envParams == null || envParams.isJsonNull()) {
+            return importedApiDto;
+        }
+
+        JsonElement policies = envParams.get(ImportExportConstants.POLICIES_FIELD);
+        if (policies != null && !policies.isJsonNull()) {
+            JsonArray definedPolicies = policies.getAsJsonArray();
+            List<String> policiesListToAdd = new ArrayList<>();
+            for (JsonElement definedPolicy : definedPolicies) {
+                if (!definedPolicy.isJsonNull()) {
+                    String policyToAdd = definedPolicy.getAsString();
+                    if (!StringUtils.isEmpty(policyToAdd)) {
+                        policiesListToAdd.add(definedPolicy.getAsString());
+                    }
+                }
+            }
+            if (!policiesListToAdd.isEmpty()) {
+                    importedApiDto.setPolicies(policiesListToAdd);
+            }
+        }
+
+        // handle available additional properties
+        JsonElement additionalProperties = envParams.get(ImportExportConstants.ADDITIONAL_PROPERTIES_FIELD);
+        if (additionalProperties != null && !additionalProperties.isJsonNull()) {
+            JsonArray definedAdditionalProperties = additionalProperties.getAsJsonArray();
+            Map<String, APIInfoAdditionalPropertiesMapDTO> additionalPropertiesMap = new HashMap<>();
+            for (JsonElement definedAdditionalProperty : definedAdditionalProperties) {
+                if (!definedAdditionalProperty.isJsonNull()) {
+                    JsonElement propertyName = (((JsonObject) definedAdditionalProperty).get("name"));
+                    JsonElement propertyValue = (((JsonObject) definedAdditionalProperty).get("value"));
+                    JsonElement propertyDisplay = (((JsonObject) definedAdditionalProperty).get("display"));
+                    if (propertyName != null && propertyValue != null && propertyDisplay != null
+                            && !propertyName.isJsonNull() && !propertyValue.isJsonNull() &&
+                            !propertyDisplay.isJsonNull()) {
+                        APIInfoAdditionalPropertiesMapDTO apiInfoAdditionalPropertiesMapDTO =
+                                new APIInfoAdditionalPropertiesMapDTO();
+                        apiInfoAdditionalPropertiesMapDTO.setName(propertyName.getAsString());
+                        apiInfoAdditionalPropertiesMapDTO.setValue(propertyValue.getAsString());
+                        apiInfoAdditionalPropertiesMapDTO.setDisplay(propertyDisplay.getAsBoolean());
+                        additionalPropertiesMap.put(propertyName.getAsString(), apiInfoAdditionalPropertiesMapDTO);
+                    }
+                }
+            }
+            if (!additionalPropertiesMap.isEmpty()) {
+                importedApiDto.setAdditionalPropertiesMap(additionalPropertiesMap);
+            }
+        }
         return importedApiDto;
     }
 
@@ -270,6 +332,12 @@ public class APIControllerUtil {
         JsonElement policies = envParams.get(ImportExportConstants.POLICIES_FIELD);
         if (policies != null && !policies.isJsonNull()) {
             handleSubscriptionPolicies(policies, null, importedApiProductDto);
+        }
+
+        // handle available additional properties
+        JsonElement additionalProperties = envParams.get(ImportExportConstants.ADDITIONAL_PROPERTIES_FIELD);
+        if (additionalProperties != null && !additionalProperties.isJsonNull()) {
+            handleAdditionalProperties(additionalProperties, null, importedApiProductDto);
         }
         return importedApiProductDto;
     }
@@ -416,6 +484,25 @@ public class APIControllerUtil {
                     ExceptionCodes.ERROR_READING_PARAMS_FILE);
         }
 
+        // Validate custom parameters
+        if (endpointSecurityDetails.has(APIConstants.OAuthConstants.OAUTH_CUSTOM_PARAMETERS)) {
+            JsonElement customParamsElement = endpointSecurityDetails.get(
+                    APIConstants.OAuthConstants.OAUTH_CUSTOM_PARAMETERS);
+            if (customParamsElement != null && !customParamsElement.isJsonNull()) {
+                JsonObject customParams = customParamsElement.getAsJsonObject();
+                for (Map.Entry<String, JsonElement> entry : customParams.entrySet()) {
+                    JsonElement value = entry.getValue();
+                    if (value != null && value.isJsonObject() && !value.getAsJsonObject()
+                            .has(APIConstants.OAuthConstants.CUSTOM_PARAMETERS_VALUE)) {
+                        throw new APIManagementException(
+                                "Error parsing custom parameters. Parameter '"
+                                        + entry.getKey() + "' has invalid format.",
+                                ExceptionCodes.ERROR_READING_PARAMS_FILE);
+                    }
+                }
+            }
+        }
+
         if (!endpointSecurityDetails.has(APIConstants.OAuthConstants.OAUTH_CLIENT_ID)
                 || endpointSecurityDetails.get(APIConstants.OAuthConstants.OAUTH_CLIENT_ID) == null
                 || endpointSecurityDetails.get(APIConstants.OAuthConstants.OAUTH_CLIENT_ID).isJsonNull()) {
@@ -516,15 +603,15 @@ public class APIControllerUtil {
         }
 
         // if endpoint type is HTTP/REST
-        if (StringUtils.equals(endpointType, ImportExportConstants.HTTP_TYPE_ENDPOINT) || StringUtils
-                .equals(endpointType, ImportExportConstants.REST_TYPE_ENDPOINT)) {
+        if (StringUtils.equalsIgnoreCase(endpointType, ImportExportConstants.HTTP_TYPE_ENDPOINT) || StringUtils
+                .equalsIgnoreCase(endpointType, ImportExportConstants.REST_TYPE_ENDPOINT)) {
             //add REST endpoint configs as endpoint configs
             multipleEndpointsConfig = handleRestEndpoints(routingPolicy, envParams, defaultProductionEndpoint,
                     defaultSandboxEndpoint);
         }
 
         // if endpoint type is HTTP/SOAP
-        if (ImportExportConstants.SOAP_TYPE_ENDPOINT.equals(endpointType)) {
+        if (ImportExportConstants.SOAP_TYPE_ENDPOINT.equalsIgnoreCase(endpointType)) {
             //add SOAP endpoint configs as endpoint configs
             multipleEndpointsConfig = handleSoapEndpoints(routingPolicy, envParams, defaultProductionEndpoint,
                     defaultSandboxEndpoint);
@@ -551,12 +638,13 @@ public class APIControllerUtil {
             endpointsObject = envParams.get(ImportExportConstants.ENDPOINTS_FIELD).getAsJsonObject();
         }
         // if the endpoint type is REST or SOAP return null
-        if (ImportExportConstants.REST_TYPE_ENDPOINT.equals(endpointType) || ImportExportConstants.SOAP_TYPE_ENDPOINT
-                .equals(endpointType) || ImportExportConstants.HTTP_TYPE_ENDPOINT.equals(endpointType)) {
+        if (ImportExportConstants.REST_TYPE_ENDPOINT.equalsIgnoreCase(endpointType) ||
+                ImportExportConstants.SOAP_TYPE_ENDPOINT.equalsIgnoreCase(endpointType) ||
+                ImportExportConstants.HTTP_TYPE_ENDPOINT.equalsIgnoreCase(endpointType)) {
             return null;
         }
         // if endpoint type is Dynamic
-        if (ImportExportConstants.DYNAMIC_TYPE_ENDPOINT.equals(endpointType)) {
+        if (ImportExportConstants.DYNAMIC_TYPE_ENDPOINT.equalsIgnoreCase(endpointType)) {
             JsonObject updatedDynamicEndpointParams = new JsonObject();
             //replace url property in dynamic endpoints
             defaultProductionEndpoint.addProperty(ImportExportConstants.ENDPOINT_URL,
@@ -573,7 +661,7 @@ public class APIControllerUtil {
             return updatedDynamicEndpointParams;
 
             // if endpoint type is AWS Lambda
-        } else if (ImportExportConstants.AWS_TYPE_ENDPOINT.equals(endpointType)) {
+        } else if (ImportExportConstants.AWS_TYPE_ENDPOINT.equalsIgnoreCase(endpointType)) {
             //if aws config is not provided
             if (envParams.get(ImportExportConstants.AWS_LAMBDA_ENDPOINT_JSON_PROPERTY) == null) {
                 throw new APIManagementException(
@@ -641,6 +729,7 @@ public class APIControllerUtil {
 
             //get load balanced configs from params
             JsonElement loadBalancedConfigElement = envParams.get(ImportExportConstants.LOAD_BALANCE_ENDPOINTS_FIELD);
+            JsonElement failOverConfigElement = envParams.get(ImportExportConstants.FAILOVER_TYPE_ENDPOINT);
             JsonObject loadBalancedConfigs;
             if (loadBalancedConfigElement == null) {
                 throw new APIManagementException(
@@ -648,6 +737,10 @@ public class APIControllerUtil {
                         ExceptionCodes.ERROR_READING_PARAMS_FILE);
             } else {
                 loadBalancedConfigs = loadBalancedConfigElement.getAsJsonObject();
+            }
+            if (failOverConfigElement != null) {
+                updatedRESTEndpointParams.addProperty(ImportExportConstants.FAILOVER_TYPE_ENDPOINT,
+                        failOverConfigElement.getAsBoolean());
             }
             updatedRESTEndpointParams.addProperty(ImportExportConstants.ENDPOINT_TYPE_PROPERTY,
                     ImportExportConstants.LOAD_BALANCE_TYPE_ENDPOINT);
@@ -964,7 +1057,8 @@ public class APIControllerUtil {
 
         APIIdentifier apiIdentifier = new APIIdentifier(identifier.getProviderName(), identifier.getName(),
                 identifier.getVersion());
-        List<ClientCertificateDTO> certs = new ArrayList<>();
+        List<ClientCertificateDTO> productionCerts = new ArrayList<>();
+        List<ClientCertificateDTO> sandboxCerts = new ArrayList<>();
 
         for (JsonElement certificate : certificates) {
             JsonObject certObject = certificate.getAsJsonObject();
@@ -975,48 +1069,86 @@ public class APIControllerUtil {
             cert.setTierName(certObject.get(ImportExportConstants.CERTIFICATE_TIER_NAME_PROPERTY).getAsString());
             String certName = certObject.get(ImportExportConstants.CERTIFICATE_PATH_PROPERTY).getAsString();
             cert.setCertificate(certName);
-            certs.add(cert);
 
-            //check and create a directory
-            String clientCertificatesDirectory =
-                    pathToArchive + ImportExportConstants.CLIENT_CERTIFICATES_DIRECTORY_PATH;
-            if (!CommonUtil.checkFileExistence(clientCertificatesDirectory)) {
-                try {
-                    CommonUtil.createDirectory(clientCertificatesDirectory);
-                } catch (APIImportExportException e) {
-                    throw new APIManagementException(e);
+            String clientCertificatesDirectory;
+            String userCertificatesTempDirectoryPath = pathToArchive + ImportExportConstants.DEPLOYMENT_DIRECTORY
+                    + ImportExportConstants.CERTIFICATE_DIRECTORY + File.separator;
+            String userCertificatesTempDirectory;
+
+            if (certObject.get(ImportExportConstants.KEY_TYPE_JSON_KEY).getAsString().
+                    equalsIgnoreCase(APIConstants.API_KEY_TYPE_SANDBOX)) {
+
+                sandboxCerts.add(cert);
+                clientCertificatesDirectory = pathToArchive + ImportExportConstants.CLIENT_CERTIFICATES_DIRECTORY_PATH
+                        + File.separator + APIConstants.API_KEY_TYPE_SANDBOX;
+                if (!CommonUtil.checkFileExistence(clientCertificatesDirectory)) {
+                    try {
+                        CommonUtil.createDirectory(clientCertificatesDirectory);
+                    } catch (APIImportExportException e) {
+                        throw new APIManagementException(e);
+                    }
                 }
+
+                //copy certs file from certificates
+                userCertificatesTempDirectory = userCertificatesTempDirectoryPath + APIConstants.API_KEY_TYPE_SANDBOX;
+
+            } else {
+                productionCerts.add(cert);
+                clientCertificatesDirectory = pathToArchive + ImportExportConstants.CLIENT_CERTIFICATES_DIRECTORY_PATH
+                        + File.separator + APIConstants.API_KEY_TYPE_PRODUCTION;
+                if (!CommonUtil.checkFileExistence(clientCertificatesDirectory)) {
+                    try {
+                        CommonUtil.createDirectory(clientCertificatesDirectory);
+                    } catch (APIImportExportException e) {
+                        throw new APIManagementException(e);
+                    }
+                }
+                //copy certs file from certificates
+                userCertificatesTempDirectory = userCertificatesTempDirectoryPath +
+                        APIConstants.API_KEY_TYPE_PRODUCTION;
             }
-            //copy certs file from certificates
-            String userCertificatesTempDirectory = pathToArchive + ImportExportConstants.DEPLOYMENT_DIRECTORY
-                    + ImportExportConstants.CERTIFICATE_DIRECTORY;
+
             String sourcePath = userCertificatesTempDirectory + File.separator + certName;
             String destinationPath = clientCertificatesDirectory + File.separator + certName;
             if (Files.notExists(Paths.get(sourcePath))) {
                 String errorMessage =
-                        "The mentioned certificate file " + certName + " is not in the certificates directory";
+                        "The mentioned certificate file " + certName + "of" + certObject.get(ImportExportConstants
+                        .KEY_TYPE_JSON_KEY).getAsString() + " key type is not in the " + "certificates directory";
                 throw new APIManagementException(errorMessage, ExceptionCodes.ERROR_READING_PARAMS_FILE);
             }
             CommonUtil.moveFile(sourcePath, destinationPath);
         }
+        JsonElement productionJsonElement = new Gson().toJsonTree(productionCerts);
+        JsonElement sandboxJsonElement = new Gson().toJsonTree(sandboxCerts);
 
-        JsonElement jsonElement = new Gson().toJsonTree(certs);
+        String metadataFilePath;
         //generate meta-data yaml file
-        String metadataFilePath = pathToArchive + ImportExportConstants.CLIENT_CERTIFICATES_META_DATA_FILE_PATH;
+        metadataFilePath = pathToArchive + ImportExportConstants.PRODUCTION_CLIENT_CERTIFICATES_META_DATA_FILE_PATH;
         try {
-            if (CommonUtil.checkFileExistence(metadataFilePath + ImportExportConstants.YAML_EXTENSION)) {
-                File oldFile = new File(metadataFilePath + ImportExportConstants.YAML_EXTENSION);
-                oldFile.delete();
-            }
-            if (CommonUtil.checkFileExistence(metadataFilePath + ImportExportConstants.JSON_EXTENSION)) {
-                File oldFile = new File(metadataFilePath + ImportExportConstants.JSON_EXTENSION);
-                oldFile.delete();
-            }
-            CommonUtil.writeDtoToFile(metadataFilePath, ExportFormat.JSON,
-                    ImportExportConstants.TYPE_CLIENT_CERTIFICATES, jsonElement);
+            verifyExistenceOfClientCertAndWriteToMetadataFile(metadataFilePath, productionJsonElement);
         } catch (APIImportExportException e) {
             throw new APIManagementException(e);
         }
+        metadataFilePath = pathToArchive + ImportExportConstants.SANDBOX_CLIENT_CERTIFICATES_META_DATA_FILE_PATH;
+        try {
+            verifyExistenceOfClientCertAndWriteToMetadataFile(metadataFilePath, sandboxJsonElement);
+        } catch (APIImportExportException e) {
+            throw new APIManagementException(e);
+        }
+    }
+
+    private static void verifyExistenceOfClientCertAndWriteToMetadataFile(String metadataFilePath,
+                              JsonElement jsonElement) throws APIImportExportException, IOException {
+        if (CommonUtil.checkFileExistence(metadataFilePath + ImportExportConstants.YAML_EXTENSION)) {
+            File oldFile = new File(metadataFilePath + ImportExportConstants.YAML_EXTENSION);
+            oldFile.delete();
+        }
+        if (CommonUtil.checkFileExistence(metadataFilePath + ImportExportConstants.JSON_EXTENSION)) {
+            File oldFile = new File(metadataFilePath + ImportExportConstants.JSON_EXTENSION);
+            oldFile.delete();
+        }
+        CommonUtil.writeDtoToFile(metadataFilePath, ExportFormat.JSON,
+                ImportExportConstants.TYPE_CLIENT_CERTIFICATES, jsonElement);
     }
 
     /**
@@ -1085,6 +1217,56 @@ public class APIControllerUtil {
                     ImportExportConstants.TYPE_ENDPOINT_CERTIFICATES, updatedCertsArray);
         } catch (APIImportExportException e) {
             throw new APIManagementException(e);
+        }
+    }
+
+    /**
+     * This method will add the defined available additional properties in an environment to the particular imported
+     * API.
+     *
+     * @param importedApiDto        API DTO object to be updated
+     * @param importedApiProductDto API Product DTO object to be updated
+     * @param additionalProperties  properties with the values
+     */
+    private static void handleAdditionalProperties(JsonElement additionalProperties, APIDTO importedApiDto,
+            APIProductDTO importedApiProductDto) {
+
+        JsonArray definedAdditionalProperties = additionalProperties.getAsJsonArray();
+        List<APIInfoAdditionalPropertiesDTO> propertiesListToAdd = new ArrayList<>();
+        Map<String, APIInfoAdditionalPropertiesMapDTO> additionalPropertiesMap = new HashMap<>();
+        for (JsonElement definedAdditionalProperty : definedAdditionalProperties) {
+            if (!definedAdditionalProperty.isJsonNull()) {
+                JsonElement propertyName = (((JsonObject) definedAdditionalProperty).get("name"));
+                JsonElement propertyValue = (((JsonObject) definedAdditionalProperty).get("value"));
+                JsonElement propertyDisplay = (((JsonObject) definedAdditionalProperty).get("display"));
+                if (propertyName != null && propertyValue != null && propertyDisplay != null
+                        && !propertyName.isJsonNull() && !propertyValue.isJsonNull() && !propertyDisplay.isJsonNull()) {
+                    APIInfoAdditionalPropertiesMapDTO apiInfoAdditionalPropertiesMapDTO =
+                            new APIInfoAdditionalPropertiesMapDTO();
+                    apiInfoAdditionalPropertiesMapDTO.setName(propertyName.getAsString());
+                    apiInfoAdditionalPropertiesMapDTO.setValue(propertyValue.getAsString());
+                    apiInfoAdditionalPropertiesMapDTO.setDisplay(propertyDisplay.getAsBoolean());
+                    additionalPropertiesMap.put(propertyName.getAsString(), apiInfoAdditionalPropertiesMapDTO);
+
+                    APIInfoAdditionalPropertiesDTO additionalPropertiesDTO = new APIInfoAdditionalPropertiesDTO();
+                    additionalPropertiesDTO.setName(propertyName.getAsString());
+                    additionalPropertiesDTO.setValue(propertyValue.getAsString());
+                    additionalPropertiesDTO.setDisplay(propertyDisplay.getAsBoolean());
+                    propertiesListToAdd.add(additionalPropertiesDTO);
+                }
+            }
+        }
+        // If the properties are not defined in params file, the values in the api.yaml should be considered.
+        // Hence, this if statement will prevent setting the properties in api.yaml to an empty array if the properties
+        // are not properly defined in the params file
+        if (propertiesListToAdd.size() > 0 && additionalPropertiesMap.size() > 0) {
+            if (importedApiDto != null) {
+                importedApiDto.setAdditionalProperties(propertiesListToAdd);
+                importedApiDto.setAdditionalPropertiesMap(additionalPropertiesMap);
+            } else {
+                importedApiProductDto.setAdditionalProperties(propertiesListToAdd);
+                importedApiProductDto.setAdditionalPropertiesMap(additionalPropertiesMap);
+            }
         }
     }
 }

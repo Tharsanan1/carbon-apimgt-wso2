@@ -19,18 +19,22 @@
 package org.wso2.carbon.apimgt.rest.api.store.v1.mappings;
 
 import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.model.APIDefinitionContentSearchResult;
 import org.wso2.carbon.apimgt.api.model.APIProduct;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
 import org.wso2.carbon.apimgt.api.model.APIProductIdentifier;
 import org.wso2.carbon.apimgt.api.model.Documentation;
+import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
+import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIDefinitionSearchResultDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.DocumentSearchResultDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.PaginationDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SearchResultDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APISearchResultDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.SearchResultListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIBusinessInformationDTO;
+import org.wso2.carbon.apimgt.rest.api.store.v1.dto.AdvertiseInfoDTO;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiConstants;
 
 import java.util.Map;
@@ -59,6 +63,7 @@ public class SearchResultMappingUtil {
         apiResultDTO.setId(api.getUUID());
         APIIdentifier apiId = api.getId();
         apiResultDTO.setName(apiId.getApiName());
+        apiResultDTO.setDisplayName(api.getDisplayName() != null ? api.getDisplayName() : apiId.getApiName());
         apiResultDTO.setVersion(apiId.getVersion());
         apiResultDTO.setProvider(APIUtil.replaceEmailDomainBack(apiId.getProviderName()));
         String context = api.getContextTemplate();
@@ -73,11 +78,24 @@ public class SearchResultMappingUtil {
         apiBusinessInformationDTO.setTechnicalOwner(api.getTechnicalOwner());
         apiBusinessInformationDTO.setTechnicalOwnerEmail(api.getTechnicalOwnerEmail());
         apiResultDTO.setBusinessInformation(apiBusinessInformationDTO);
-        apiResultDTO.setType(SearchResultDTO.TypeEnum.API);
-        apiResultDTO.setTransportType(api.getType());
+        if (APIConstants.API_TYPE_MCP.equals(api.getType())) {
+            apiResultDTO.setType(SearchResultDTO.TypeEnum.MCP);
+            apiResultDTO.setTransportType(APIConstants.API_TYPE_HTTP);
+        } else if (APIConstants.API_TYPE_PRODUCT.equals(api.getType())) {
+            // In API search, the API Products are also returned as APIs. Hence, we need to handle this case as well.
+            apiResultDTO.setType(SearchResultDTO.TypeEnum.APIPRODUCT);
+            apiResultDTO.setTransportType(APIConstants.API_TYPE_HTTP);
+        } else {
+            apiResultDTO.setType(SearchResultDTO.TypeEnum.API);
+            apiResultDTO.setTransportType(api.getType());
+        }
         apiResultDTO.setDescription(api.getDescription());
         apiResultDTO.setStatus(api.getStatus());
         apiResultDTO.setThumbnailUri(api.getThumbnailUrl());
+        AdvertiseInfoDTO advertiseInfoDTO = new AdvertiseInfoDTO();
+        advertiseInfoDTO.setAdvertised(api.isAdvertiseOnly());
+        apiResultDTO.setAdvertiseInfo(advertiseInfoDTO);
+        apiResultDTO.setMonetizedInfo(api.isMonetizationEnabled());
         return apiResultDTO;
     }
 
@@ -91,6 +109,8 @@ public class SearchResultMappingUtil {
         apiResultDTO.setId(apiProduct.getUuid());
         APIProductIdentifier apiId = apiProduct.getId();
         apiResultDTO.setName(apiId.getName());
+        apiResultDTO.setDisplayName(
+                apiProduct.getDisplayName() != null ? apiProduct.getDisplayName() : apiId.getName());
         apiResultDTO.setVersion(apiId.getVersion());
         apiResultDTO.setProvider(APIUtil.replaceEmailDomainBack(apiId.getProviderName()));
         String context = apiProduct.getContextTemplate();
@@ -105,8 +125,8 @@ public class SearchResultMappingUtil {
         apiBusinessInformationDTO.setTechnicalOwner(apiProduct.getTechnicalOwner());
         apiBusinessInformationDTO.setTechnicalOwnerEmail(apiProduct.getTechnicalOwnerEmail());
         apiResultDTO.setBusinessInformation(apiBusinessInformationDTO);
-        apiResultDTO.setType(SearchResultDTO.TypeEnum.API);
-        apiResultDTO.setTransportType(apiProduct.getType());
+        apiResultDTO.setType(SearchResultDTO.TypeEnum.APIPRODUCT);
+        apiResultDTO.setTransportType(APIConstants.API_TYPE_HTTP);
         apiResultDTO.setDescription(apiProduct.getDescription());
         apiResultDTO.setStatus(apiProduct.getState());
         apiResultDTO.setThumbnailUri(apiProduct.getThumbnailUrl());
@@ -130,9 +150,11 @@ public class SearchResultMappingUtil {
         docResultDTO.setOtherTypeName(document.getOtherTypeName());
         APIIdentifier apiId = api.getId();
         docResultDTO.setApiName(apiId.getApiName());
+        docResultDTO.setApiDisplayName(api.getDisplayName() != null ? api.getDisplayName() : apiId.getApiName());
         docResultDTO.setApiVersion(apiId.getVersion());
         docResultDTO.setApiProvider(apiId.getProviderName());
         docResultDTO.setApiUUID(api.getUUID());
+        docResultDTO.setAssociatedType(api.getType());
         return docResultDTO;
     }
 
@@ -171,6 +193,40 @@ public class SearchResultMappingUtil {
         paginationDTO.setNext(paginatedNext);
         paginationDTO.setPrevious(paginatedPrevious);
         resultListDTO.setPagination(paginationDTO);
+    }
+
+    /**
+     * Get APIDefinitionSearchResultDTO representation for APi Definition Content Search Result.
+     *
+     * @param apiDefResult APIDefinitionContentSearchResult obj
+     * @return APIDefinitionSearchResultDTO obj
+     */
+
+    public static APIDefinitionSearchResultDTO
+    fromAPIDefSearchResultToAPIDefSearchResultDTO(APIDefinitionContentSearchResult apiDefResult) {
+        APIDefinitionSearchResultDTO apiDefSearchResultDTO = new APIDefinitionSearchResultDTO();
+        apiDefSearchResultDTO.setId(apiDefResult.getId());
+        apiDefSearchResultDTO.setType(SearchResultDTO.TypeEnum.DEFINITION);
+        apiDefSearchResultDTO.setApiUUID(apiDefResult.getApiUuid());
+        apiDefSearchResultDTO.setApiName(apiDefResult.getApiName());
+        apiDefSearchResultDTO.setApiDisplayName(apiDefResult.getApiDisplayName() != null ?
+                apiDefResult.getApiDisplayName() :
+                apiDefResult.getApiName());
+        apiDefSearchResultDTO.setApiContext(apiDefResult.getApiContext());
+        apiDefSearchResultDTO.setApiVersion(apiDefResult.getApiVersion());
+        apiDefSearchResultDTO.setApiProvider(apiDefResult.getApiProvider());
+        apiDefSearchResultDTO.setApiType(apiDefResult.getApiType());
+        apiDefSearchResultDTO.setAssociatedType(apiDefResult.getAssociatedType());
+        if (apiDefResult.getName().contains("swagger")) {
+            apiDefSearchResultDTO.setName(apiDefResult.getApiName() + " REST API Definition");
+        } else if (apiDefResult.getName().contains("graphql")) {
+            apiDefSearchResultDTO.setName(apiDefResult.getApiName() + " GraphQL Definition");
+        } else if (apiDefResult.getName().contains("async")) {
+            apiDefSearchResultDTO.setName(apiDefResult.getApiName() + " Async Definition");
+        } else if (apiDefResult.getName().contains("wsdl")) {
+            apiDefSearchResultDTO.setName(apiDefResult.getApiName() + " WSDL Definition");
+        }
+        return apiDefSearchResultDTO;
     }
 
 }

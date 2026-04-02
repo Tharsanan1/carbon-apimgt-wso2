@@ -19,6 +19,8 @@
 package org.wso2.carbon.apimgt.persistence.dto;
 
 import org.json.simple.JSONObject;
+import org.wso2.carbon.apimgt.api.model.AIConfiguration;
+import org.wso2.carbon.apimgt.api.model.BackendThrottlingConfiguration;
 import org.wso2.carbon.apimgt.api.model.SOAPToRestSequence;
 
 import java.util.ArrayList;
@@ -44,7 +46,8 @@ public class PublisherAPI extends PublisherAPIInfo {
     private String businessOwnerEmail;
     private String visibility;
     private String visibleRoles;
-    private String visibleOrganizations; //visibleTenants
+    private String visibleSuperOrganizations; //visibleTenants
+    private String visibleOrganizations; //visible organizations
     private boolean endpointSecured;
     private String swaggerDefinition;
     private String asyncApiDefinition;
@@ -63,8 +66,11 @@ public class PublisherAPI extends PublisherAPIInfo {
     private String subscriptionAvailableOrgs; // subscriptionAvailableTenants;
     private String implementation;
     private String productionMaxTps;
+    private String productionTimeUnit;
     private String sandboxMaxTps;
+    private String sandboxTimeUnit;
     private String authorizationHeader;
+    private String apiKeyHeader;
     private String apiSecurity; // ?check whether same to private List<String> securityScheme = new ArrayList<>();
     private boolean enableSchemaValidation;
     private boolean enableSubscriberVerification;
@@ -72,6 +78,7 @@ public class PublisherAPI extends PublisherAPIInfo {
     private String testKey;
     private String contextTemplate;
     private Set<String> availableTierNames;
+    private Set<OrganizationTiers> availableTiersForOrganizations;
     private Set<String> environments;
     private CORSConfiguration corsConfiguration;
     private WebsubSubscriptionConfiguration websubSubscriptionConfiguration;
@@ -94,11 +101,32 @@ public class PublisherAPI extends PublisherAPIInfo {
 
     private String versionTimestamp;
     private String audience;
+    private Set<String> audiences;
     private String apiExternalProductionEndpoint;
     private String apiExternalSandboxEndpoint;
     private String redirectURL;
     private String apiOwner;
     private String vendor;
+    private AIConfiguration aiConfiguration;
+    private BackendThrottlingConfiguration backendThrottlingConfiguration;
+
+    public AIConfiguration getAiConfiguration() {
+
+        return aiConfiguration;
+    }
+
+    public void setAiConfiguration(AIConfiguration aiConfiguration) {
+
+        this.aiConfiguration = aiConfiguration;
+    }
+
+    public BackendThrottlingConfiguration getBackendThrottlingConfiguration() {
+        return backendThrottlingConfiguration;
+    }
+
+    public void setBackendThrottlingConfiguration(BackendThrottlingConfiguration backendThrottlingConfiguration) {
+        this.backendThrottlingConfiguration = backendThrottlingConfiguration;
+    }
 
     public String getAudience() {
         return audience;
@@ -106,6 +134,14 @@ public class PublisherAPI extends PublisherAPIInfo {
 
     public void setAudience(String audience) {
         this.audience = audience;
+    }
+
+    public Set<String> getAudiences() {
+        return audiences;
+    }
+
+    public void setAudiences(Set<String> audiences) {
+        this.audiences = audiences;
     }
 
     public List<SOAPToRestSequence> getSoapToRestSequences() {
@@ -340,12 +376,37 @@ public class PublisherAPI extends PublisherAPIInfo {
         this.sandboxMaxTps = sandboxMaxTps;
     }
 
+
+    public String getProductionTimeUnit() {
+        return productionTimeUnit;
+    }
+
+    public void setProductionTimeUnit(String productionTimeUnit) {
+        this.productionTimeUnit = productionTimeUnit;
+    }
+
+    public String getSandboxTimeUnit() {
+        return sandboxTimeUnit;
+    }
+
+    public void setSandboxTimeUnit(String sandboxTimeUnit) {
+        this.sandboxTimeUnit = sandboxTimeUnit;
+    }
+
     public String getAuthorizationHeader() {
         return authorizationHeader;
     }
 
     public void setAuthorizationHeader(String authorizationHeader) {
         this.authorizationHeader = authorizationHeader;
+    }
+
+    public String getApiKeyHeader() {
+        return apiKeyHeader;
+    }
+
+    public void setApiKeyHeader(String apiKeyHeader) {
+        this.apiKeyHeader = apiKeyHeader;
     }
 
     public String getApiSecurity() {
@@ -402,6 +463,14 @@ public class PublisherAPI extends PublisherAPIInfo {
 
     public void setAvailableTierNames(Set<String> availableTierNames) {
         this.availableTierNames = availableTierNames;
+    }
+
+    public Set<OrganizationTiers> getAvailableTiersForOrganizations() {
+        return availableTiersForOrganizations;
+    }
+
+    public void setAvailableTiersForOrganizations(Set<OrganizationTiers> availableTiersForOrganizations) {
+        this.availableTiersForOrganizations = availableTiersForOrganizations;
     }
 
     public Set<String> getEnvironments() {
@@ -606,38 +675,48 @@ public class PublisherAPI extends PublisherAPIInfo {
     public void setVendor(String vendor) {
         this.vendor = vendor;
     }
+    
+    public String getVisibleSuperOrganizations() {
+		return visibleSuperOrganizations;
+	}
 
-    @Override
-    public String toString() {
-        return "PublisherAPI [isDefaultVersion=" + isDefaultVersion + ", description=" + description + ", wsdlUrl="
-                + wsdlUrl + ", wadlUrl=" + wadlUrl + ", technicalOwner=" + technicalOwner + ", technicalOwnerEmail="
-                + technicalOwnerEmail + ", businessOwner=" + businessOwner + ", businessOwnerEmail="
-                + businessOwnerEmail + ", visibility=" + visibility + ", visibleRoles=" + visibleRoles
-                + ", visibleOrganizations=" + visibleOrganizations + ", endpointSecured=" + endpointSecured
-                + ", endpointAuthDigest=" + endpointAuthDigest + ", endpointUTUsername=" + endpointUTUsername
-                + ", endpointUTPassword=" + endpointUTPassword + ", transports=" + transports + ", inSequence="
-                + inSequence + ", outSequence=" + outSequence + ", faultSequence=" + faultSequence + ", responseCache="
-                + responseCache + ", cacheTimeout=" + cacheTimeout + ", endpointConfig=" + endpointConfig
-                + ", subscriptionAvailability=" + subscriptionAvailability + ", subscriptionAvailableOrgs="
-                + subscriptionAvailableOrgs + ", implementation=" + implementation + ", productionMaxTps="
-                + productionMaxTps + ", sandboxMaxTps=" + sandboxMaxTps + ", authorizationHeader=" + authorizationHeader
-                + ", apiSecurity=" + apiSecurity + ", enableSchemaValidation=" + enableSchemaValidation
-                + ", enableSubscriberVerification=" + enableSubscriberVerification + ", enableStore=" + enableStore
-                + ", testKey=" + testKey + ", contextTemplate=" + contextTemplate + ", availableTierNames="
-                + availableTierNames + ", environments=" + environments
-                + ", corsConfiguration=" + corsConfiguration + ", websubSubscriptionConfiguration="
-                + websubSubscriptionConfiguration + ", apiCategories="
-                + apiCategories + ", isMonetizationEnabled=" + isMonetizationEnabled + ", monetizationProperties="
-                + monetizationProperties + ", keyManagers=" + keyManagers + ", deploymentEnvironments="
-                + deploymentEnvironments + ", tags=" + tags + ", accessControl=" + accessControl + ", gatewayVendor="
-                + gatewayVendor +  ", asyncTransportProtocols=" + asyncTransportProtocols + ", accessControlRoles="
-                + accessControlRoles + ", additionalProperties=" + additionalProperties
-                + ", thumbnail=" + thumbnail + ", createdTime=" + createdTime + ", lastUpdated=" + lastUpdated
-                + ", versionTimestamp=" + versionTimestamp + ",apiExternalProductionEndpoint="
-                + apiExternalProductionEndpoint + ",apiExternalSandboxEndpoint=" + apiExternalSandboxEndpoint
-                + ", originalDevportalURL" + redirectURL + ", apiOwner" + apiOwner + ", vendor" + vendor
-                + ", toString()=" + super.toString() + "]";
-    }
+	public void setVisibleSuperOrganizations(String visibleSuperOrganizations) {
+		this.visibleSuperOrganizations = visibleSuperOrganizations;
+	}
+
+	@Override
+	public String toString() {
+		return "PublisherAPI [isDefaultVersion=" + isDefaultVersion + ", description=" + description + ", wsdlUrl="
+				+ wsdlUrl + ", wadlUrl=" + wadlUrl + ", technicalOwner=" + technicalOwner + ", technicalOwnerEmail="
+				+ technicalOwnerEmail + ", businessOwner=" + businessOwner + ", businessOwnerEmail="
+				+ businessOwnerEmail + ", visibility=" + visibility + ", visibleRoles=" + visibleRoles
+				+ ", visibleSuperOrganizations=" + visibleSuperOrganizations + ", visibleOrganizations="
+				+ visibleOrganizations + ", endpointSecured=" + endpointSecured + ", swaggerDefinition="
+				+ swaggerDefinition + ", asyncApiDefinition=" + asyncApiDefinition + ", endpointAuthDigest="
+				+ endpointAuthDigest + ", endpointUTUsername=" + endpointUTUsername + ", endpointUTPassword="
+				+ endpointUTPassword + ", transports=" + transports + ", inSequence=" + inSequence + ", outSequence="
+				+ outSequence + ", faultSequence=" + faultSequence + ", responseCache=" + responseCache
+				+ ", cacheTimeout=" + cacheTimeout + ", endpointConfig=" + endpointConfig
+				+ ", subscriptionAvailability=" + subscriptionAvailability + ", subscriptionAvailableOrgs="
+				+ subscriptionAvailableOrgs + ", implementation=" + implementation + ", productionMaxTps="
+				+ productionMaxTps + ", sandboxMaxTps=" + sandboxMaxTps + ", authorizationHeader=" + authorizationHeader
+				+ ", apiKeyHeader=" + apiKeyHeader + ", apiSecurity=" + apiSecurity + ", enableSchemaValidation="
+				+ enableSchemaValidation + ", enableSubscriberVerification=" + enableSubscriberVerification
+				+ ", enableStore=" + enableStore + ", testKey=" + testKey + ", contextTemplate=" + contextTemplate
+				+ ", availableTierNames=" + availableTierNames + ", environments=" + environments
+				+ ", corsConfiguration=" + corsConfiguration + ", websubSubscriptionConfiguration="
+				+ websubSubscriptionConfiguration + ", apiCategories=" + apiCategories + ", isMonetizationEnabled="
+				+ isMonetizationEnabled + ", monetizationProperties=" + monetizationProperties + ", keyManagers="
+				+ keyManagers + ", deploymentEnvironments=" + deploymentEnvironments + ", tags=" + tags
+				+ ", accessControl=" + accessControl + ", accessControlRoles=" + accessControlRoles
+				+ ", additionalProperties=" + additionalProperties + ", thumbnail=" + thumbnail + ", createdTime="
+				+ createdTime + ", lastUpdated=" + lastUpdated + ", soapToRestSequences=" + soapToRestSequences
+				+ ", wsUriMapping=" + wsUriMapping + ", gatewayVendor=" + gatewayVendor + ", asyncTransportProtocols="
+				+ asyncTransportProtocols + ", versionTimestamp=" + versionTimestamp + ", audience=" + audience
+				+ ", apiExternalProductionEndpoint=" + apiExternalProductionEndpoint + ", apiExternalSandboxEndpoint="
+				+ apiExternalSandboxEndpoint + ", redirectURL=" + redirectURL + ", apiOwner=" + apiOwner + ", vendor="
+				+ vendor + "]";
+	}
 }
 
 /*

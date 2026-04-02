@@ -24,9 +24,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.xerces.impl.Constants;
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.ValidationException;
 import org.json.JSONException;
@@ -38,31 +39,57 @@ import org.wso2.carbon.apimgt.api.APIAdmin;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.APIMgtResourceNotFoundException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
+import org.wso2.carbon.apimgt.api.APIProvider;
+import org.wso2.carbon.apimgt.api.dto.GatewayVisibilityPermissionConfigurationDTO;
 import org.wso2.carbon.apimgt.api.dto.KeyManagerConfigurationDTO;
+import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.dto.KeyManagerPermissionConfigurationDTO;
+import org.wso2.carbon.apimgt.api.dto.OrganizationDetailsDTO;
 import org.wso2.carbon.apimgt.api.model.APICategory;
+import org.wso2.carbon.apimgt.api.model.APIIdentifier;
+import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
+import org.wso2.carbon.apimgt.api.model.ApiResult;
 import org.wso2.carbon.apimgt.api.model.Application;
 import org.wso2.carbon.apimgt.api.model.ApplicationInfo;
+import org.wso2.carbon.apimgt.api.model.ApplicationInfoKeyManager;
 import org.wso2.carbon.apimgt.api.model.ConfigurationDto;
 import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
+import org.wso2.carbon.apimgt.api.model.KeyManagerApplicationUsages;
 import org.wso2.carbon.apimgt.api.model.KeyManagerConfiguration;
 import org.wso2.carbon.apimgt.api.model.KeyManagerConnectorConfiguration;
+import org.wso2.carbon.apimgt.api.model.LLMProvider;
+import org.wso2.carbon.apimgt.api.model.Label;
 import org.wso2.carbon.apimgt.api.model.Monetization;
 import org.wso2.carbon.apimgt.api.model.MonetizationUsagePublishInfo;
 import org.wso2.carbon.apimgt.api.model.VHost;
 import org.wso2.carbon.apimgt.api.model.Workflow;
+import org.wso2.carbon.apimgt.api.model.WorkflowTaskService;
 import org.wso2.carbon.apimgt.api.model.botDataAPI.BotDetectionData;
 import org.wso2.carbon.apimgt.api.model.policy.Policy;
 import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
 import org.wso2.carbon.apimgt.impl.alertmgt.AlertMgtConstants;
+import org.wso2.carbon.apimgt.impl.dao.ApiKeyMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
+import org.wso2.carbon.apimgt.impl.dao.LabelsDAO;
 import org.wso2.carbon.apimgt.impl.dao.constants.SQLConstants;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
 import org.wso2.carbon.apimgt.impl.dto.WorkflowProperties;
+import org.wso2.carbon.apimgt.impl.factory.PersistenceFactory;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.keymgt.KeyMgtNotificationSender;
 import org.wso2.carbon.apimgt.impl.monetization.DefaultMonetizationImpl;
+import org.wso2.carbon.apimgt.impl.notifier.events.APIKeyEvent;
+import org.wso2.carbon.apimgt.impl.notifier.events.LabelEvent;
 import org.wso2.carbon.apimgt.impl.service.KeyMgtRegistrationService;
+import org.wso2.carbon.apimgt.impl.utils.APINameComparator;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.impl.utils.ContentSearchResultNameComparator;
+import org.wso2.carbon.apimgt.persistence.APIPersistence;
+import org.wso2.carbon.apimgt.persistence.dto.AdminApiSearchContent;
+import org.wso2.carbon.apimgt.persistence.dto.AdminContentSearchResult;
+import org.wso2.carbon.apimgt.persistence.dto.SearchContent;
+import org.wso2.carbon.apimgt.persistence.exceptions.APIPersistenceException;
 import org.wso2.carbon.context.CarbonContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.core.util.CryptoException;
@@ -83,27 +110,35 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.SortedSet;
 import java.util.TimeZone;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import static org.wso2.carbon.apimgt.impl.utils.APIUtil.getPaginatedApplicationList;
 
 /**
  * This class provides the core API admin functionality.
@@ -112,9 +147,13 @@ public class APIAdminImpl implements APIAdmin {
 
     private static final Log log = LogFactory.getLog(APIAdminImpl.class);
     protected ApiMgtDAO apiMgtDAO;
+    protected ApiKeyMgtDAO apiKeyMgtDAO;
+    protected LabelsDAO labelsDAO;
 
     public APIAdminImpl() {
         apiMgtDAO = ApiMgtDAO.getInstance();
+        apiKeyMgtDAO = ApiKeyMgtDAO.getInstance();
+        labelsDAO = LabelsDAO.getInstance();
     }
 
     @Override
@@ -123,10 +162,18 @@ public class APIAdminImpl implements APIAdmin {
         // gateway environment name should be unique, ignore environments defined in api-manager.xml with the same name
         // if a dynamic (saved in database) environment exists.
         List<String> dynamicEnvNames = dynamicEnvs.stream().map(Environment::getName).collect(Collectors.toList());
-        List<Environment> allEnvs = new ArrayList<>(dynamicEnvs.size() + APIUtil.getReadOnlyEnvironments().size());
+        List<Environment> allEnvs = new ArrayList<>(dynamicEnvs.size() +
+                APIUtil.getReadOnlyEnvironments().size());
         // add read only environments first and dynamic environments later
-        APIUtil.getReadOnlyEnvironments().values().stream().filter(env -> !dynamicEnvNames.contains(env.getName())).forEach(allEnvs::add);
+        APIUtil.getReadOnlyEnvironments().values().stream().filter(env ->
+                !dynamicEnvNames.contains(env.getName())).forEach(allEnvs::add);
         allEnvs.addAll(dynamicEnvs);
+
+        for (Environment env : allEnvs) {
+            if (env.getProvider().equalsIgnoreCase(APIConstants.EXTERNAL_GATEWAY_VENDOR)) {
+                maskValues(env);
+            }
+        }
         return allEnvs;
     }
 
@@ -134,16 +181,43 @@ public class APIAdminImpl implements APIAdmin {
     public Environment getEnvironment(String tenantDomain, String uuid) throws APIManagementException {
         // priority for configured environments over dynamic environments
         // name is the UUID of environments configured in api-manager.xml
+        // for backward compatibility, support both plain text and base64 encoded UUIDs
         Environment env = APIUtil.getReadOnlyEnvironments().get(uuid);
         if (env == null) {
             env = apiMgtDAO.getEnvironment(tenantDomain, uuid);
             if (env == null) {
-                String errorMessage = String.format("Failed to retrieve Environment with UUID %s. Environment not found",
-                        uuid);
-                throw new APIMgtResourceNotFoundException(errorMessage, ExceptionCodes.from(
-                        ExceptionCodes.GATEWAY_ENVIRONMENT_NOT_FOUND, String.format("UUID '%s'", uuid))
-                );
+                //try decoding the UUID and search again
+                try {
+                    String decodedEnvId = new String(Base64.getDecoder().decode(uuid), StandardCharsets.UTF_8);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Attempting to retrieve environment with decoded UUID: " + decodedEnvId);
+                    }
+                    env = APIUtil.getReadOnlyEnvironments().get(decodedEnvId);
+                    if (env == null) {
+                        env = apiMgtDAO.getEnvironment(tenantDomain, decodedEnvId);
+                        if (env == null) {
+                            String errorMessage = String.format("Failed to retrieve Environment with plain text UUID %s." +
+                                    " Environment not found", uuid);
+                            log.error(errorMessage);
+                            throw new APIMgtResourceNotFoundException(errorMessage, ExceptionCodes.from(
+                                    ExceptionCodes.GATEWAY_ENVIRONMENT_NOT_FOUND, String.format("UUID '%s'", uuid))
+                            );
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    //This catches errors if the string is not valid Base64
+                    String errorMessage = String.format("Provided env UUID: %s is not a valid Base64 encoded string. " +
+                            "Environment not found.", uuid);
+                    if (log.isDebugEnabled()) {
+                        log.debug(errorMessage, e);
+                    }
+                    throw new APIMgtResourceNotFoundException(errorMessage, ExceptionCodes.from(
+                            ExceptionCodes.GATEWAY_ENVIRONMENT_NOT_FOUND, String.format("UUID '%s'", uuid)));
+                }
             }
+        }
+        if (env.getProvider().equalsIgnoreCase(APIConstants.EXTERNAL_GATEWAY_VENDOR)) {
+            maskValues(env);
         }
         return env;
     }
@@ -159,7 +233,9 @@ public class APIAdminImpl implements APIAdmin {
                             String.format("name '%s'", environment.getName())));
         }
         validateForUniqueVhostNames(environment);
-        return apiMgtDAO.addEnvironment(tenantDomain, environment);
+        Environment environmentToStore =  new Environment(environment);
+        encryptGatewayConfigurationValues(null, environmentToStore);
+        return apiMgtDAO.addEnvironment(tenantDomain, environmentToStore);
     }
 
     @Override
@@ -172,13 +248,63 @@ public class APIAdminImpl implements APIAdmin {
             throw new APIMgtResourceNotFoundException(errorMessage,
                     ExceptionCodes.from(ExceptionCodes.READONLY_GATEWAY_ENVIRONMENT, String.format("UUID '%s'", uuid)));
         }
+        if (hasExistingDeployments(tenantDomain, uuid)) {
+            throw new APIManagementException("Cannot delete the environment with id: " + uuid
+                    + " as active gateway policy deployment exist",
+                    ExceptionCodes.from(ExceptionCodes.GATEWAY_ENVIRONMENT_ACTIVE_DEPLOYMENTS_EXIST,
+                            String.format("UUID '%s'", uuid)));
+        }
+        if (hasExistingAPIRevisions(tenantDomain, uuid)) {
+            throw new APIManagementException("Cannot delete the environment with id: " + uuid
+                    + " as API revisions are deployed to it", ExceptionCodes.from(
+                    ExceptionCodes.GATEWAY_ENVIRONMENT_API_REVISIONS_EXIST, String.format("UUID '%s'", uuid)));
+        }
+        APIUtil.stopFederatedGatewayAPIDiscovery(existingEnv, tenantDomain);
         apiMgtDAO.deleteEnvironment(uuid);
+    }
+
+    public Environment getEnvironmentWithoutPropertyMasking(String tenantDomain, String uuid)
+            throws APIManagementException {
+        // priority for configured environments over dynamic environments
+        // name is the UUID of environments configured in api-manager.xml
+        Environment env = APIUtil.getReadOnlyEnvironments().get(uuid);
+        if (env == null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Environment with UUID " + uuid + " not found in read-only cache, checking database");
+            }
+            env = apiMgtDAO.getEnvironment(tenantDomain, uuid);
+        }
+        if (env == null) {
+            log.error("Failed to retrieve Environment with UUID " + uuid + " for tenant domain " + tenantDomain);
+            String errorMessage = String.format("Failed to retrieve Environment with UUID %s. " +
+                            "Environment not found", uuid);
+            throw new APIMgtResourceNotFoundException(errorMessage, ExceptionCodes.from(
+                    ExceptionCodes.GATEWAY_ENVIRONMENT_NOT_FOUND, String.format("UUID '%s'", uuid))
+            );
+        }
+        return env;
+    }
+
+    @Override
+    public boolean hasExistingDeployments(String tenantDomain, String uuid) throws APIManagementException {
+        Environment existingEnv = getEnvironment(tenantDomain, uuid);
+        // check if the policy mapping exists for the given environment
+        return StringUtils.isNotEmpty(
+                apiMgtDAO.getGatewayPolicyMappingByGatewayLabel(existingEnv.getDisplayName(), tenantDomain));
+    }
+
+    private boolean hasExistingAPIRevisions(String tenantDomain, String uuid) throws APIManagementException {
+        if (log.isDebugEnabled()) {
+            log.debug(String.format("Checking for existing API revisions for "
+                    + "gateway environment with UUID '%s' in tenant '%s'", uuid, tenantDomain));
+        }
+        return apiMgtDAO.hasExistingAPIRevisions(uuid, tenantDomain);
     }
 
     @Override
     public Environment updateEnvironment(String tenantDomain, Environment environment) throws APIManagementException {
         // check if the VHost exists in the tenant domain with given UUID, throw error if not found
-        Environment existingEnv = getEnvironment(tenantDomain, environment.getUuid());
+        Environment existingEnv = getEnvironmentWithoutPropertyMasking(tenantDomain, environment.getUuid());
         if (existingEnv.isReadOnly()) {
             String errorMessage = String.format("Failed to update Environment with UUID '%s'. Environment is read only",
                     environment.getUuid());
@@ -197,7 +323,28 @@ public class APIAdminImpl implements APIAdmin {
 
         validateForUniqueVhostNames(environment);
         environment.setId(existingEnv.getId());
-        return apiMgtDAO.updateEnvironment(environment);
+        encryptGatewayConfigurationValues(existingEnv, environment);
+        Environment updatedEnvironment = apiMgtDAO.updateEnvironment(environment);
+        // If the update is successful without throwing an exception
+        // Perform a separate task of updating gateway label names
+        updateGatewayLabelNameForGatewayPolicies(existingEnv.getDisplayName(), updatedEnvironment.getDisplayName(),
+                tenantDomain);
+        return updatedEnvironment;
+    }
+
+    /**
+     * Update the gateway label name for the gateway policies if the environment name is changed.
+     *
+     * @param oldLabel     Old gateway label name
+     * @param newLabel     New gateway label name
+     * @param tenantDomain Tenant domain
+     * @throws APIManagementException If failed to update the gateway label name
+     */
+    private void updateGatewayLabelNameForGatewayPolicies(String oldLabel, String newLabel, String tenantDomain)
+            throws APIManagementException {
+        if (StringUtils.isNotEmpty(apiMgtDAO.getGatewayPolicyMappingByGatewayLabel(oldLabel, tenantDomain))) {
+            apiMgtDAO.updateGatewayLabelName(oldLabel, newLabel, tenantDomain);
+        }
     }
 
     private void validateForUniqueVhostNames(Environment environment) throws APIManagementException {
@@ -222,13 +369,48 @@ public class APIAdminImpl implements APIAdmin {
     }
 
     /**
+     * Returns api keys of a given tenant
+     *
+     * @param tenantDomain Tenant Domain
+     * @return List of api keys related to the given tenant
+     */
+    @Override
+    public List<APIKeyInfo> getAllApiKeys(String tenantDomain) throws APIManagementException {
+
+        return apiKeyMgtDAO.getAllAPIKeys(tenantDomain);
+    }
+
+    /**
+     * Revokes a given api key
+     *
+     * @param keyUUId API key UUId
+     * @param tenantDomain Tenant domain
+     */
+    @Override
+    public void revokeAPIKey(String keyUUId, String tenantDomain) throws APIManagementException {
+        int tenantId = APIUtil.getTenantId(tenantDomain);
+        // Load existing metadata before revocation (revocation may remove/alter it)
+        APIKeyInfo apiKeyInfo = apiKeyMgtDAO.getAPIKeyForTenant(keyUUId, tenantDomain);
+        if (apiKeyInfo == null || StringUtils.isEmpty(apiKeyInfo.getKeyUUID())) {
+            throw new APIMgtResourceNotFoundException("Active API key not found for UUID: " + keyUUId);
+        }
+        if (log.isDebugEnabled()){
+            log.debug("Revoking API key with UUID: " + keyUUId + " for tenant: " + tenantDomain);
+        }
+        apiKeyMgtDAO.revokeAPIKey(keyUUId, tenantDomain);
+        APIKeyEvent apiKeyEvent = new APIKeyEvent(APIConstants.EventType.API_KEY_DELETE.name(), tenantId, tenantDomain,
+                apiKeyInfo.getApiKeyHash(),apiKeyInfo.getKeyUUID(), apiKeyInfo.getKeyName(),apiKeyInfo.getKeyType());
+        APIUtil.sendNotification(apiKeyEvent, APIConstants.NotifierType.API_KEY.name());
+    }
+
+    /**
      * @inheritDoc
      **/
     public Application[] getApplicationsWithPagination(String user, String owner, int tenantId, int limit,
                                                        int offset, String applicationName, String sortBy,
                                                        String sortOrder) throws APIManagementException {
 
-        return apiMgtDAO.getApplicationsWithPagination(user, owner, tenantId, limit, offset, sortBy, sortOrder,
+        return apiMgtDAO.getApplicationsWithPaginationAndKMs(user, owner, tenantId, limit, offset, sortBy, sortOrder,
                 applicationName);
     }
 
@@ -330,8 +512,8 @@ public class APIAdminImpl implements APIAdmin {
     }
 
     @Override
-    public List<KeyManagerConfigurationDTO> getKeyManagerConfigurationsByOrganization(String organization)
-            throws APIManagementException {
+    public List<KeyManagerConfigurationDTO> getKeyManagerConfigurationsByOrganization(String organization,
+            boolean checkUsages) throws APIManagementException {
 
         // For Choreo scenario (Choreo organization uses the same super tenant Resident Key Manager
         // Hence no need to register the default key manager per organization)
@@ -340,7 +522,8 @@ public class APIAdminImpl implements APIAdmin {
             if (APIUtil.isInternalOrganization(organization)) {
                 KeyMgtRegistrationService.registerDefaultKeyManager(organization);
             } else {
-                tenantDomain = APIUtil.getInternalOrganizationDomain(organization);
+                tenantDomain = !APIConstants.KeyManager.ALL_KEY_MANAGERS.equals(organization) ?
+                        APIUtil.getInternalOrganizationDomain(organization) : organization;
             }
         } catch (UserStoreException e) {
             throw new APIManagementException("Error while retrieving tenant id for organization "
@@ -353,7 +536,10 @@ public class APIAdminImpl implements APIAdmin {
         KeyManagerConfigurationDTO defaultKeyManagerConfiguration = null;
         while (iterator.hasNext()) {
             KeyManagerConfigurationDTO keyManagerConfigurationDTO = iterator.next();
-            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName())) {
+            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName()) && (
+                    APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(keyManagerConfigurationDTO.getType())
+                            || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(
+                            keyManagerConfigurationDTO.getType()))) {
                 defaultKeyManagerConfiguration = keyManagerConfigurationDTO;
                 iterator.remove();
                 break;
@@ -383,10 +569,24 @@ public class APIAdminImpl implements APIAdmin {
         }
 
         setIdentityProviderRelatedInformation(keyManagerConfigurationsByTenant, organization);
+        if (checkUsages) {
+            setKeyManagerUsageRelatedInformation(keyManagerConfigurationsByTenant, organization);
+        }
+        // Add missing fields for migrated Key manager configs
+        Map<String, KeyManagerConnectorConfiguration> keyManagerConnectorConfigurationMap =
+                ServiceReferenceHolder.getInstance().getKeyManagerConnectorConfigurations();
+        for (KeyManagerConfigurationDTO keyManagerConfigurationDTO : keyManagerConfigurationsByTenant) {
+            if (keyManagerConnectorConfigurationMap.containsKey(keyManagerConfigurationDTO.getType())) {
+                keyManagerConnectorConfigurationMap.get(keyManagerConfigurationDTO.getType())
+                        .processConnectorConfigurations(keyManagerConfigurationDTO.getAdditionalProperties());
+            }
+        }
         return keyManagerConfigurationsByTenant;
     }
 
-    private void setIdentityProviderRelatedInformation(List<KeyManagerConfigurationDTO> keyManagerConfigurationsByOrganization, String organization)
+    private void setIdentityProviderRelatedInformation(List<KeyManagerConfigurationDTO>
+                                                               keyManagerConfigurationsByOrganization,
+                                                       String organization)
             throws APIManagementException {
 
         for (KeyManagerConfigurationDTO keyManagerConfigurationDTO : keyManagerConfigurationsByOrganization) {
@@ -410,6 +610,29 @@ public class APIAdminImpl implements APIAdmin {
             }
         }
 
+    }
+
+    private void setKeyManagerUsageRelatedInformation(
+            List<KeyManagerConfigurationDTO> keyManagerConfigurationsByOrganization, String organization)
+            throws APIManagementException {
+
+        for (KeyManagerConfigurationDTO keyManagerConfigurationDTO : keyManagerConfigurationsByOrganization) {
+
+            KeyManagerApplicationUsages appUsages = getApplicationsOfKeyManager(keyManagerConfigurationDTO.getUuid(), 0,
+                    Integer.MAX_VALUE);
+            if (appUsages.getApplicationCount() > 0) {
+                keyManagerConfigurationDTO.setUsed(true);
+                continue;
+            }
+
+            AdminContentSearchResult apiUsages = getAPIUsagesByKeyManagerNameAndOrganization(organization,
+                    keyManagerConfigurationDTO.getName(), 0, Integer.MAX_VALUE);
+            if (apiUsages.getApiCount() > 0) {
+                keyManagerConfigurationDTO.setUsed(true);
+                continue;
+            }
+            keyManagerConfigurationDTO.setUsed(false);
+        }
     }
 
     private void setAliasForTokenExchangeKeyManagers(List<KeyManagerConfigurationDTO> keyManagerConfigurationsByTenant,
@@ -450,7 +673,10 @@ public class APIAdminImpl implements APIAdmin {
             } else {
                 keyManagerConfigurationDTOS = new ArrayList<>();
             }
-            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfiguration.getName())) {
+            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfiguration.getName()) && (
+                    APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(keyManagerConfiguration.getType())
+                            || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(
+                            keyManagerConfiguration.getType()))) {
                 APIUtil.getAndSetDefaultKeyManagerConfiguration(keyManagerConfiguration);
             }
             keyManagerConfigurationDTOS.add(keyManagerConfiguration);
@@ -469,8 +695,14 @@ public class APIAdminImpl implements APIAdmin {
         if (keyManagerConfigurationDTO == null){
             return null;
         }
-        if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName())) {
-            APIUtil.getAndSetDefaultKeyManagerConfiguration(keyManagerConfigurationDTO);
+        if (keyManagerConfigurationDTO != null) {
+            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName()) && (
+                    APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(keyManagerConfigurationDTO.getType())
+                            || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(
+                            keyManagerConfigurationDTO.getType()))) {
+                APIUtil.getAndSetDefaultKeyManagerConfiguration(keyManagerConfigurationDTO);
+            }
+            maskValues(keyManagerConfigurationDTO);
         }
         if (!KeyManagerConfiguration.TokenType.valueOf(keyManagerConfigurationDTO.getTokenType().toUpperCase())
                 .equals(KeyManagerConfiguration.TokenType.EXCHANGED)) {
@@ -497,6 +729,77 @@ public class APIAdminImpl implements APIAdmin {
             getKeyManagerEndpoints(keyManagerConfigurationDTO);
         }
         return keyManagerConfigurationDTO;
+    }
+
+    @Override
+    public KeyManagerConfigurationDTO getGlobalKeyManagerConfigurationById(String id) throws APIManagementException {
+        KeyManagerConfigurationDTO keyManagerConfigurationDTO = apiMgtDAO.getKeyManagerConfigurationByID(
+                APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN, id);
+        if (keyManagerConfigurationDTO != null) {
+            maskValues(keyManagerConfigurationDTO);
+        }
+        return keyManagerConfigurationDTO;
+    }
+
+    @Override
+    public void deleteGlobalKeyManagerConfigurationById(String id) throws APIManagementException {
+
+        KeyManagerConfigurationDTO keyManagerConfigurationDTO = apiMgtDAO.getKeyManagerConfigurationByID(
+                APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN, id);
+        if (keyManagerConfigurationDTO != null) {
+            apiMgtDAO.deleteKeyManagerConfigurationById(id, APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN);
+            new KeyMgtNotificationSender()
+                    .notify(keyManagerConfigurationDTO, APIConstants.KeyManager.KeyManagerEvent.ACTION_DELETE);
+        }
+    }
+
+    @Override
+    public LLMProvider addLLMProvider(String organization, LLMProvider provider) throws APIManagementException {
+
+        provider.setId(UUID.randomUUID().toString());
+        LLMProvider result = apiMgtDAO.addLLMProvider(organization, provider);
+        new LLMProviderNotificationSender().notify(result.getId(), result.getName(), result.getApiVersion(),
+                provider.getConfigurations(), organization, APIConstants.EventType.LLM_PROVIDER_CREATE.name());
+        return result;
+    }
+
+    @Override
+    public List<LLMProvider> getLLMProviders(String organization, String name, String apiVersion,
+                                             Boolean builtInSupport) throws APIManagementException {
+
+        return apiMgtDAO.getLLMProviders(organization, name, apiVersion, builtInSupport);
+    }
+
+    @Override
+    public String deleteLLMProvider(String organization, LLMProvider provider, boolean builtIn)
+            throws APIManagementException {
+
+        String deletedLLMProviderId = apiMgtDAO.deleteLLMProvider(organization, provider.getId(), builtIn);
+        new LLMProviderNotificationSender().notify(provider.getId(), provider.getName(), provider.getApiVersion(),
+                provider.getConfigurations(), organization, APIConstants.EventType.LLM_PROVIDER_DELETE.name());
+        return deletedLLMProviderId;
+    }
+
+    @Override
+    public LLMProvider updateLLMProvider(String organization, LLMProvider provider) throws APIManagementException {
+
+        LLMProvider result = apiMgtDAO.updateLLMProvider(organization, provider);
+        if (!result.isBuiltInSupport()) {
+            new LLMProviderNotificationSender().notify(result.getId(), result.getName(), result.getApiVersion(),
+                    provider.getConfigurations(), organization, APIConstants.EventType.LLM_PROVIDER_UPDATE.name());
+        }
+        return result;
+    }
+
+    @Override
+    public LLMProvider getLLMProvider(String organization, String llmProviderId) throws APIManagementException {
+
+        LLMProvider llmProvider = apiMgtDAO.getLLMProvider(organization, llmProviderId);
+        if (llmProvider== null) {
+            throw new APIManagementException(
+                    ExceptionCodes.from(ExceptionCodes.AI_SERVICE_PROVIDER_NOT_FOUND, llmProviderId));
+        }
+        return llmProvider;
     }
 
     @Override
@@ -527,7 +830,8 @@ public class APIAdminImpl implements APIAdmin {
         }
         if (!KeyManagerConfiguration.TokenType.valueOf(keyManagerConfigurationDTO.getTokenType().toUpperCase())
                 .equals(KeyManagerConfiguration.TokenType.EXCHANGED)) {
-            validateKeyManagerConfiguration(keyManagerConfigurationDTO);
+            sanitizeKeyManagerConfiguration(keyManagerConfigurationDTO);
+            validateKeyManagerConfiguration(keyManagerConfigurationDTO, null);
             validateKeyManagerEndpointConfiguration(keyManagerConfigurationDTO);
         }
         if (StringUtils.equals(KeyManagerConfiguration.TokenType.EXCHANGED.toString(),
@@ -558,9 +862,35 @@ public class APIAdminImpl implements APIAdmin {
         return keyManagerConfigurationDTO;
     }
 
+    public AdminContentSearchResult getAPIUsagesByKeyManagerNameAndOrganization(String org, String keyManagerName,
+            int offset, int limit) throws APIManagementException {
+
+        APIPersistence apiPersistenceInstance = PersistenceFactory.getAPIPersistenceInstance();
+        String searchQuery = APIConstants.API_USAGE_BY_KEY_MANAGER_QUERY.replace("$1", keyManagerName);
+        try {
+            return apiPersistenceInstance.searchContentForAdmin(org, searchQuery, offset, limit, limit);
+        } catch (APIPersistenceException e) {
+            throw new APIManagementException("Error while finding the key manager ", e);
+        }
+    }
+
+    public KeyManagerApplicationUsages getApplicationsOfKeyManager(String keyManagerId, int offset, int limit)
+            throws APIManagementException {
+
+        KeyManagerApplicationUsages keyManagerApplicationUsages = new KeyManagerApplicationUsages();
+        ApiMgtDAO apiMgtDAO = ApiMgtDAO.getInstance();
+        List<ApplicationInfoKeyManager> applications = apiMgtDAO.getAllApplicationsOfKeyManager(keyManagerId);
+        keyManagerApplicationUsages.setApplicationCount(applications.size());
+        keyManagerApplicationUsages.setApplications(getPaginatedApplicationList(applications, offset, limit));
+        return keyManagerApplicationUsages;
+    }
+
     private void validateKeyManagerEndpointConfiguration(KeyManagerConfigurationDTO keyManagerConfigurationDTO)
             throws APIManagementException {
-        if (!APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName())) {
+        if (!(APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName()) && (
+                APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(keyManagerConfigurationDTO.getType())
+                        || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(
+                        keyManagerConfigurationDTO.getType())))) {
             KeyManagerConnectorConfiguration keyManagerConnectorConfiguration = ServiceReferenceHolder.getInstance()
                     .getKeyManagerConnectorConfiguration(keyManagerConfigurationDTO.getType());
             if (keyManagerConnectorConfiguration != null) {
@@ -588,6 +918,32 @@ public class APIAdminImpl implements APIAdmin {
         }
     }
 
+    private void encryptConfigurationInNestedFields(List<Object> configurations,
+                                                    Map<String, Object> additionalProperties,
+                                                    KeyManagerConfigurationDTO retrievedKeyManagerConfigurationDTO) throws APIManagementException {
+        if (configurations == null || configurations.isEmpty()) {
+            return;
+        }
+        for (Object configuration : configurations) {
+            ConfigurationDto configurationDto = (ConfigurationDto) configuration;
+            if (configurationDto.isMask()) {
+                String value = (String) additionalProperties.get(configurationDto.getName());
+                if (APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD.equals(value)) {
+                    if (retrievedKeyManagerConfigurationDTO != null) {
+                        Object unModifiedValue = retrievedKeyManagerConfigurationDTO.getAdditionalProperties()
+                                .get(configurationDto.getName());
+                        additionalProperties.replace(configurationDto.getName(), unModifiedValue);
+                    }
+                } else if (StringUtils.isNotEmpty(value)) {
+                    additionalProperties.replace(configurationDto.getName(), encryptValues(value));
+                }
+            }
+            // Recursively process nested values
+            encryptConfigurationInNestedFields(((ConfigurationDto) configuration).getValues(),
+                    additionalProperties, retrievedKeyManagerConfigurationDTO);
+        }
+    }
+
     private void encryptKeyManagerConfigurationValues(KeyManagerConfigurationDTO retrievedKeyManagerConfigurationDTO,
                                                       KeyManagerConfigurationDTO updatedKeyManagerConfigurationDto)
             throws APIManagementException {
@@ -611,6 +967,74 @@ public class APIAdminImpl implements APIAdmin {
                     }
                 }
             }
+            // if authConfiguration array is not empty, encrypt values there as well
+            if (keyManagerConnectorConfiguration.getAuthConfigurations() != null
+                    && !(keyManagerConnectorConfiguration.getAuthConfigurations().isEmpty())) {
+                List<ConfigurationDto> authConfigurations = keyManagerConnectorConfiguration.getAuthConfigurations();
+                // Recursively check nested objects in authConfigurations and apply encryption
+                for (ConfigurationDto authConfiguration : authConfigurations) {
+                    encryptConfigurationInNestedFields(authConfiguration.getValues(), additionalProperties,
+                            retrievedKeyManagerConfigurationDTO);
+                }
+            }
+        }
+    }
+
+    private void encryptGatewayConfigurationValues(Environment retrievedGatewayConfigurationDTO,
+            Environment updatedGatewayConfigurationDto) throws APIManagementException {
+
+        GatewayAgentConfiguration gatewayConfiguration = ServiceReferenceHolder.getInstance()
+                .getExternalGatewayConnectorConfiguration(updatedGatewayConfigurationDto.getGatewayType());
+        if (gatewayConfiguration != null) {
+            Map<String, String> additionalProperties = updatedGatewayConfigurationDto.getAdditionalProperties();
+            List<ConfigurationDto> connectionConfigurations = gatewayConfiguration.getConnectionConfigurations();
+            if (connectionConfigurations != null && !connectionConfigurations.isEmpty()) {
+                for (ConfigurationDto configurationDto : connectionConfigurations) {
+                    applyGatewayConfigMaskingAndEncryption(configurationDto, additionalProperties,
+                            retrievedGatewayConfigurationDTO);
+                }
+            }
+        }
+    }
+
+    /**
+     * Masks or encrypts gateway configuration values.
+     * If a value is the default masked password, it restores the original value from the
+     * retrieved configuration. Otherwise, it encrypts non-empty values.
+     * The same process is applied to any nested configurations.
+     *
+     * @param configurationDto The configuration to process.
+     * @param additionalProperties The map of configuration name-value pairs.
+     * @param retrievedGatewayConfigurationDTO The existing configuration for restoring values.
+     * @throws APIManagementException If an error occurs during processing.
+     */
+    private void applyGatewayConfigMaskingAndEncryption(ConfigurationDto configurationDto,
+            Map<String, String> additionalProperties, Environment retrievedGatewayConfigurationDTO)
+            throws APIManagementException {
+
+        if (configurationDto.isMask()) {
+            String value = additionalProperties.get(configurationDto.getName());
+            if (APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD.equals(value)) {
+                if (retrievedGatewayConfigurationDTO != null) {
+                    String unModifiedValue = retrievedGatewayConfigurationDTO.getAdditionalProperties()
+                            .get(configurationDto.getName());
+                    if (unModifiedValue != null) {
+                        additionalProperties.replace(configurationDto.getName(), unModifiedValue);
+                    }
+                }
+            } else if (StringUtils.isNotEmpty(value)) {
+                additionalProperties.replace(configurationDto.getName(), String.valueOf(encryptValues(value)));
+            }
+        }
+
+        List<Object> nestedConfigurationValues = configurationDto.getValues();
+        if (nestedConfigurationValues != null && !nestedConfigurationValues.isEmpty()) {
+            for (Object nestedConfiguration : nestedConfigurationValues) {
+                if (nestedConfiguration instanceof ConfigurationDto) {
+                    applyGatewayConfigMaskingAndEncryption((ConfigurationDto) nestedConfiguration, additionalProperties,
+                            retrievedGatewayConfigurationDTO);
+                }
+            }
         }
     }
 
@@ -627,6 +1051,20 @@ public class APIAdminImpl implements APIAdmin {
             }
         }
         return keyManagerConfigurationDTO;
+    }
+
+    public Environment decryptGatewayConfigurationValues(Environment environment)
+            throws APIManagementException {
+
+        Map<String, String> additionalProperties = environment.getAdditionalProperties();
+        for (Map.Entry<String, String> entry : additionalProperties.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (value != null) {
+                additionalProperties.replace(key, String.valueOf(decryptValue(value)));
+            }
+        }
+        return environment;
     }
 
     private Object decryptValue(Object value) throws APIManagementException {
@@ -684,14 +1122,25 @@ public class APIAdminImpl implements APIAdmin {
     public KeyManagerConfigurationDTO updateKeyManagerConfiguration(
             KeyManagerConfigurationDTO keyManagerConfigurationDTO)
             throws APIManagementException {
-        if (!KeyManagerConfiguration.TokenType.valueOf(keyManagerConfigurationDTO.getTokenType().toUpperCase())
-                .equals(KeyManagerConfiguration.TokenType.EXCHANGED)) {
-            validateKeyManagerConfiguration(keyManagerConfigurationDTO);
-            validateKeyManagerEndpointConfiguration(keyManagerConfigurationDTO);
-        }
         KeyManagerConfigurationDTO oldKeyManagerConfiguration =
                 apiMgtDAO.getKeyManagerConfigurationByID(keyManagerConfigurationDTO.getOrganization(),
                         keyManagerConfigurationDTO.getUuid());
+        if (oldKeyManagerConfiguration == null) {
+            String errorMsg = String.format(
+                    "Key Manager configuration not found for id '%s' in organization '%s'",
+                    keyManagerConfigurationDTO.getUuid(),
+                    keyManagerConfigurationDTO.getOrganization());
+            throw new APIMgtResourceNotFoundException(
+                    errorMsg,
+                    ExceptionCodes.from(ExceptionCodes.KEY_MANAGER_NOT_FOUND,
+                            keyManagerConfigurationDTO.getUuid()));
+        }
+        if (!KeyManagerConfiguration.TokenType.valueOf(keyManagerConfigurationDTO.getTokenType().toUpperCase())
+                .equals(KeyManagerConfiguration.TokenType.EXCHANGED)) {
+            sanitizeKeyManagerConfiguration(keyManagerConfigurationDTO);
+            validateKeyManagerConfiguration(keyManagerConfigurationDTO, oldKeyManagerConfiguration);
+            validateKeyManagerEndpointConfiguration(keyManagerConfigurationDTO);
+        }
         if (StringUtils.equals(KeyManagerConfiguration.TokenType.EXCHANGED.toString(),
                 keyManagerConfigurationDTO.getTokenType()) ||
                 StringUtils.equals(KeyManagerConfiguration.TokenType.BOTH.toString(),
@@ -743,6 +1192,29 @@ public class APIAdminImpl implements APIAdmin {
         new KeyMgtNotificationSender()
                 .notify(decryptedKeyManagerConfiguration, APIConstants.KeyManager.KeyManagerEvent.ACTION_UPDATE);
         return keyManagerConfigurationDTO;
+    }
+    @Override
+    public KeyManagerPermissionConfigurationDTO getKeyManagerPermissions(String id) throws APIManagementException {
+
+        KeyManagerPermissionConfigurationDTO keyManagerPermissionConfigurationDTO;
+        try {
+            keyManagerPermissionConfigurationDTO = apiMgtDAO.getKeyManagerPermissions(id);
+        } catch (APIManagementException e) {
+            throw new APIManagementException("Key Manager Permissions retrieval failed for Key Manager id " + id, e);
+        }
+        return keyManagerPermissionConfigurationDTO;
+    }
+
+    @Override
+    public GatewayVisibilityPermissionConfigurationDTO getGatewayVisibilityPermissions(String id) throws APIManagementException {
+
+        GatewayVisibilityPermissionConfigurationDTO gatewayVisibilityPermissionConfigurationDTO;
+        try {
+            gatewayVisibilityPermissionConfigurationDTO = apiMgtDAO.getGatewayVisibilityPermissions(id);
+        } catch (APIManagementException e) {
+            throw new APIManagementException("Gateway Visibility Permissions retrieval failed for gateway environment id " + id, e);
+        }
+        return gatewayVisibilityPermissionConfigurationDTO;
     }
 
     private IdentityProvider updatedIDP(IdentityProvider retrievedIDP,
@@ -830,14 +1302,26 @@ public class APIAdminImpl implements APIAdmin {
     public void deleteKeyManagerConfigurationById(String organization, KeyManagerConfigurationDTO kmConfig)
             throws APIManagementException {
         if (kmConfig != null) {
-            if (!APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(kmConfig.getName())) {
-                deleteIdentityProvider(organization, kmConfig);
-                apiMgtDAO.deleteKeyManagerConfigurationById(kmConfig.getUuid(), organization);
-                new KeyMgtNotificationSender()
-                        .notify(kmConfig, APIConstants.KeyManager.KeyManagerEvent.ACTION_DELETE);
+            AdminContentSearchResult apiUsage = getAPIUsagesByKeyManagerNameAndOrganization(organization,
+                    kmConfig.getName(), 0, Integer.MAX_VALUE);
+            KeyManagerApplicationUsages appUsages = getApplicationsOfKeyManager(kmConfig.getUuid(), 0,
+                    Integer.MAX_VALUE);
+            if (apiUsage != null && apiUsage.getApiCount() == 0 && appUsages != null
+                    && appUsages.getApplicationCount() == 0) {
+                if (!(APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(kmConfig.getName()) && (
+                        APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(kmConfig.getType())
+                                || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(kmConfig.getType())))) {
+                    deleteIdentityProvider(organization, kmConfig);
+                    apiMgtDAO.deleteKeyManagerConfigurationById(kmConfig.getUuid(), organization);
+                    new KeyMgtNotificationSender()
+                            .notify(kmConfig, APIConstants.KeyManager.KeyManagerEvent.ACTION_DELETE);
+                } else {
+                    throw new APIManagementException(APIConstants.KeyManager.DEFAULT_KEY_MANAGER + " couldn't delete",
+                            ExceptionCodes.KEY_MANAGER_DELETE_FAILED);
+                }
             } else {
-                throw new APIManagementException(APIConstants.KeyManager.DEFAULT_KEY_MANAGER + " couldn't delete",
-                        ExceptionCodes.INTERNAL_ERROR);
+                throw new APIManagementException("Key Manager is already used by an API or an Application.",
+                        ExceptionCodes.KEY_MANAGER_DELETE_FAILED);
             }
         }
     }
@@ -849,7 +1333,10 @@ public class APIAdminImpl implements APIAdmin {
         KeyManagerConfigurationDTO keyManagerConfiguration =
                 apiMgtDAO.getKeyManagerConfigurationByName(organization, name);
         if (keyManagerConfiguration != null) {
-            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfiguration.getName())) {
+            if (APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfiguration.getName()) && (
+                    APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(keyManagerConfiguration.getType())
+                            || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(
+                            keyManagerConfiguration.getType()))) {
                 APIUtil.getAndSetDefaultKeyManagerConfiguration(keyManagerConfiguration);
             }
             maskValues(keyManagerConfiguration);
@@ -925,6 +1412,22 @@ public class APIAdminImpl implements APIAdmin {
         try {
             //Parse the message body and extract the content in XML form
             DocumentBuilderFactory factory = APIUtil.getSecuredDocumentBuilder();
+
+            factory.setFeature(Constants.XERCES_FEATURE_PREFIX + Constants.DISALLOW_DOCTYPE_DECL_FEATURE,
+                    true);
+
+            // Enable secure processing
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+
+            // Enable namespace awareness
+            factory.setNamespaceAware(true);
+
+            // Disable external entities to prevent XXE attacks
+            factory.setFeature(Constants.SAX_FEATURE_PREFIX + Constants.EXTERNAL_GENERAL_ENTITIES_FEATURE,
+                    false);
+            factory.setFeature(Constants.SAX_FEATURE_PREFIX +
+                    Constants.EXTERNAL_PARAMETER_ENTITIES_FEATURE, false);
+
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document document = builder.parse(new InputSource(new StringReader(messageBody)));
             Node bodyContentNode = document.getFirstChild().getFirstChild();
@@ -933,6 +1436,7 @@ public class APIAdminImpl implements APIAdmin {
             if (bodyContentNode != null) {
                 StringWriter writer = new StringWriter();
                 Transformer transformer = TransformerFactory.newInstance().newTransformer();
+                transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
                 transformer.transform(new DOMSource(bodyContentNode), new StreamResult(writer));
                 String output = writer.toString();
                 content = output.substring(output.indexOf("?>") + 2); //remove <?xml version="1.0" encoding="UTF-8"?>
@@ -1007,19 +1511,163 @@ public class APIAdminImpl implements APIAdmin {
         APIProviderImpl apiProvider = new APIProviderImpl(username);
         //no need to add type prefix here since we need to ge the total number of category associations including both
         //APIs and API categories
-        String searchQuery = APIConstants.CATEGORY_SEARCH_TYPE_PREFIX + "=*" + category.getName() + "*";
+        String searchQuery = APIConstants.CATEGORY_SEARCH_TYPE_PREFIX + ":*" + category.getName() + "*";
         String tenantDomain = MultitenantUtils.getTenantDomain(username);
-        Map<String, Object> result = apiProvider.searchPaginatedAPIs(searchQuery, tenantDomain, 0, Integer.MAX_VALUE, null, null);
+        Map<String, Object> result = apiProvider.searchPaginatedAPIs(searchQuery, tenantDomain, 0, Integer.MAX_VALUE);
         return (int) (Integer) result.get("length");
     }
 
-    private void validateKeyManagerConfiguration(KeyManagerConfigurationDTO keyManagerConfigurationDTO)
+    /**
+     * Adds a new label for the tenant
+     *
+     * @param label      label to add
+     * @param tenantDomain tenant domain
+     * @throws APIManagementException if failed add label
+     */
+    public Label addLabel(Label label, String tenantDomain) throws APIManagementException {
+
+        if (!StringUtils.isEmpty(label.getName())) {
+            if (label.getName().length() > 255) {
+                throw new APIManagementException("Label name is too long.",
+                        ExceptionCodes.from(ExceptionCodes.LABEL_ADDING_FAILED, "Label name is too long."));
+            }
+        } else {
+            throw new APIManagementException("Label name is empty.",
+                    ExceptionCodes.from(ExceptionCodes.LABEL_ADDING_FAILED, "Label name is empty."));
+        }
+
+        if (labelsDAO.isLabelNameExists(label.getName(), tenantDomain)) {
+            throw new APIManagementException("Label with name '" + label.getName() + "' already exists",
+                    ExceptionCodes.from(ExceptionCodes.LABEL_NAME_ALREADY_EXISTS, label.getName()));
+        }
+
+        label.setLabelId(UUID.randomUUID().toString());
+        Label newLabel = labelsDAO.addLabel(label, tenantDomain);
+        LabelEvent labelEvent = new LabelEvent(UUID.randomUUID().toString(), System.currentTimeMillis(),
+                APIConstants.EventType.LABEL_CREATE.name(), tenantDomain, newLabel.getLabelId(), newLabel.getName());
+        APIUtil.sendNotification(labelEvent, APIConstants.NotifierType.LABEL.name());
+        return newLabel;
+    }
+
+    /**
+     * Updates a label
+     *
+     * @param labelID       label ID to update
+     * @param updateLabelBody   label data to update
+     * @param tenantDomain tenant domain
+     * @throws APIManagementException if failed update label
+     */
+    public Label updateLabel(String labelID, Label updateLabelBody, String tenantDomain)
+            throws APIManagementException {
+        Label labelOriginal = labelsDAO.getLabelByIdAndTenantDomain(labelID, tenantDomain);
+        if (labelOriginal == null) {
+            throw new APIManagementException("Label not found for the given label ID: " + labelID,
+                    ExceptionCodes.from(ExceptionCodes.LABEL_NOT_FOUND, labelID));
+        }
+        //Override labelID as it is not allowed to be updated
+        updateLabelBody.setLabelId(labelOriginal.getLabelId());
+
+        //We allow to update Label name given that the new label name is not taken yet
+        String oldName = labelOriginal.getName();
+        String updatedName = updateLabelBody.getName();
+        if (!StringUtils.isEmpty(updatedName)) {
+            if (updatedName.length() > 255) {
+                throw new APIManagementException("Label name is too long.",
+                        ExceptionCodes.from(ExceptionCodes.LABEL_UPDATE_FAILED, "Label name is too long."));
+            }
+        } else {
+            throw new APIManagementException("Label name is empty.",
+                    ExceptionCodes.from(ExceptionCodes.LABEL_UPDATE_FAILED, "Label name is empty."));
+        }
+
+        if (!oldName.equals(updatedName) && labelsDAO.isLabelNameExists(updatedName,
+                labelID, tenantDomain)) {
+            throw new APIManagementException("Label with name '" + updatedName + "' already exists",
+                    ExceptionCodes.from(ExceptionCodes.LABEL_NAME_ALREADY_EXISTS, updatedName));
+        }
+
+        labelsDAO.updateLabel(updateLabelBody);
+        LabelEvent labelEvent = new LabelEvent(UUID.randomUUID().toString(), System.currentTimeMillis(),
+                APIConstants.EventType.LABEL_UPDATE.name(), tenantDomain, labelID, updateLabelBody.getName());
+        APIUtil.sendNotification(labelEvent, APIConstants.NotifierType.LABEL.name());
+        return labelsDAO.getLabelByIdAndTenantDomain(labelID, tenantDomain);
+    }
+
+    /**
+     * Delete a label
+     *
+     * @param labelID       label ID to delete
+     * @param tenantDomain tenant domain
+     * @throws APIManagementException if failed delete label
+     */
+    public void deleteLabel(String labelID, String tenantDomain) throws APIManagementException {
+
+        Label labelOriginal = labelsDAO.getLabelByIdAndTenantDomain(labelID, tenantDomain);
+        if (labelOriginal == null) {
+            throw new APIManagementException("Label not found for the given label ID: " + labelID,
+                    ExceptionCodes.from(ExceptionCodes.LABEL_NOT_FOUND, labelID));
+        }
+        if (labelsDAO.hasAPIsForLabel(labelID)) {
+            throw new APIManagementException("Label is attached to APIs and cannot be deleted. Label ID: " + labelID,
+                    ExceptionCodes.from(ExceptionCodes.LABEL_CANNOT_DELETE_ASSOCIATED));
+        }
+        labelsDAO.deleteLabel(labelID);
+        LabelEvent labelEvent = new LabelEvent(UUID.randomUUID().toString(), System.currentTimeMillis(),
+                APIConstants.EventType.LABEL_DELETE.name(), tenantDomain, labelID, labelOriginal.getName());
+        APIUtil.sendNotification(labelEvent, APIConstants.NotifierType.LABEL.name());
+    }
+
+    /**
+     * Returns all labels of the tenant
+     *
+     * @param tenantDomain  tenant domain
+     * @return List<Label> list of Label objects
+     * @throws APIManagementException if failed to get labels
+     */
+    public List<Label> getAllLabelsOfTenant(String tenantDomain) throws APIManagementException {
+
+        return labelsDAO.getAllLabels(tenantDomain);
+    }
+
+    /**
+     * Get mapped APIs for the given label
+     *
+     * @param labelID label UUID
+     * @param tenantDomain  tenant domain
+     * @return List<ApiResult> list of ApiResult objects
+     * @throws APIManagementException
+     */
+    public List<ApiResult> getMappedApisForLabel(String labelID, String tenantDomain) throws APIManagementException {
+
+        Label labelOriginal = labelsDAO.getLabelByIdAndTenantDomain(labelID, tenantDomain);
+        if (labelOriginal == null) {
+            throw new APIManagementException("Label not found for the given label ID: " + labelID,
+                    ExceptionCodes.from(ExceptionCodes.LABEL_NOT_FOUND, labelID));
+        }
+        return labelsDAO.getMappedApisForLabel(labelID);
+    }
+
+    private void sanitizeKeyManagerConfiguration(KeyManagerConfigurationDTO keyManagerConfigurationDTO) {
+        if (keyManagerConfigurationDTO != null && keyManagerConfigurationDTO.getAdditionalProperties() != null) {
+            for (Map.Entry<String, Object> entry : keyManagerConfigurationDTO.getAdditionalProperties().entrySet()) {
+                if (entry.getValue() instanceof String) {
+                    entry.setValue(((String) entry.getValue()).trim());
+                }
+            }
+        }
+    }
+
+    protected void validateKeyManagerConfiguration(KeyManagerConfigurationDTO keyManagerConfigurationDTO,
+                                                 KeyManagerConfigurationDTO oldKeyManagerConfiguration)
             throws APIManagementException {
 
         if (StringUtils.isEmpty(keyManagerConfigurationDTO.getName())) {
             throw new APIManagementException("Key Manager Name can't be empty", ExceptionCodes.KEY_MANAGER_NAME_EMPTY);
         }
-        if (!APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName())) {
+        if (!(APIConstants.KeyManager.DEFAULT_KEY_MANAGER.equals(keyManagerConfigurationDTO.getName()) && (
+                APIConstants.KeyManager.DEFAULT_KEY_MANAGER_TYPE.equals(keyManagerConfigurationDTO.getType())
+                        || APIConstants.KeyManager.WSO2_IS_KEY_MANAGER_TYPE.equals(
+                        keyManagerConfigurationDTO.getType())))) {
             KeyManagerConnectorConfiguration keyManagerConnectorConfiguration = ServiceReferenceHolder.getInstance()
                     .getKeyManagerConnectorConfiguration(keyManagerConfigurationDTO.getType());
             if (keyManagerConnectorConfiguration != null) {
@@ -1036,6 +1684,42 @@ public class APIAdminImpl implements APIAdmin {
                             missingRequiredConfigurations.add(configurationDto.getName());
                         }
                     }
+
+                    // Check if invoked by update flow and if the configuration is disabled for update
+                    boolean hasExistingConfig = oldKeyManagerConfiguration != null;
+                    boolean isUpdateDisabled = configurationDto.isUpdateDisabled();
+
+                    if (hasExistingConfig && isUpdateDisabled) {
+                        String configName = configurationDto.getName();
+                        Object newValue = keyManagerConfigurationDTO.getAdditionalProperties().get(configName);
+                        Object defaultValue = configurationDto.getDefaultValue();
+                        boolean oldConfigContainsKey = oldKeyManagerConfiguration.getAdditionalProperties()
+                                .containsKey(configName);
+                        Object oldValue = oldKeyManagerConfiguration.getAdditionalProperties().get(configName);
+
+                        if (newValue == null && oldConfigContainsKey) {
+                            newValue = oldValue;
+                        } else if (newValue == null) {
+                            newValue = defaultValue;
+                        }
+                        keyManagerConfigurationDTO.getAdditionalProperties().put(configName, newValue);
+
+                        boolean valueChangedFromOld = oldConfigContainsKey && !Objects.equals(newValue, oldValue);
+                        boolean valueChangedFromDefault = !Objects.equals(newValue, defaultValue);
+                        boolean valueChanged = valueChangedFromOld
+                                || (!oldConfigContainsKey && valueChangedFromDefault);
+                        if (valueChanged) {
+                            throw new APIManagementException(
+                                    "Modification of the Key Manager configuration " + configurationDto.getName() +
+                                            " is not permitted",
+                                    ExceptionCodes.KEY_MANAGER_UPDATE_VIOLATION);
+                        }
+                    }
+                }
+                if (keyManagerConnectorConfiguration.getAuthConfigurations() != null
+                        && !keyManagerConnectorConfiguration.getAuthConfigurations().isEmpty()) {
+                    missingRequiredConfigurations.addAll(keyManagerConnectorConfiguration.validateAuthConfigurations(
+                            keyManagerConfigurationDTO.getAdditionalProperties()));
                 }
                 if (!missingRequiredConfigurations.isEmpty()) {
                     throw new APIManagementException("Key Manager Configuration value for " + String.join(",",
@@ -1104,14 +1788,88 @@ public class APIAdminImpl implements APIAdmin {
     private void maskValues(KeyManagerConfigurationDTO keyManagerConfigurationDTO) {
         KeyManagerConnectorConfiguration keyManagerConnectorConfiguration = ServiceReferenceHolder.getInstance()
                 .getKeyManagerConnectorConfiguration(keyManagerConfigurationDTO.getType());
+        // When the KM is used for Token Exchange,there won't be any connection configurations to mask.
+        if (keyManagerConnectorConfiguration != null) {
+            Map<String, Object> additionalProperties = keyManagerConfigurationDTO.getAdditionalProperties();
+            List<ConfigurationDto> connectionConfigurations =
+                    keyManagerConnectorConfiguration.getConnectionConfigurations();
+            if (connectionConfigurations != null && !connectionConfigurations.isEmpty()) {
+                for (ConfigurationDto connectionConfiguration : connectionConfigurations) {
+                    if (connectionConfiguration.isMask()) {
+                        additionalProperties.replace(connectionConfiguration.getName(),
+                                APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD);
+                    }
+                }
+            }
 
-        Map<String, Object> additionalProperties = keyManagerConfigurationDTO.getAdditionalProperties();
-        List<ConfigurationDto> connectionConfigurations =
-                keyManagerConnectorConfiguration.getConnectionConfigurations();
-        for (ConfigurationDto connectionConfiguration : connectionConfigurations) {
-            if (connectionConfiguration.isMask()) {
-                additionalProperties.replace(connectionConfiguration.getName(),
+            // if authConfiguration array is not empty, check for maskable values there as well
+            if (keyManagerConnectorConfiguration.getAuthConfigurations() != null
+                    && !(keyManagerConnectorConfiguration.getAuthConfigurations().isEmpty())) {
+                List<ConfigurationDto> authConfigurations = keyManagerConnectorConfiguration.getAuthConfigurations();
+                if (authConfigurations != null && !authConfigurations.isEmpty()) {
+                    // Recursively check nested objects in authConfigurations and apply masking
+                    for (ConfigurationDto authConfiguration : authConfigurations) {
+                        applyMaskToNestedFields(authConfiguration.getValues(), additionalProperties);
+                    }
+                }
+            }
+        }
+    }
+
+    private void applyMaskToNestedFields(List<Object> configurations, Map<String, Object> additionalProperties) {
+        if (configurations == null || configurations.isEmpty()) {
+            return;
+        }
+        for (Object configuration : configurations) {
+            if (((ConfigurationDto)configuration).isMask()) {
+                additionalProperties.replace(((ConfigurationDto) configuration).getName(),
                         APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD);
+            }
+            // Recursively process nested values
+            applyMaskToNestedFields(((ConfigurationDto)configuration).getValues(), additionalProperties);
+        }
+    }
+
+    /**
+     * Applies masking to nested gateway configuration fields.
+     * For each masked configuration, the actual value in {@code additionalProperties}
+     * is replaced with the default masked password. The method is applied recursively
+     * to handle nested configurations.
+     *
+     * @param connectorConfigurations The list of gateway configurations to process.
+     * @param additionalProperties The map of configuration name-value pairs to update.
+     */
+    private void applyMaskToNestedGatewayFields(List<Object> connectorConfigurations,
+            Map<String, String> additionalProperties) {
+        if (connectorConfigurations == null || connectorConfigurations.isEmpty()) {
+            return;
+        }
+        for (Object connectorConfiguration : connectorConfigurations) {
+            if (connectorConfiguration instanceof ConfigurationDto) {
+                ConfigurationDto connectorConfigurationDto = (ConfigurationDto) connectorConfiguration;
+                if (connectorConfigurationDto.isMask()) {
+                    additionalProperties.replace(connectorConfigurationDto.getName(),
+                            APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD);
+                }
+                applyMaskToNestedGatewayFields(connectorConfigurationDto.getValues(), additionalProperties);
+            }
+        }
+    }
+
+    private void maskValues(Environment environment) {
+        GatewayAgentConfiguration gatewayConfiguration = ServiceReferenceHolder.getInstance()
+                .getExternalGatewayConnectorConfiguration(environment.getGatewayType());
+        if (gatewayConfiguration != null) {
+            Map<String, String> additionalProperties = environment.getAdditionalProperties();
+            List<ConfigurationDto> connectionConfigurations = gatewayConfiguration.getConnectionConfigurations();
+            if (connectionConfigurations != null && !connectionConfigurations.isEmpty()) {
+                for (ConfigurationDto connectionConfiguration : connectionConfigurations) {
+                    if (connectionConfiguration.isMask()) {
+                        additionalProperties.replace(connectionConfiguration.getName(),
+                                APIConstants.DEFAULT_MODIFIED_ENDPOINT_PASSWORD);
+                    }
+                    applyMaskToNestedGatewayFields(connectionConfiguration.getValues(), additionalProperties);
+                }
             }
         }
     }
@@ -1130,7 +1888,11 @@ public class APIAdminImpl implements APIAdmin {
         WorkflowProperties workflowConfig = org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.
                 getInstance().getAPIManagerConfigurationService().getAPIManagerConfiguration().getWorkflowProperties();
         if (workflowConfig.isListTasks()) {
-            return apiMgtDAO.getworkflows(workflowType, status, tenantDomain);
+            Workflow[] workflows = apiMgtDAO.getworkflows(workflowType, status, tenantDomain);
+            WorkflowTaskService taskService = org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder.
+            getInstance().getWorkflowTaskService();
+            return taskService.getFilteredPendingTasks(workflows,
+                    CarbonContext.getThreadLocalCarbonContext().getUsername(), tenantDomain);
         } else {
             return new Workflow[0];
         }
@@ -1155,10 +1917,6 @@ public class APIAdminImpl implements APIAdmin {
                     status, tenantDomain);
         }
 
-        if (workflow == null) {
-            String msg = "External workflow Reference: " + externelWorkflowRef + " was not found.";
-            throw new APIMgtResourceNotFoundException(msg);
-        }
         return workflow;
     }
 
@@ -1220,7 +1978,7 @@ public class APIAdminImpl implements APIAdmin {
         while (iterator.hasNext()) {
             Map.Entry<String, String> entry = iterator.next();
             for (String aRole : entry.getValue().split(",")) {
-                if (userRoleList.contains(aRole)) {
+                if (userRoleList.contains(aRole.trim())) {
                     authorizedScopes.add(entry.getKey());
                 }
             }
@@ -1264,6 +2022,31 @@ public class APIAdminImpl implements APIAdmin {
     }
 
     @Override
+    public void importDraftedOrgTheme(String organization, InputStream themeContent) throws APIManagementException {
+        apiMgtDAO.importDraftedOrgTheme(organization, themeContent);
+    }
+
+    @Override
+    public void updateOrgThemeStatus(String organization, String action) throws APIManagementException {
+        apiMgtDAO.updateOrgThemeStatus(organization, action);
+    }
+
+    @Override
+    public void deleteOrgTheme(String organization, String themeId) throws APIManagementException {
+        apiMgtDAO.deleteOrgTheme(organization, themeId);
+    }
+
+    @Override
+    public InputStream getOrgTheme(String uuid, String organization) throws APIManagementException {
+        return apiMgtDAO.getOrgTheme(uuid, organization);
+    }
+
+    @Override
+    public Map<String, String> getOrgThemes(String organization) throws APIManagementException {
+        return apiMgtDAO.getOrgThemes(organization);
+    }
+
+    @Override
     public void updateTenantConfig(String organization, String config) throws APIManagementException {
 
         Schema schema = APIUtil.retrieveTenantConfigJsonSchema();
@@ -1279,6 +2062,101 @@ public class APIAdminImpl implements APIAdmin {
             }
         } else {
             throw new APIManagementException("tenant-config validation failure", ExceptionCodes.INTERNAL_ERROR);
+        }
+    }
+
+    public void updateApiProvider(String apiId, String provider, String organisation) throws APIManagementException {
+        APIPersistence apiPersistenceInstance = PersistenceFactory.getAPIPersistenceInstance();
+        String username = CarbonContext.getThreadLocalCarbonContext().getUsername();
+        APIProvider apiProvider = APIManagerFactory.getInstance().getAPIProvider(username);
+        API api;
+        try {
+            api = apiProvider.getAPIbyUUID(apiId, organisation);
+        } catch (APIManagementException e) {
+            throw new APIManagementException("Error while retrieving API for id: " + apiId, e);
+        }
+        if (api == null) {
+            throw new APIMgtResourceNotFoundException("API not found for id: " + apiId);
+        }
+
+        String oldProvider = api.getId() != null ? api.getId().getProviderName() : null;
+        try {
+            ApiMgtDAO.getInstance().updateApiProvider(apiId, provider);
+            apiPersistenceInstance.changeApiProvider(provider, apiId, organisation);
+        } catch (APIPersistenceException | APIManagementException e) {
+            throw new APIManagementException("Error while changing the API provider", e);
+        }
+
+        JSONObject apiLogObject = new JSONObject();
+        apiLogObject.put(APIConstants.AuditLogConstants.NAME,
+                api.getId() != null ? api.getId().getApiName() : null);
+        apiLogObject.put(APIConstants.AuditLogConstants.VERSION,
+                api.getId() != null ? api.getId().getVersion() : null);
+        apiLogObject.put(APIConstants.AuditLogConstants.CONTEXT, api.getContext());
+        apiLogObject.put(APIConstants.AuditLogConstants.OLD_PROVIDER, oldProvider);
+        apiLogObject.put(APIConstants.AuditLogConstants.NEW_PROVIDER, provider);
+
+        APIUtil.logAuditMessage(APIConstants.AuditLogConstants.API, apiLogObject.toString(),
+                APIConstants.AuditLogConstants.PROVIDER_CHANGED, username);
+    }
+
+    /**
+     * get/search paginated APIs in admin portal
+     *
+     * @param searchQuery API name search query
+     * @param organization organization
+     * @param start start index of the pagination
+     * @param end end index of the pagination
+     * @return APIs result object
+     * @throws APIManagementException if an error occurs when searching/getting the APIs
+     */
+    public Map<String, Object> searchPaginatedApis(String searchQuery, String organization, int start, int end)
+            throws APIManagementException {
+        ArrayList<Object> compoundResult = new ArrayList<>();
+        Map<String, Object> result = new HashMap<>();
+        SortedSet<API> apiSet = new TreeSet<>(new APINameComparator());
+        String modifiedSearchQuery = buildSearchQuery(searchQuery);
+        try {
+            APIPersistence apiPersistenceInstance = PersistenceFactory.getAPIPersistenceInstance();
+            AdminContentSearchResult results = apiPersistenceInstance.searchContentForAdmin(organization,
+                    modifiedSearchQuery, start, end, end);
+            if (results != null) {
+                List<SearchContent> resultList = results.getApis();
+                for (SearchContent item : resultList) {
+                    if (APIConstants.API_IDENTIFIER_TYPE.equals(item.getType())) {
+                        AdminApiSearchContent adminSearchApi = (AdminApiSearchContent) item;
+                        API api = new API(new APIIdentifier(adminSearchApi.getProvider(), adminSearchApi.getName(),
+                                adminSearchApi.getVersion()));
+                        api.setUuid(adminSearchApi.getId());
+                        apiSet.add(api);
+                    }
+                }
+                compoundResult.addAll(apiSet);
+                compoundResult.sort(new ContentSearchResultNameComparator());
+                result.put(APIConstants.API_DATA_LENGTH, compoundResult.size());
+                result.put(APIConstants.ADMIN_API_LIST_RESPONSE_PARAMS_TOTAL, results.getApiTotal());
+            } else {
+                result.put(APIConstants.API_DATA_LENGTH, compoundResult.size());
+            }
+        } catch (APIPersistenceException e) {
+            throw new APIManagementException("Error while searching apis ",
+                    ExceptionCodes.GET_SEARCH_APIS_IN_ADMIN_FAILED);
+        }
+        result.put(APIConstants.API_DATA_APIS, compoundResult);
+        return result;
+    }
+
+    /**
+     * If the user provided a search query then it will use that, otherwise it will use the asterix(*) symbol.
+     *
+     * @param searchQuery searchQuery that the user provided
+     * @return modified searchQuery
+     */
+    private String buildSearchQuery(String searchQuery) {
+        if (searchQuery.equals(APIConstants.CHAR_ASTERIX)) {
+            return searchQuery;
+        } else {
+            return APIConstants.CHAR_ASTERIX + searchQuery + APIConstants.CHAR_ASTERIX;
         }
     }
 
@@ -1523,5 +2401,72 @@ public class APIAdminImpl implements APIAdmin {
 
         Gson gson = new Gson();
         return gson.fromJson(gson.toJson(identityProvider), IdentityProvider.class);
+    }
+
+    @Override
+    public List<KeyManagerConfigurationDTO> getGlobalKeyManagerConfigurations() throws APIManagementException {
+        List<KeyManagerConfigurationDTO> keyManagerConfigurations = apiMgtDAO.getKeyManagerConfigurationsByOrganization(
+                APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN);
+        for (KeyManagerConfigurationDTO keyManagerConfigurationDTO : keyManagerConfigurations) {
+            decryptKeyManagerConfigurationValues(keyManagerConfigurationDTO);
+        }
+        return keyManagerConfigurations;
+    }
+
+    public List<KeyManagerConfigurationDTO> getGlobalKeyManagerConfigurations(String organization)
+            throws APIManagementException {
+        List<KeyManagerConfigurationDTO> keyManagerConfigurations = apiMgtDAO.getKeyManagerConfigurationsByOrganization(
+                APIConstants.GLOBAL_KEY_MANAGER_TENANT_DOMAIN);
+        for (KeyManagerConfigurationDTO keyManagerConfigurationDTO : keyManagerConfigurations) {
+            decryptKeyManagerConfigurationValues(keyManagerConfigurationDTO);
+        }
+        setKeyManagerUsageRelatedInformation(keyManagerConfigurations, organization);
+        return keyManagerConfigurations;
+    }
+
+    @Override
+    public List<OrganizationDetailsDTO> getOrganizations(String parentOrgId, String tenantDomain) throws APIManagementException {
+        List<OrganizationDetailsDTO> organizationsList = apiMgtDAO.getChildOrganizations(parentOrgId, tenantDomain);
+        return organizationsList;
+    }
+
+    @Override
+    public OrganizationDetailsDTO addOrganization(OrganizationDetailsDTO orgDto, String parentOrgId,
+            String tenantDomain) throws APIManagementException {
+       
+        //If there is an organization entry already available for external reference, update it
+        OrganizationDetailsDTO savedOrgInfo = apiMgtDAO.getOrganizationDetalsByExternalOrgId(
+                orgDto.getExternalOrganizationReference(), tenantDomain);
+        if (savedOrgInfo != null) {
+            orgDto.setOrganizationHandle(APIUtil.getOrganizationHandle(orgDto.getName()));
+            orgDto.setOrganizationId(savedOrgInfo.getOrganizationId());
+            apiMgtDAO.updateOrganizationDetails(orgDto, parentOrgId);
+        } else {
+            orgDto.setOrganizationHandle(APIUtil.getOrganizationHandle(orgDto.getName()));
+            savedOrgInfo = apiMgtDAO.addOrganization(orgDto, parentOrgId, tenantDomain);
+            orgDto.setOrganizationId(savedOrgInfo.getOrganizationId());
+        }
+
+        return orgDto;
+    }
+
+    @Override
+    public OrganizationDetailsDTO getOrganizationDetails(String organizationId, String tenantDomain)
+            throws APIManagementException {
+        return apiMgtDAO.getOrganizationDetails(organizationId, tenantDomain);
+    }
+
+    @Override
+    public OrganizationDetailsDTO updateOrganization(OrganizationDetailsDTO organizationInfoDTO, String parentOrgId,
+            String tenantDomain) throws APIManagementException {
+        organizationInfoDTO.setOrganizationHandle(APIUtil.getOrganizationHandle(organizationInfoDTO.getName()));
+        apiMgtDAO.updateOrganizationDetails(organizationInfoDTO, parentOrgId);
+        return apiMgtDAO.getOrganizationDetails(organizationInfoDTO.getOrganizationId(),
+                tenantDomain);
+    }
+
+    @Override
+    public void deleteOrganization(String organizationId, String tenantDomain) throws APIManagementException {
+        apiMgtDAO.deleteOrganizationDetails(organizationId, tenantDomain);
     }
 }

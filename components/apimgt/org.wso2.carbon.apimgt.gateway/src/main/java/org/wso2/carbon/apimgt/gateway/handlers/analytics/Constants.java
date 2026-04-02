@@ -22,16 +22,22 @@ package org.wso2.carbon.apimgt.gateway.handlers.analytics;
  */
 public class Constants {
     public static final String REQUEST_START_TIME_PROPERTY = "apim.analytics.request.start.time";
+    public static final String REQUEST_END_TIME_PROPERTY = "apim.analytics.request.end.time";
     public static final String BACKEND_START_TIME_PROPERTY = "apim.analytics.backend.start.time";
     public static final String BACKEND_END_TIME_PROPERTY = "apim.analytics.backend.end.time";
     public static final String BACKEND_RESPONSE_CODE = "api.analytics.backend.response_code";
     public static final String USER_AGENT_PROPERTY = "api.analytics.user.agent";
     public static final String USER_IP_PROPERTY = "api.analytics.user.ip";
     public static final String CACHED_RESPONSE_KEY = "CachableResponse";
-    public static final String SKIP_DEFAULT_METRICS_PUBLISHING = "skip_default_metrics_publishing";
+    public static final String IS_ASYNC_API = "isAsyncAPI";
+    public static final String SKIP_METRICS_PUBLISHING = "SKIP_METRICS_PUBLISHING";
     public static final String REQUEST_CACHE_HIT = "api.analytics.cacheHit";
     public static final String API_USER_NAME_KEY = "userName";
     public static final String API_CONTEXT_KEY = "apiContext";
+    public static final String RESPONSE_SIZE = "responseSize";
+    public static final String REQUEST_SIZE = "requestSize";
+    public static final String RESOURCE_PATH = "RESOURCE_PATH";
+    public static final String RESPONSE_CONTENT_TYPE = "responseContentType";
     public static final String API_ANALYTICS_CUSTOM_DATA_PROVIDER_CLASS = "publisher.custom.data.provider.class";
 
     public static final String REGION_ID_PROP = "apim.gw.region";
@@ -51,15 +57,53 @@ public class Constants {
 
         public static final int TARGET_FAILURE_START = 101500;
         public static final int TARGET_FAILURE__END = 101600;
+
+        public static final int WS_TARGET_FAILURE_START = 1002;
+        public static final int WS_TARGET_FAILURE__END = 1015;
+
+        public static final int GUARDRAIL_FAILURE_START = 900514;
+        public static final int GUARDRAIL_FAILURE__END = 900515;
     }
 
     public static final int RESOURCE_NOT_FOUND_ERROR_CODE = 404;
     public static final int METHOD_NOT_ALLOWED_ERROR_CODE = 405;
+    public static final int GUARDRAIL_ERROR_CODE = 900514;
     public static final int ENDPOINT_SUSPENDED_ERROR_CODE = 303001;
+    public static final int RESOURCE_NOT_FOUND_APIM_ERROR_CODE = 900906;
+
+    public static final int WS_BAD_GATEWAY_ERROR_CODE = 1014;
 
     public static final String API_GOOGLE_ANALYTICS_TRACKING_ENABLED = "Enabled";
     public static final String API_GOOGLE_ANALYTICS_TRACKING_ID = "TrackingID";
+    public static final String API_GOOGLE_ANALYTICS_MEASUREMENT_ID = "MeasurementID";
+    public static final String API_GOOGLE_ANALYTICS_API_SECRET = "APISecret";
     public static final String X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
-
     public static final String HEADER_X_FORWARDED_FOR = "X-FORWARDED-FOR";
+    public static final String BUILD_RESPONSE_MESSAGE_CONFIG = "build_response_message";
+
+    public static final String CERTIFICATE_COMMON_NAME = "commonName";
+    public static final String NOT_APPLICABLE_VALUE = "N/A";
+    public static final String SEND_HEADER = "send_headers";
+    public static final String REQUEST_HEADERS= "requestHeaders";
+    public static final String RESPONSE_HEADERS= "responseHeaders";
+    public static final String RESPONSE_HEADER_MASK = "response_headers";
+    public static final String REQUEST_HEADER_MASK = "request_headers";
+    public static final String MASK_VALUE = "*****";
+
+    public static final String AI_METADATA = "aiMetadata";
+    public static final String AI_VENDOR_NAME = "vendorName";
+    public static final String AI_VENDOR_VERSION = "vendorVersion";
+    public static final String AI_MODEL = "model";
+    public static final String AI_TOKEN_USAGE = "aiTokenUsage";
+    public static final String AI_PROMPT_TOKEN_USAGE = "promptTokens";
+    public static final String AI_COMPLETION_TOKEN_USAGE = "completionTokens";
+    public static final String HOUR = "hour";
+    public static final String AI_TOTAL_TOKEN_USAGE = "totalTokens";
+    public static final String IS_EGRESS = "isEgress";
+    public static final String SUBTYPE = "subtype";
+
+    public static final String MCP_METHOD = "jsonRpcMethod";
+    public static final String GUARDRAIL_NAME = "guardrailName";
+    public static final String IS_GUARDRAIL_HIT = "isGuardrailHit";
+
 }

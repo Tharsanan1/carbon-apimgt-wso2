@@ -23,16 +23,26 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.config.xml.MultiXMLConfigurationBuilder;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.common.jms.JMSTransportHandler;
 import org.wso2.carbon.apimgt.gateway.APILoggerManager;
 import org.wso2.carbon.apimgt.gateway.EndpointCertificateDeployer;
+import org.wso2.carbon.apimgt.gateway.GatewayPolicyDeployer;
 import org.wso2.carbon.apimgt.gateway.GoogleAnalyticsConfigDeployer;
 import org.wso2.carbon.apimgt.gateway.InMemoryAPIDeployer;
+import org.wso2.carbon.apimgt.gateway.LLMProviderManager;
+import org.wso2.carbon.apimgt.gateway.TenancyLoader;
+import org.wso2.carbon.apimgt.gateway.apikey.APIKeysRetriever;
+import org.wso2.carbon.apimgt.gateway.notifiers.DeploymentStatusNotifier;
+import org.wso2.carbon.apimgt.gateway.notifiers.GatewayNotifier;
 import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.jwt.RevokedJWTTokensRetriever;
 import org.wso2.carbon.apimgt.gateway.throttling.util.BlockingConditionRetriever;
 import org.wso2.carbon.apimgt.gateway.throttling.util.KeyTemplateRetriever;
+import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
+import org.wso2.carbon.apimgt.gateway.utils.InternalServiceCall;
+import org.wso2.carbon.apimgt.gateway.utils.TenantUtils;
 import org.wso2.carbon.apimgt.gateway.webhooks.WebhooksDataHolder;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.certificatemgt.exceptions.CertificateManagementException;
@@ -44,6 +54,10 @@ import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.exception.Artifac
 import org.wso2.carbon.apimgt.impl.jms.listener.JMSListenerShutDownService;
 import org.wso2.carbon.apimgt.impl.utils.CertificateMgtUtils;
 import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
+import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataLoader;
+import org.wso2.carbon.apimgt.keymgt.model.entity.API;
+import org.wso2.carbon.apimgt.keymgt.model.exception.DataLoadingException;
+import org.wso2.carbon.apimgt.keymgt.model.impl.SubscriptionDataLoaderImpl;
 import org.wso2.carbon.base.CarbonBaseUtils;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.core.ServerShutdownHandler;
@@ -57,6 +71,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 /**
@@ -71,9 +88,12 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
     private JMSTransportHandler jmsTransportHandlerForTrafficManager;
     private JMSTransportHandler jmsTransportHandlerForEventHub;
     private ThrottleProperties throttleProperties;
+    private ExecutorService service = Executors.newFixedThreadPool(3, new InternalServiceCall());
     private GatewayArtifactSynchronizerProperties gatewayArtifactSynchronizerProperties;
     private boolean isAPIsDeployedInSyncMode = false;
+    private boolean isGatewayPoliciesDeployedInSyncMode = false;
     private int syncModeDeploymentCount = 0;
+    private int syncModeGatewayPolicyDeploymentCount = 0;
     private int retryCount = 10;
     private String securedWebSocketInboundEp = "SecureWebSocketInboundEndpoint";
     private String webHookServerHTTPS = "SecureWebhookServer";
@@ -82,40 +102,55 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
     private String tenantsRootPath = CarbonBaseUtils.getCarbonHome() + File.separator + "repository" + File.separator
             + "tenants" + File.separator;
     private String synapseDeploymentPath = "synapse-configs" + File.separator + "default";
+    private GatewayNotifier gatewayNotifier;
+    private DeploymentStatusNotifier deploymentStatusNotifier;
 
     public GatewayStartupListener() {
 
         gatewayArtifactSynchronizerProperties =
                 ServiceReferenceHolder.getInstance().getAPIManagerConfiguration()
                         .getGatewayArtifactSynchronizerProperties();
+        gatewayNotifier = GatewayNotifier.getInstance();
+        deploymentStatusNotifier = DeploymentStatusNotifier.getInstance();
         throttleProperties = ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getThrottleProperties();
         ThrottleProperties.JMSConnectionProperties jmsConnectionProperties =
                 throttleProperties.getJmsConnectionProperties();
         this.jmsTransportHandlerForTrafficManager =
-                new JMSTransportHandler(jmsConnectionProperties.getJmsConnectionProperties());
+                new JMSTransportHandler(jmsConnectionProperties.getJmsConnectionProperties(), null);
         EventHubConfigurationDto.EventHubReceiverConfiguration eventHubReceiverConfiguration =
                 ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getEventHubConfigurationDto()
                         .getEventHubReceiverConfiguration();
+        ThrottleProperties.JMSConnectionProperties.JMSTaskManagerProperties jmsTaskManagerProperties =
+                ServiceReferenceHolder.getInstance().getAPIManagerConfiguration().getThrottleProperties()
+                        .getJmsConnectionProperties().getJmsTaskManagerProperties();
         if (eventHubReceiverConfiguration != null) {
-            this.jmsTransportHandlerForEventHub =
-                    new JMSTransportHandler(eventHubReceiverConfiguration.getJmsConnectionParameters());
+            this.jmsTransportHandlerForEventHub = new JMSTransportHandler(
+                    eventHubReceiverConfiguration.getJmsConnectionParameters(), jmsTaskManagerProperties);
         }
     }
 
     @Override
     public void completingServerStartup() {
-
-        try {
-            CertificateMgtUtils.backupOriginalTrustStore();
-            CertificateMgtUtils.startListenerCertificateReLoader();
-        } catch (CertificateManagementException e) {
-            log.error("Error while Backup Truststore", e);
+        String migrationEnabled = System.getProperty(APIConstants.MIGRATE);
+        if (migrationEnabled == null) {
+            try {
+                CertificateMgtUtils.backupOriginalTrustStore();
+                CertificateMgtUtils.startListenerCertificateReLoader();
+            } catch (CertificateManagementException e) {
+                log.error("Error while Backup Truststore", e);
+            }
+            log.debug("Registering ServerStartupListener for SubscriptionStore for the tenant domain : " +
+                    MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            SubscriptionDataHolder.getInstance()
+                    .registerTenantSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            log.debug("Registered ServerStartupListener for SubscriptionStore for the tenant domain : " +
+                    MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            SubscriptionDataHolder.getInstance()
+                    .initializeSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            cleanDeployment(CarbonUtils.getCarbonRepository());
+        } else {
+            log.info("Running on migration enabled mode: Stopped at gateway startup listener completing");
         }
-        log.debug("Registering ServerStartupListener for SubscriptionStore for the tenant domain : " + MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        SubscriptionDataHolder.getInstance().registerTenantSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        log.debug("Registered ServerStartupListener for SubscriptionStore for the tenant domain : " + MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        SubscriptionDataHolder.getInstance().initializeSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        cleanDeployment(CarbonUtils.getCarbonRepository());
     }
 
     private boolean deployArtifactsAtStartup(String tenantDomain) throws ArtifactSynchronizerException {
@@ -123,28 +158,34 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
         GatewayArtifactSynchronizerProperties gatewayArtifactSynchronizerProperties =
                 ServiceReferenceHolder.getInstance()
                         .getAPIManagerConfiguration().getGatewayArtifactSynchronizerProperties();
-
         boolean flag = false;
-        long waitTime = System.currentTimeMillis() + 60 * 1000;
-        long retryDuration = 5000;
-
         if (gatewayArtifactSynchronizerProperties.isRetrieveFromStorageEnabled()) {
             InMemoryAPIDeployer inMemoryAPIDeployer = new InMemoryAPIDeployer();
-
-            while (waitTime > System.currentTimeMillis() && !flag) {
-                flag = inMemoryAPIDeployer.deployAllAPIsAtGatewayStartup(
-                        gatewayArtifactSynchronizerProperties.getGatewayLabels(), tenantDomain);
-                if (!flag) {
-                    log.error("Unable to deploy synapse artifacts at gateway. Next retry in " + (retryDuration / 1000)
-                            + " seconds");
-                    try {
-                        Thread.sleep(retryDuration);
-                    } catch (InterruptedException ignore) {
-                    }
-                }
-            }
+            flag = inMemoryAPIDeployer.deployAllAPIsAtGatewayStartup(
+                    gatewayArtifactSynchronizerProperties.getGatewayLabels(), tenantDomain);
         }
         return flag;
+    }
+
+    /**
+     * Deploy gateway policy artifacts at server startup.
+     *
+     * @param tenantDomain tenant domain
+     * @return true if deployment is successful
+     * @throws ArtifactSynchronizerException if an error occurs while deploying gateway policy artifacts
+     */
+    private boolean deployGatewayPolicyArtifactsAtStartup(String tenantDomain) throws ArtifactSynchronizerException {
+
+        GatewayArtifactSynchronizerProperties gatewayArtifactSynchronizerProperties =
+                ServiceReferenceHolder.getInstance()
+                        .getAPIManagerConfiguration().getGatewayArtifactSynchronizerProperties();
+        boolean globalPolicyDeploymentFlag = false;
+        if (gatewayArtifactSynchronizerProperties.isRetrieveFromStorageEnabled()) {
+            GatewayPolicyDeployer gatewayPolicyDeployer = new GatewayPolicyDeployer();
+            globalPolicyDeploymentFlag = gatewayPolicyDeployer.deployGlobalPoliciesAtGatewayStartup(
+                    gatewayArtifactSynchronizerProperties.getGatewayLabels(), tenantDomain);
+        }
+        return globalPolicyDeploymentFlag;
     }
 
     private void cleanDeployment(String artifactRepositoryPath) {
@@ -155,36 +196,90 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
 
     @Override
     public void completedServerStartup() {
+        String migrationEnabled = System.getProperty(APIConstants.MIGRATE);
+        if (migrationEnabled == null) {
+            new Thread(() -> {
+                // Tenant Loading
+                if (GatewayUtils.isTenantLoadingEnable()) {
+                    try {
+                        new TenancyLoader().retrieveAndLoadAllTenants();
+                        DataHolder.getInstance().setTenantsProvisioned(true);
+                    } catch (APIManagementException e) {
+                        log.error("Failed to load tenants during gateway startup.", e);
+                    }
+                } else {
+                    DataHolder.getInstance().setTenantsProvisioned(true);
+                }
 
-        new Thread(() -> {
-
-            try {
-                new EndpointCertificateDeployer(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME)
-                        .deployCertificatesAtStartup();
-                new GoogleAnalyticsConfigDeployer(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME).deploy();
-            } catch (APIManagementException e) {
-                log.error(e);
+                try {
+                    new EndpointCertificateDeployer(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME)
+                            .deployCertificatesAtStartup();
+                    new GoogleAnalyticsConfigDeployer(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME).deploy();
+                } catch (APIManagementException e) {
+                    log.error(e);
+                }
+            }).start();
+            SubscriptionDataHolder.getInstance()
+                    .registerTenantSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            service.execute(() -> {
+                try {
+                    retrieveAllAPIMetadata();
+                } catch (DataLoadingException e) {
+                    log.error("Error while loading All API Metadata", e);
+                }
+            });
+            if (GatewayUtils.isOnDemandLoading()) {
+                try {
+                    new EndpointCertificateDeployer().deployAllCertificatesAtStartup();
+                } catch (APIManagementException e) {
+                    log.error("Error while loading All certificate", e);
+                }
             }
-        }).start();
-        SubscriptionDataHolder.getInstance().registerTenantSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        ServiceReferenceHolder.getInstance().addLoadedTenant(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        retrieveAndDeployArtifacts(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        retrieveBlockConditionsAndKeyTemplates();
-        WebhooksDataHolder.getInstance().registerTenantSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
-        jmsTransportHandlerForTrafficManager
-                .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_THROTTLE_DATA, new JMSMessageListener());
-        jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_TOKEN_REVOCATION,
-                new GatewayTokenRevocationMessageListener());
-        jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_CACHE_INVALIDATION,
-                new APIMgtGatewayCacheMessageListener());
-        jmsTransportHandlerForEventHub
-                .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_NOTIFICATION, new GatewayJMSMessageListener());
-        jmsTransportHandlerForEventHub
-                .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_THROTTLE_DATA, new JMSMessageListener());
-        jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_ASYNC_WEBHOOKS_DATA,
-                new GatewayJMSMessageListener());
-        copyTenantArtifacts();
-        APILoggerManager.getInstance().initializeAPILoggerList();
+            gatewayNotifier.registerGateway();
+            gatewayNotifier.startHeartbeat();
+
+            ServiceReferenceHolder.getInstance().addLoadedTenant(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            retrieveAndDeployArtifacts(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            retrieveBlockConditionsAndKeyTemplates();
+            retrieveApiKeys();
+            WebhooksDataHolder.getInstance()
+                    .registerTenantSubscriptionStore(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            jmsTransportHandlerForTrafficManager
+                    .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_THROTTLE_DATA, new JMSMessageListener());
+            jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_TOKEN_REVOCATION,
+                    new GatewayTokenRevocationMessageListener());
+            jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_CACHE_INVALIDATION,
+                    new APIMgtGatewayCacheMessageListener());
+            jmsTransportHandlerForEventHub
+                    .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_NOTIFICATION,
+                            new GatewayJMSMessageListener(true));
+            jmsTransportHandlerForEventHub
+                    .subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_THROTTLE_DATA, new JMSMessageListener());
+            jmsTransportHandlerForEventHub.subscribeForJmsEvents(APIConstants.TopicNames.TOPIC_ASYNC_WEBHOOKS_DATA,
+                    new GatewayJMSMessageListener());
+            copyTenantArtifacts();
+            service.execute(() -> {
+                APILoggerManager.getInstance().initializeAPILoggerList(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            });
+            service.execute(() -> {
+                LLMProviderManager.getInstance()
+                        .initializeLLMProviderConfigurations(MultitenantConstants.SUPER_TENANT_DOMAIN_NAME);
+            });
+        } else {
+            log.info("Running on migration enabled mode: Stopped at Gateway Startup listener completed");
+        }
+    }
+
+    private void retrieveAllAPIMetadata() throws DataLoadingException {
+        SubscriptionDataLoader subscriptionDataLoader = new SubscriptionDataLoaderImpl();
+        List<API> apis = subscriptionDataLoader.loadAllTenantApiMetadata();
+        if (apis != null && !apis.isEmpty()) {
+            apis.forEach(api -> {
+                if (TenantUtils.isTenantAvailable(api.getOrganization())) {
+                    DataHolder.getInstance().addAPIMetaData(api);
+                }
+            });
+        }
     }
 
     private void copyTenantArtifacts() {
@@ -194,20 +289,21 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
         try (Stream<Path> files = Files.walk(directory, 1)) {
             files.filter(entry -> !entry.equals(directory))
                     .filter(Files::isDirectory).forEach(subdirectory ->
-            {
-                try {
-                    FileUtils.copyFile(new File(synapseConfigRootPath + securedWebSocketInboundEp + ".xml"),
-                            new File(subdirectory.toAbsolutePath().toString() + File.separator +
-                                    synapseDeploymentPath + File.separator + MultiXMLConfigurationBuilder.
-                                    INBOUND_ENDPOINT_DIR + File.separator + securedWebSocketInboundEp + ".xml"));
-                    FileUtils.copyFile(new File(synapseConfigRootPath + webHookServerHTTPS + ".xml"),
-                            new File(subdirectory.toAbsolutePath().toString() + File.separator +
-                                    synapseDeploymentPath + File.separator + MultiXMLConfigurationBuilder.
-                                    INBOUND_ENDPOINT_DIR + File.separator + webHookServerHTTPS + ".xml"));
-                } catch (IOException e) {
-                    log.error("Error while copying tenant artifacts", e);
-                }
-            });
+                    {
+                        try {
+                            FileUtils.copyFile(new File(synapseConfigRootPath + securedWebSocketInboundEp + ".xml"),
+                                    new File(subdirectory.toAbsolutePath().toString() + File.separator +
+                                            synapseDeploymentPath + File.separator + MultiXMLConfigurationBuilder.
+                                            INBOUND_ENDPOINT_DIR + File.separator + securedWebSocketInboundEp + ".xml"
+                                    ));
+                            FileUtils.copyFile(new File(synapseConfigRootPath + webHookServerHTTPS + ".xml"),
+                                    new File(subdirectory.toAbsolutePath().toString() + File.separator +
+                                            synapseDeploymentPath + File.separator + MultiXMLConfigurationBuilder.
+                                            INBOUND_ENDPOINT_DIR + File.separator + webHookServerHTTPS + ".xml"));
+                        } catch (IOException e) {
+                            log.error("Error while copying tenant artifacts", e);
+                        }
+                    });
         } catch (IOException e) {
             log.error("Error while retrieving tenants root folders ", e);
         }
@@ -223,8 +319,16 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
                 } catch (ArtifactSynchronizerException e) {
                     log.error("Error in Deploying APIs to gateway", e);
                 }
+                // Logic becomes too complex and less readable if we consolidated, better to keep the blocks separate,
+                // especially since it enhances code clarity and maintainability
+                try {
+                    deployGatewayPoliciesInSyncMode(tenantDomain);
+                } catch (ArtifactSynchronizerException e) {
+                    log.error("Error in Deploying gateway policies to gateway", e);
+                }
             } else {
                 deployAPIsInAsyncMode(tenantDomain);
+                deployGatewayPoliciesInAsyncMode(tenantDomain);
             }
         }
     }
@@ -236,16 +340,65 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
         }
         syncModeDeploymentCount++;
         isAPIsDeployedInSyncMode = deployArtifactsAtStartup(tenantDomain);
-        DataHolder.getInstance().setAllApisDeployed(isAPIsDeployedInSyncMode);
         if (!isAPIsDeployedInSyncMode) {
-            log.error("Deployment attempt : " + syncModeDeploymentCount + " was unsuccessful");
+            String logMessage = "Deployment attempt : " + syncModeDeploymentCount
+                    + " was unsuccessful, Next retry in 1 second";
+            if (syncModeDeploymentCount >= 4) {
+                log.error(logMessage);
+            } else if (syncModeDeploymentCount == 3) {
+                log.warn(logMessage);
+            }
             if (!(syncModeDeploymentCount > retryCount)) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
                 deployAPIsInSyncMode(tenantDomain);
             } else {
                 log.error("Maximum retry limit exceeded. Server is starting without deploying all synapse artifacts");
             }
         } else {
+            DataHolder.getInstance().setTenantDeployStatus(tenantDomain);
             log.info("Deployment attempt : " + syncModeDeploymentCount + " was successful");
+        }
+    }
+
+    /**
+     * Deploy all gateway policy artifacts in synchronous mode
+     *
+     * @param tenantDomain tenant domain
+     * @throws ArtifactSynchronizerException if an error occurs while deploying gateway policy artifacts
+     */
+    private void deployGatewayPoliciesInSyncMode(String tenantDomain) throws ArtifactSynchronizerException {
+
+        log.debug("Deploying gateway policy artifacts in synchronous mode");
+
+        syncModeGatewayPolicyDeploymentCount++;
+        isGatewayPoliciesDeployedInSyncMode = deployGatewayPolicyArtifactsAtStartup(tenantDomain);
+        DataHolder.getInstance().setAllGatewayPoliciesDeployed(isGatewayPoliciesDeployedInSyncMode);
+        if (!isGatewayPoliciesDeployedInSyncMode) {
+            String logMessage = "Gateway policy deployment attempt : " + syncModeGatewayPolicyDeploymentCount +
+                    " was unsuccessful, Next retry in 1 second";
+            if (syncModeGatewayPolicyDeploymentCount >= 4) {
+                log.error(logMessage);
+            } else if (syncModeGatewayPolicyDeploymentCount == 3) {
+                log.warn(logMessage);
+            }
+            if (!(syncModeGatewayPolicyDeploymentCount > retryCount)) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    // Ignore
+                }
+                deployGatewayPoliciesInSyncMode(tenantDomain);
+            } else {
+                log.error(
+                        "Maximum retry limit exceeded. Server is starting without deploying all gateway policy " +
+                                "artifacts");
+            }
+        } else {
+            log.info("Gateway policy deployment attempt : " + syncModeGatewayPolicyDeploymentCount + " was successful");
         }
     }
 
@@ -262,11 +415,23 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
             log.debug("Unsubscribe from JMS Events...");
             jmsTransportHandlerForEventHub.unSubscribeFromEvents();
         }
+        if (gatewayNotifier != null) {
+            gatewayNotifier.stopHeartbeat();
+        }
+        if (deploymentStatusNotifier != null) {
+            deploymentStatusNotifier.shutdown();
+        }
+
     }
 
     public void deployAPIsInAsyncMode(String tenantDomain) {
 
         new Thread(new AsyncAPIDeployment(tenantDomain)).start();
+    }
+
+    public void deployGatewayPoliciesInAsyncMode(String tenantDomain) {
+
+        new Thread(new AsyncGatewayPolicyDeployment(tenantDomain)).start();
     }
 
     private void deployArtifactsInGateway(String tenantDomain) throws ArtifactSynchronizerException {
@@ -276,25 +441,99 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
         }
 
         long retryDuration = gatewayArtifactSynchronizerProperties.getRetryDuartion();
-        double reconnectionProgressionFactor = 2.0;
+        int maxRetryCount = gatewayArtifactSynchronizerProperties.getMaxRetryCount();
+        double reconnectionProgressionFactor = gatewayArtifactSynchronizerProperties.getRetryProgressionFactor();
         long maxReconnectDuration = 1000 * 60 * 60; // 1 hour
-
-        while (true) {
-            boolean isArtifactsDeployed = deployArtifactsAtStartup(tenantDomain);
-            DataHolder.getInstance().setAllApisDeployed(isArtifactsDeployed);
-            if (isArtifactsDeployed) {
-                log.info("Synapse Artifacts deployed Successfully in the Gateway");
-                break;
-            } else {
-                retryDuration = (long) (retryDuration * reconnectionProgressionFactor);
-                if (retryDuration > maxReconnectDuration) {
-                    retryDuration = maxReconnectDuration;
+        int retryCount = 0;
+        boolean retry = true;
+        while (retry) {
+            try {
+                boolean isArtifactsDeployed = deployArtifactsAtStartup(tenantDomain);
+                if (isArtifactsDeployed) {
+                    DataHolder.getInstance().setTenantDeployStatus(tenantDomain);
+                    log.info("Synapse Artifacts deployed Successfully in the Gateway");
+                    retry = false;
+                } else {
+                    throw new ArtifactSynchronizerException("Unable to deploy synapse artifacts at gateway");
                 }
-                log.error("Unable to deploy synapse artifacts at gateway. Next retry in " + (retryDuration / 1000)
-                        + " seconds");
-                try {
-                    Thread.sleep(retryDuration);
-                } catch (InterruptedException ignore) {
+            } catch (ArtifactSynchronizerException e) {
+                if (!ExceptionCodes.ARTIFACT_SYNC_HTTP_REQUEST_FAILED.equals(e.getErrorHandler())) {
+                    retryCount++;
+                    if (retryCount <= maxRetryCount) {
+                        String logMessage = "Unable to deploy synapse artifacts at gateway. Retry Attempt " + retryCount
+                                + " in " + (retryDuration / 1000) + " seconds";
+                        if (retryCount >= 4) {
+                            log.error(logMessage);
+                        } else if (retryCount == 3) {
+                            log.warn(logMessage);
+                        }
+                        try {
+                            Thread.sleep(retryDuration);
+                            retryDuration = (long) (retryDuration * reconnectionProgressionFactor);
+                            if (retryDuration > maxReconnectDuration) {
+                                retryDuration = maxReconnectDuration;
+                            }
+                        } catch (InterruptedException ignore) {
+                            // Ignore
+                        }
+                    } else {
+                        log.error("Unable to deploy synapse artifacts at gateway. Maximum retry count exceeded.");
+                        throw e;
+                    }
+                } else {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private void deployGatewayPolicyArtifactsInGateway(String tenantDomain) throws ArtifactSynchronizerException {
+
+        log.debug("Deploying gateway policy artifacts in asynchronous mode");
+
+        long retryDuration = gatewayArtifactSynchronizerProperties.getRetryDuartion();
+        int maxRetryCount = gatewayArtifactSynchronizerProperties.getMaxRetryCount();
+        double reconnectionProgressionFactor = gatewayArtifactSynchronizerProperties.getRetryProgressionFactor();
+        long maxReconnectDuration = 1000 * 60 * 60; // 1 hour
+        int retryCount = 0;
+        boolean retry = true;
+        while (retry) {
+            try {
+                boolean isArtifactsDeployed = deployGatewayPolicyArtifactsAtStartup(tenantDomain);
+                DataHolder.getInstance().setAllGatewayPoliciesDeployed(isArtifactsDeployed);
+                if (isArtifactsDeployed) {
+                    log.info("Gateway policy artifacts deployed Successfully in the Gateway");
+                    retry = false;
+                } else {
+                    throw new ArtifactSynchronizerException("Unable to deploy gateway policy artifacts at gateway");
+                }
+            } catch (ArtifactSynchronizerException e) {
+                if (!ExceptionCodes.ARTIFACT_SYNC_HTTP_REQUEST_FAILED.equals(e.getErrorHandler())) {
+                    retryCount++;
+                    if (retryCount <= maxRetryCount) {
+                        String logMessage = "Unable to deploy gateway policy artifacts at gateway. Retry Attempt "
+                                + retryCount + " in " + (retryDuration / 1000) + " seconds";
+                        if (retryCount >= 4) {
+                            log.error(logMessage);
+                        } else if (retryCount == 3) {
+                            log.warn(logMessage);
+                        }
+                        try {
+                            Thread.sleep(retryDuration);
+                            retryDuration = (long) (retryDuration * reconnectionProgressionFactor);
+                            if (retryDuration > maxReconnectDuration) {
+                                retryDuration = maxReconnectDuration;
+                            }
+                        } catch (InterruptedException ignore) {
+                            // Ignore
+                        }
+                    } else {
+                        log.error(
+                                "Unable to deploy gateway policy artifacts at gateway. Maximum retry count exceeded.");
+                        throw e;
+                    }
+                } else {
+                    throw e;
                 }
             }
         }
@@ -308,12 +547,19 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
             KeyTemplateRetriever webServiceBlockConditionsRetriever = new KeyTemplateRetriever();
             webServiceBlockConditionsRetriever.startKeyTemplateDataRetriever();
 
-            // Start web service based revoked JWT tokens retriever.
+            // Start web service based revoke conditions retriever. Retrieve revoked token JTIs, users and client IDs.
             // Advanced throttle properties & blocking conditions have to be enabled for JWT token
             // retrieval due to the throttle config dependency for this feature.
             RevokedJWTTokensRetriever webServiceRevokedJWTTokensRetriever = new RevokedJWTTokensRetriever();
             webServiceRevokedJWTTokensRetriever.startRevokedJWTTokensRetriever();
         }
+    }
+
+    private void retrieveApiKeys() {
+
+        String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
+        APIKeysRetriever webServiceAPIKeysRetriever = new APIKeysRetriever();
+        webServiceAPIKeysRetriever.startWebServiceApiKeyRetriever(tenantDomain);
     }
 
     @Override
@@ -327,17 +573,22 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
         SubscriptionDataHolder.getInstance().initializeSubscriptionStore(tenantDomain);
         log.debug("Initialized ServerStartupListener for SubscriptionStore for the tenant domain : " + tenantDomain);
         WebhooksDataHolder.getInstance().registerTenantSubscriptionStore(tenantDomain);
+        service.execute(() -> {
+            APILoggerManager.getInstance().initializeAPILoggerList(tenantDomain);
+        });
 
         cleanDeployment(configContext.getAxisConfiguration().getRepository().getPath());
         new Thread(() -> {
             try {
-                new EndpointCertificateDeployer(tenantDomain).deployCertificatesAtStartup();
+                new EndpointCertificateDeployer(tenantDomain).deployAllTenantCertificatesAtStartup();
                 new GoogleAnalyticsConfigDeployer(tenantDomain).deploy();
+                LLMProviderManager.getInstance().initializeLLMProviderConfigurations(tenantDomain);
             } catch (APIManagementException e) {
                 log.error(e);
             }
         }).start();
         retrieveAndDeployArtifacts(tenantDomain);
+        retrieveApiKeys();
         ServiceReferenceHolder.getInstance().addLoadedTenant(tenantDomain);
     }
 
@@ -346,6 +597,7 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
 
         String tenantDomain = PrivilegedCarbonContext.getThreadLocalCarbonContext().getTenantDomain();
         ServiceReferenceHolder.getInstance().removeUnloadedTenant(tenantDomain);
+        DataHolder.getInstance().markApisAsUnDeployedInTenant(tenantDomain);
         log.debug("UNRegistering ServerStartupListener for SubscriptionStore for the tenant domain : " + tenantDomain);
         SubscriptionDataHolder.getInstance().unregisterTenantSubscriptionStore(tenantDomain);
         log.debug("UNRegistered ServerStartupListener for SubscriptionStore for the tenant domain : " + tenantDomain);
@@ -388,6 +640,26 @@ public class GatewayStartupListener extends AbstractAxis2ConfigurationContextObs
                 deployArtifactsInGateway(tenantDomain);
             } catch (ArtifactSynchronizerException e) {
                 log.error("Error in Deploying APIs to gateway", e);
+            }
+        }
+    }
+
+    class AsyncGatewayPolicyDeployment implements Runnable {
+
+        private String tenantDomain;
+
+        public AsyncGatewayPolicyDeployment(String tenantDomain) {
+
+            this.tenantDomain = tenantDomain;
+        }
+
+        @Override
+        public void run() {
+
+            try {
+                deployGatewayPolicyArtifactsInGateway(tenantDomain);
+            } catch (ArtifactSynchronizerException e) {
+                log.error("Error in deploying gateway policies to gateway", e);
             }
         }
     }

@@ -17,6 +17,7 @@
  */
 package org.wso2.carbon.apimgt.keymgt.model;
 
+import org.wso2.carbon.apimgt.api.gateway.GatewayAPIDTO;
 import org.wso2.carbon.apimgt.impl.notifier.events.DeployAPIInGatewayEvent;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
 import org.wso2.carbon.apimgt.keymgt.model.entity.ApiPolicy;
@@ -49,6 +50,15 @@ public interface SubscriptionDataStore {
     Application getApplicationById(int appId);
 
     /**
+     * Gets an {@link Application} by Id
+     *
+     * @param appId Id of the Application
+     * @param validationDisabled whether subscription validation is disabled
+     * @return {@link Application} with the appId
+     */
+    Application getApplicationById(int appId, boolean validationDisabled);
+
+    /**
      * Gets the {@link ApplicationKeyMapping} entry by Key
      *
      * @param key <ApplicationIs>.<keyType>
@@ -56,6 +66,16 @@ public interface SubscriptionDataStore {
      * @return {@link ApplicationKeyMapping} entry
      */
     ApplicationKeyMapping getKeyMappingByKeyAndKeyManager(String key, String keyManager);
+
+    /**
+     * Gets the {@link ApplicationKeyMapping} entry by Key
+     *
+     * @param key <ApplicationIs>.<keyType>
+     * @param keyManager Keymanager Name
+     * @param validationDisabled whether subscription validation is disabled
+     * @return {@link ApplicationKeyMapping} entry
+     */
+    ApplicationKeyMapping getKeyMappingByKeyAndKeyManager(String key, String keyManager, boolean validationDisabled);
 
     /**
      * Get API by Context and Version
@@ -93,6 +113,16 @@ public interface SubscriptionDataStore {
     Subscription getSubscriptionById(int appId, int apiId);
 
     /**
+     * Gets Subscription by ID
+     *
+     * @param appId Application associated with the Subscription
+     * @param apiId Api associated with the Subscription
+     * @param validationDisabled whether subscription validation is disabled
+     * @return {@link Subscription}
+     */
+    Subscription getSubscriptionById(int appId, int apiId, boolean validationDisabled);
+
+    /**
      * Gets API Throttling Policy by the name and Tenant Id
      *
      * @param policyName Name of the Throttling Policy
@@ -121,6 +151,14 @@ public interface SubscriptionDataStore {
     void addOrUpdateApplication(Application application);
 
     void addOrUpdateSubscription(Subscription subscription);
+
+    /**
+     * Internally subscribe to an API.
+     * @param api API to subscribe to
+     * @param app Application to subscribe from
+     * @param tenantDomain Tenant Domain
+     */
+    void subscribeToAPIInternally(API api, Application app, String tenantDomain);
 
     void addOrUpdateAPI(API api);
     
@@ -181,5 +219,7 @@ public interface SubscriptionDataStore {
     List<ApplicationKeyMapping> getKeyMappingByApplicationId(int applicationId);
 
     void destroy();
+
+    void updateAPIPropertiesFromGatewayDTO(GatewayAPIDTO gatewayAPIDTO);
 }
 

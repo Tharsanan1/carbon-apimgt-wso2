@@ -1,6 +1,8 @@
 package org.wso2.carbon.apimgt.rest.api.admin.v1;
 
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.ErrorDTO;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerAPIUsagesDTO;
+import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerAppUsagesDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerListDTO;
 import org.wso2.carbon.apimgt.rest.api.admin.v1.dto.KeyManagerWellKnownResponseDTO;
@@ -45,7 +47,8 @@ KeyManagersApiService delegate = new KeyManagersApiServiceImpl();
     @ApiOperation(value = "Retrieve Well-known information from Key Manager Well-known Endpoint", notes = "Retrieve well-known information from key manager's well-known endpoint ", response = KeyManagerWellKnownResponseDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
-            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations"),
+            @AuthorizationScope(scope = "apim:keymanagers_manage", description = "Manage Key Managers")
         })
     }, tags={ "Key Manager (Collection)",  })
     @ApiResponses(value = { 
@@ -61,13 +64,50 @@ KeyManagersApiService delegate = new KeyManagersApiServiceImpl();
     @ApiOperation(value = "Get all Key managers", notes = "Get all Key managers ", response = KeyManagerListDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
-            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations"),
+            @AuthorizationScope(scope = "apim:keymanagers_manage", description = "Manage Key Managers")
         })
     }, tags={ "Key Manager (Collection)",  })
     @ApiResponses(value = { 
         @ApiResponse(code = 200, message = "OK. KeyManagers returned ", response = KeyManagerListDTO.class) })
     public Response keyManagersGet() throws APIManagementException{
         return delegate.keyManagersGet(securityContext);
+    }
+
+    @GET
+    @Path("/{keyManagerId}/api-usages")
+    
+    @Produces({ "application/json" })
+    @ApiOperation(value = "Retrieve Key Manager Usages (APIs)", notes = "Retrieves a list of APIs that are specifically utilizing the Key Manager identified by the provided ID. The Key Manager ID should be provided as a path parameter. ", response = KeyManagerAPIUsagesDTO.class, authorizations = {
+        @Authorization(value = "OAuth2Security", scopes = {
+            @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+        })
+    }, tags={ "Key Manager (Individual)",  })
+    @ApiResponses(value = { 
+        @ApiResponse(code = 200, message = "OK. KeyManager API usages returned. ", response = KeyManagerAPIUsagesDTO.class),
+        @ApiResponse(code = 404, message = "Not Found. The specified resource does not exist.", response = ErrorDTO.class),
+        @ApiResponse(code = 406, message = "Not Acceptable. The requested media type is not supported.", response = ErrorDTO.class) })
+    public Response keyManagersKeyManagerIdApiUsagesGet(@ApiParam(value = "Key Manager UUID ",required=true) @PathParam("keyManagerId") String keyManagerId,  @ApiParam(value = "Starting point within the complete list of items qualified. ", defaultValue="0") @DefaultValue("0") @QueryParam("offset") Integer offset,  @ApiParam(value = "Maximum size of resource array to return. ", defaultValue="25") @DefaultValue("25") @QueryParam("limit") Integer limit) throws APIManagementException{
+        return delegate.keyManagersKeyManagerIdApiUsagesGet(keyManagerId, offset, limit, securityContext);
+    }
+
+    @GET
+    @Path("/{keyManagerId}/app-usages")
+    
+    @Produces({ "application/json" })
+    @ApiOperation(value = "Retrieve Key Manager Usages (Appilcations)", notes = "Retrieves a list of Applications that are specifically utilizing the Key Manager identified by the provided ID. The Key Manager ID should be provided as a path parameter. ", response = KeyManagerAppUsagesDTO.class, authorizations = {
+        @Authorization(value = "OAuth2Security", scopes = {
+            @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+        })
+    }, tags={ "Key Manager (Individual)",  })
+    @ApiResponses(value = { 
+        @ApiResponse(code = 200, message = "OK. KeyManager application usages returned. ", response = KeyManagerAppUsagesDTO.class),
+        @ApiResponse(code = 404, message = "Not Found. The specified resource does not exist.", response = ErrorDTO.class),
+        @ApiResponse(code = 406, message = "Not Acceptable. The requested media type is not supported.", response = ErrorDTO.class) })
+    public Response keyManagersKeyManagerIdAppUsagesGet(@ApiParam(value = "Key Manager UUID ",required=true) @PathParam("keyManagerId") String keyManagerId,  @ApiParam(value = "Starting point within the complete list of items qualified. ", defaultValue="0") @DefaultValue("0") @QueryParam("offset") Integer offset,  @ApiParam(value = "Maximum size of resource array to return. ", defaultValue="25") @DefaultValue("25") @QueryParam("limit") Integer limit) throws APIManagementException{
+        return delegate.keyManagersKeyManagerIdAppUsagesGet(keyManagerId, offset, limit, securityContext);
     }
 
     @DELETE
@@ -94,7 +134,8 @@ KeyManagersApiService delegate = new KeyManagersApiServiceImpl();
     @ApiOperation(value = "Get a Key Manager Configuration", notes = "Retrieve a single Key Manager Configuration. We should provide the Id of the KeyManager as a path parameter. ", response = KeyManagerDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
-            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations"),
+            @AuthorizationScope(scope = "apim:keymanagers_manage", description = "Manage Key Managers")
         })
     }, tags={ "Key Manager (Individual)",  })
     @ApiResponses(value = { 
@@ -112,7 +153,8 @@ KeyManagersApiService delegate = new KeyManagersApiServiceImpl();
     @ApiOperation(value = "Update a Key Manager", notes = "Update a Key Manager by keyManager id ", response = KeyManagerDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
-            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations"),
+            @AuthorizationScope(scope = "apim:keymanagers_manage", description = "Manage Key Managers")
         })
     }, tags={ "Key Manager (Individual)",  })
     @ApiResponses(value = { 
@@ -130,7 +172,8 @@ KeyManagersApiService delegate = new KeyManagersApiServiceImpl();
     @ApiOperation(value = "Add a new API Key Manager", notes = "Add a new API Key Manager ", response = KeyManagerDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:admin", description = "Manage all admin operations"),
-            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations")
+            @AuthorizationScope(scope = "apim:admin_operations", description = "Manage API categories and Key Managers related operations"),
+            @AuthorizationScope(scope = "apim:keymanagers_manage", description = "Manage Key Managers")
         })
     }, tags={ "Key Manager (Collection)" })
     @ApiResponses(value = { 

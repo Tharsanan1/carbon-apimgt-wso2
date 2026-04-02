@@ -31,6 +31,7 @@ import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.utils.SystemScopeUtils;
+import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.application.authentication.framework.model.AuthenticatedUser;
 import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils;
 import org.wso2.carbon.identity.application.common.model.*;
@@ -94,6 +95,7 @@ public class SystemScopesIssuer implements ScopeValidator {
     private IdentityProvider identityProvider = null;
     // set role based scopes issuer as the default
     private static final String ISSUER_PREFIX = "default";
+    private static final String DEFAULT_ADMIN_ROLE = "admin";
 
     @Override
     public boolean validateScope(OAuthAuthzReqMessageContext oAuthAuthzReqMessageContext) throws
@@ -213,7 +215,7 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return true;
             }
             userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
             oAuth2TokenValidationMessageContext.getResponseDTO().setScope(authorizedScopes.toArray(
                     new String[authorizedScopes.size()]));
         }
@@ -277,7 +279,7 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
         }
         return authorizedScopes;
     }
@@ -302,7 +304,7 @@ public class SystemScopesIssuer implements ScopeValidator {
                 return getAllowedScopes(requestedScopes);
             }
             String[] userRoles = getUserRoles(authenticatedUser);
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
         }
         return authorizedScopes;
     }
@@ -335,14 +337,21 @@ public class SystemScopesIssuer implements ScopeValidator {
             String isSAML2Enabled = System.getProperty(APIConstants.SystemScopeConstants.CHECK_ROLES_FROM_SAML_ASSERTION);
             String isRetrieveRolesFromUserStoreForScopeValidation = System
                     .getProperty(APIConstants.SystemScopeConstants.RETRIEVE_ROLES_FROM_USERSTORE_FOR_SCOPE_VALIDATION);
-            if (GrantType.SAML20_BEARER.toString().equals(grantType) && Boolean.parseBoolean(isSAML2Enabled)) {
+            if (APIConstants.OAuthConstants.TOKEN_EXCHANGE.equals(grantType)) {
+                configureForJWTGrantOrExchangeGrant(tokReqMsgCtx, true);
+                Map<ClaimMapping, String> userAttributes = authenticatedUser.getUserAttributes();
+                if (tokReqMsgCtx.getProperty(APIConstants.SystemScopeConstants.ROLE_CLAIM) != null) {
+                    userRoles = getRolesFromUserAttribute(userAttributes,
+                            tokReqMsgCtx.getProperty(APIConstants.SystemScopeConstants.ROLE_CLAIM).toString());
+                }
+            } else if (GrantType.SAML20_BEARER.toString().equals(grantType) && Boolean.parseBoolean(isSAML2Enabled)) {
                 authenticatedUser.setUserStoreDomain("FEDERATED");
                 tokReqMsgCtx.setAuthorizedUser(authenticatedUser);
                 Assertion assertion = (Assertion) tokReqMsgCtx.getProperty(APIConstants.SystemScopeConstants.SAML2_ASSERTION);
                 userRoles = getRolesFromAssertion(assertion);
             } else if (APIConstants.SystemScopeConstants.OAUTH_JWT_BEARER_GRANT_TYPE.equals(grantType) && !(Boolean
                     .parseBoolean(isRetrieveRolesFromUserStoreForScopeValidation))) {
-                configureForJWTGrant(tokReqMsgCtx);
+                configureForJWTGrantOrExchangeGrant(tokReqMsgCtx, false);
                 Map<ClaimMapping, String> userAttributes = authenticatedUser.getUserAttributes();
                 if (tokReqMsgCtx.getProperty(APIConstants.SystemScopeConstants.ROLE_CLAIM) != null) {
                     userRoles = getRolesFromUserAttribute(userAttributes,
@@ -351,7 +360,7 @@ public class SystemScopesIssuer implements ScopeValidator {
             } else {
                 userRoles = getUserRoles(authenticatedUser);
             }
-            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes);
+            authorizedScopes = getAuthorizedScopes(userRoles, requestedScopes, appScopes, authenticatedUser);
         }
         return authorizedScopes;
     }
@@ -396,13 +405,14 @@ public class SystemScopesIssuer implements ScopeValidator {
     /**
      * This method is used to get authorized scopes for user from the requested scopes based on roles.
      *
-     * @param userRoles       Roles list of user
-     * @param requestedScopes Requested scopes
-     * @param appScopes       Scopes of the Application
+     * @param userRoles         Roles list of user
+     * @param requestedScopes   Requested scopes
+     * @param appScopes         Scopes of the Application
+     * @param authenticatedUser Current authenticated user
      * @return authorized scopes list
      */
     private List<String> getAuthorizedScopes(String[] userRoles, List<String> requestedScopes,
-                                             Map<String, String> appScopes) {
+                                             Map<String, String> appScopes, AuthenticatedUser authenticatedUser) {
 
         List<String> defaultScope = new ArrayList<>();
         defaultScope.add(DEFAULT_SCOPE_NAME);
@@ -424,6 +434,13 @@ public class SystemScopesIssuer implements ScopeValidator {
             }
         }
 
+        // Check whether the admin role has been changed
+        boolean isAdminRoleChanged = false;
+        String adminRole = getAdminRole(authenticatedUser);
+        if (!DEFAULT_ADMIN_ROLE.equals(adminRole)) {
+            isAdminRoleChanged = true;
+        }
+
         //Iterate the requested scopes list.
         for (String scope : requestedScopes) {
             //Get the set of roles associated with the requested scope.
@@ -432,6 +449,7 @@ public class SystemScopesIssuer implements ScopeValidator {
             if (roles != null && roles.length() != 0) {
                 List<String> roleList = new ArrayList<>();
                 for (String aRole : roles.split(",")) {
+                    aRole = checkAndReplaceAdminRole(aRole.trim(), isAdminRoleChanged, adminRole);
                     if (preservedCaseSensitive) {
                         roleList.add(aRole.trim());
                     } else {
@@ -448,6 +466,57 @@ public class SystemScopesIssuer implements ScopeValidator {
             }
         }
         return (!authorizedScopes.isEmpty()) ? authorizedScopes : defaultScope;
+    }
+
+    /**
+     * Returns the admin role of the current tenant
+     *
+     * @param authenticatedUser Current authenticated user
+     * @return Admin role of the current tenant
+     */
+    private String getAdminRole(AuthenticatedUser authenticatedUser) {
+        String adminRole = null;
+
+        String tenantDomain;
+        String username;
+        if (authenticatedUser.isFederatedUser()) {
+            tenantDomain = MultitenantUtils.getTenantDomain(authenticatedUser.getAuthenticatedSubjectIdentifier());
+            username = MultitenantUtils.getTenantAwareUsername(authenticatedUser.getAuthenticatedSubjectIdentifier());
+        } else {
+            tenantDomain = authenticatedUser.getTenantDomain();
+            username = authenticatedUser.getUserName();
+        }
+        RealmService realmService = getRealmService();
+        try {
+            int tenantId = realmService.getTenantManager().getTenantId(tenantDomain);
+            // If tenant ID is not set in the tokenReqContext, deriving it from username.
+            if (tenantId == 0 || tenantId == -1) {
+                tenantId = getTenantIdOfUser(username);
+            }
+            adminRole = realmService.getTenantUserRealm(tenantId).getRealmConfiguration().getAdminRoleName();
+        } catch (UserStoreException e) {
+            //Log and return since we do not want to stop issuing the token in case of scope validation failures.
+            log.error("Error when getting the tenant's UserStoreManager or when getting admin role ", e);
+        }
+        return adminRole;
+    }
+
+    /**
+     * Checks and replaces the admin role name if the admin role has been changed for the admin user
+     *
+     * @param role               The role allocated for the scope
+     * @param isAdminRoleChanged Has the admin role changed
+     * @param newAdminRole       The new admin role
+     * @return Updated admin role name
+     */
+    private String checkAndReplaceAdminRole(String role, boolean isAdminRoleChanged, String newAdminRole) {
+        String updatedRole;
+        if (isAdminRoleChanged && DEFAULT_ADMIN_ROLE.equals(role)) {
+            updatedRole = newAdminRole;
+        } else {
+            updatedRole = role;
+        }
+        return updatedRole;
     }
 
     /**
@@ -497,13 +566,18 @@ public class SystemScopesIssuer implements ScopeValidator {
         return SystemScopeUtils.getRolesFromAssertion(assertion);
     }
 
-    protected void configureForJWTGrant(OAuthTokenReqMessageContext tokReqMsgCtx) {
+    protected void configureForJWTGrantOrExchangeGrant(OAuthTokenReqMessageContext tokReqMsgCtx,
+                                                       boolean isExchangeGrant) {
 
         SignedJWT signedJWT = null;
         JWTClaimsSet claimsSet = null;
         String[] roles = null;
         try {
-            signedJWT = getSignedJWT(tokReqMsgCtx);
+            if (isExchangeGrant) {
+                signedJWT = getSignedJWTFromSubjectToken(tokReqMsgCtx);
+            } else {
+                signedJWT = getSignedJWT(tokReqMsgCtx);
+            }
         } catch (IdentityOAuth2Exception e) {
             log.error("Couldn't retrieve signed JWT", e);
         }
@@ -586,6 +660,41 @@ public class SystemScopesIssuer implements ScopeValidator {
 
         try {
             signedJWT = SignedJWT.parse(assertion);
+            if (log.isDebugEnabled()) {
+                log.debug(signedJWT);
+            }
+        } catch (ParseException e) {
+            String errorMessage = "Error while parsing the JWT.";
+            throw new IdentityOAuth2Exception(errorMessage, e);
+        }
+        return signedJWT;
+    }
+
+    /**
+     * Method to parse the subject token and retrieve the signed JWT
+     *
+     * @param tokReqMsgCtx request
+     * @return SignedJWT object
+     * @throws IdentityOAuth2Exception exception thrown due to a parsing error
+     */
+    private SignedJWT getSignedJWTFromSubjectToken(OAuthTokenReqMessageContext tokReqMsgCtx) throws IdentityOAuth2Exception {
+
+        RequestParameter[] params = tokReqMsgCtx.getOauth2AccessTokenReqDTO().getRequestParameters();
+        String subjectToken = null;
+        SignedJWT signedJWT;
+        for (RequestParameter param : params) {
+            if (param.getKey().equals(APIConstants.OAuthConstants.SUBJECT_TOKEN)) {
+                subjectToken = param.getValue()[0];
+                break;
+            }
+        }
+        if (StringUtils.isEmpty(subjectToken)) {
+            String errorMessage = "Error while retrieving subjectToken";
+            throw new IdentityOAuth2Exception(errorMessage);
+        }
+
+        try {
+            signedJWT = SignedJWT.parse(subjectToken);
             if (log.isDebugEnabled()) {
                 log.debug(signedJWT);
             }
@@ -700,21 +809,24 @@ public class SystemScopesIssuer implements ScopeValidator {
 
         //Get all the scopes and roles against the scopes defined for the APIs subscribed to the application.
         Map<String, String> appScopes = new HashMap<>();
-        String tenantDomain = null;
-        try {
-            tenantDomain = getAppInformationByClientId(consumerKey).getAppOwner().getTenantDomain();
-        } catch (InvalidOAuthClientException | IdentityOAuth2Exception e) {
-            log.error("Error when retrieving the tenant domain " + e.getMessage(), e);
-        }
+        boolean isTenantFlowStarted = false;
+        String tenantDomain = authenticatedUser.getTenantDomain();
         //Add API Manager rest API scopes set. This list should be loaded at server start up and keep
         //in memory and add it to each and every request coming.
         try {
+            isTenantFlowStarted = true;
+            PrivilegedCarbonContext.startTenantFlow();
+            PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
             Map<String, String> restAPIScopes = SystemScopeUtils.getRESTAPIScopesForTenant(tenantDomain);
             if (!restAPIScopes.isEmpty()) {
                 appScopes.putAll(restAPIScopes);
             }
         } catch (APIManagementException e) {
             log.error("Error while getting scopes of application " + e.getMessage(), e);
+        } finally {
+            if (isTenantFlowStarted) {
+                PrivilegedCarbonContext.endTenantFlow();
+            }
         }
         return appScopes;
     }

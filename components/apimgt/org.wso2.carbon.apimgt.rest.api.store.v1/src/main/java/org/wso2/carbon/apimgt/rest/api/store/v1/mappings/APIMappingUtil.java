@@ -36,21 +36,27 @@ import org.wso2.carbon.apimgt.api.model.APIProductResource;
 import org.wso2.carbon.apimgt.api.model.APIRevisionDeployment;
 import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
 import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.api.model.GatewayAgentConfiguration;
+import org.wso2.carbon.apimgt.api.model.GatewayDeployer;
 import org.wso2.carbon.apimgt.api.model.Scope;
 import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import org.wso2.carbon.apimgt.api.model.VHost;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIType;
+import org.wso2.carbon.apimgt.impl.deployer.ExternalGatewayDeployer;
+import org.wso2.carbon.apimgt.impl.deployer.exceptions.DeployerException;
+import org.wso2.carbon.apimgt.impl.factory.GatewayHolder;
+import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.impl.utils.VHostUtils;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiConstants;
-import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIInfoAdditionalPropertiesDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIBusinessInformationDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIDefaultVersionURLsDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIEndpointURLsDTO;
+import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIInfoAdditionalPropertiesDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIInfoDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIListDTO;
 import org.wso2.carbon.apimgt.rest.api.store.v1.dto.APIMonetizationAttributesDTO;
@@ -66,6 +72,9 @@ import org.wso2.carbon.apimgt.rest.api.store.v1.dto.ScopeInfoDTO;
 import org.wso2.carbon.apimgt.solace.utils.SolaceConstants;
 import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
 
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -90,12 +99,15 @@ public class APIMappingUtil {
         String providerName = model.getId().getProviderName();
         dto.setProvider(APIUtil.replaceEmailDomainBack(providerName));
         dto.setId(model.getUUID());
+        dto.setDisplayName(model.getDisplayName());
         dto.setContext(model.getContext());
         dto.setDescription(model.getDescription());
         dto.setIsDefaultVersion(model.isPublishedDefaultVersion());
         dto.setLifeCycleStatus(model.getStatus());
         dto.setType(model.getType());
+        dto.setSubtype(model.getSubtype());
         dto.setAvgRating(String.valueOf(model.getRating()));
+        dto.setEgress(model.isEgress() == 1);
 
         Set<Scope> scopes = model.getScopes();
         Map<String, ScopeInfoDTO> uniqueScope = new HashMap<>();
@@ -242,7 +254,14 @@ public class APIMappingUtil {
             dto.setEnvironmentList(environmentListToReturn);
         }
 
+        if (model.getEnvironments() != null) {
+            List<String> environmentListToReturn = new ArrayList<>();
+            environmentListToReturn.addAll(model.getEnvironments());
+            dto.setEnvironmentList(environmentListToReturn);
+        }
+
         dto.setAuthorizationHeader(model.getAuthorizationHeader());
+        dto.setApiKeyHeader(model.getApiKeyHeader());
         if (model.getApiSecurity() != null) {
             dto.setSecurityScheme(Arrays.asList(model.getApiSecurity().split(",")));
         }
@@ -270,6 +289,13 @@ public class APIMappingUtil {
         } else {
             dto.setGatewayVendor("wso2");
         }
+        dto.setInitiatedFromGateway(model.isInitiatedFromGateway());
+
+        if (model.getGatewayType() != null) {
+            dto.setGatewayType(model.getGatewayType());
+        } else {
+            dto.setGatewayType("wso2/synapse");
+        }
 
         if (model.getAsyncTransportProtocols() != null) {
             dto.setAsyncTransportProtocols(Arrays.asList(model.getAsyncTransportProtocols().split(",")));
@@ -283,14 +309,27 @@ public class APIMappingUtil {
         APIDTO dto = new APIDTO();
         dto.setName(model.getId().getName());
         dto.setVersion(model.getId().getVersion());
+
+        List<APICategory> apiCategories = model.getApiCategories();
+        List<String> categoryNamesList = new ArrayList<>();
+        if (apiCategories != null) {
+            for (APICategory category : apiCategories) {
+                categoryNamesList.add(category.getName());
+            }
+        }
+        dto.setCategories(categoryNamesList);
+
         String providerName = model.getId().getProviderName();
         dto.setProvider(APIUtil.replaceEmailDomainBack(providerName));
         dto.setId(model.getUuid());
+        dto.setDisplayName(model.getDisplayName());
         dto.setContext(model.getContext());
+        dto.setIsDefaultVersion(model.isPublishedDefaultVersion());
         dto.setDescription(model.getDescription());
         dto.setLifeCycleStatus(model.getState());
         dto.setType(model.getType());
         dto.setAvgRating(String.valueOf(model.getRating()));
+        dto.setEgress(model.isEgress() == 1);
 
         /* todo: created and last updated times
         if (null != model.getLastUpdated()) {
@@ -429,6 +468,7 @@ public class APIMappingUtil {
         }
 
         dto.setAuthorizationHeader(model.getAuthorizationHeader());
+        dto.setApiKeyHeader(model.getApiKeyHeader());
         if (model.getApiSecurity() != null) {
             dto.setSecurityScheme(Arrays.asList(model.getApiSecurity().split(",")));
         }
@@ -437,6 +477,7 @@ public class APIMappingUtil {
         AdvertiseInfoDTO advertiseInfoDTO = new AdvertiseInfoDTO();
         advertiseInfoDTO.setAdvertised(false);
         dto.setAdvertiseInfo(advertiseInfoDTO);
+        dto.setInitiatedFromGateway(false);
         String apiTenant = MultitenantUtils.getTenantDomain(APIUtil.replaceEmailDomainBack(model.getId()
                 .getProviderName()));
         String subscriptionAvailability = model.getSubscriptionAvailability();
@@ -464,9 +505,23 @@ public class APIMappingUtil {
         }
 
         // Set Async protocols of API based on the gateway vendor
-        if (SolaceConstants.SOLACE_ENVIRONMENT.equals(apidto.getGatewayVendor())) {
-            apidto.setAsyncTransportProtocols(AdditionalSubscriptionInfoMappingUtil.setEndpointURLsForApiDto(
-                    model.getApi(), organization));
+        if (SolaceConstants.SOLACE_ENVIRONMENT.equals(apidto.getGatewayType())) {
+            String asyncDefinition = apidto.getApiDefinition();
+            List<String> urlsStringList = new ArrayList<>();
+            JsonObject configObject = JsonParser.parseString(asyncDefinition).getAsJsonObject();
+            JsonObject servers = configObject.getAsJsonObject("servers");
+            for (Map.Entry<String, JsonElement> entry : servers.entrySet()) {
+                JsonObject server = entry.getValue().getAsJsonObject();
+                String protocol = server.get("protocol").getAsString();
+                String url = server.get("url").getAsString();
+
+                Map<String, String> asyncProtocol = new HashMap<>();
+                asyncProtocol.put("protocol", protocol);
+                asyncProtocol.put("endPointUrl", url);
+
+                urlsStringList.add(new JSONObject(asyncProtocol).toString());
+            }
+            apidto.setAsyncTransportProtocols(urlsStringList);
         }
         return apidto;
     }
@@ -500,7 +555,9 @@ public class APIMappingUtil {
     public static List<APIEndpointURLsDTO> fromAPIRevisionListToEndpointsList(APIDTO apidto, String organization)
             throws APIManagementException {
 
-        Map<String, Environment> environments = APIUtil.getEnvironments(organization);
+        Map<String, Environment> environmentsMap = APIUtil.getEnvironments(organization);
+        List<Environment> environmentsList = new ArrayList<Environment>(environmentsMap.values());
+        Map<String, Environment> permittedEnvironments = APIUtil.extractVisibleEnvironmentsForUser(environmentsList, RestApiCommonUtil.getLoggedInUsername());
         APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
         List<APIRevisionDeployment> revisionDeployments = apiConsumer.getAPIRevisionDeploymentListOfAPI(apidto.getId());
 
@@ -516,7 +573,7 @@ public class APIMappingUtil {
         for (APIRevisionDeployment revisionDeployment : revisionDeployments) {
             if (revisionDeployment.isDisplayOnDevportal()) {
                 // Deployed environment
-                Environment environment = environments.get(revisionDeployment.getDeployment());
+                Environment environment = permittedEnvironments.get(revisionDeployment.getDeployment());
                 if (environment != null) {
                     APIEndpointURLsDTO apiEndpointURLsDTO = fromAPIRevisionToEndpoints(apidto, environment,
                             revisionDeployment.getVhost(), customGatewayUrl, organization);
@@ -526,6 +583,51 @@ public class APIMappingUtil {
         }
         return endpointUrls;
     }
+
+    private static APIURLsDTO extractEndpointUrlsForDiscoveredApi(APIDTO apidto) {
+        try {
+            if (StringUtils.isBlank(apidto.getApiDefinition())) {
+                return null;
+            }
+            JsonElement configElement = JsonParser.parseString(apidto.getApiDefinition());
+            if (!configElement.isJsonObject()) {
+                return null;
+            }
+            JsonObject configObject = configElement.getAsJsonObject();
+            JsonArray servers = configObject.getAsJsonArray("servers");
+            if (servers == null || servers.size() == 0) {
+                return null;
+            }
+            JsonObject server = servers.get(0).getAsJsonObject();
+            if (server == null || !server.has("url")) {
+                return null;
+            }
+            String resolvedUrl = server.get("url").getAsString();
+            JsonObject variables = server.getAsJsonObject("variables");
+            if (variables != null && variables.has("basePath")) {
+                JsonObject basePath = variables.getAsJsonObject("basePath");
+                if (basePath != null && basePath.has("default")) {
+                    String stageName = basePath.get("default").getAsString();
+                    resolvedUrl = resolvedUrl
+                            .replace("/{basePath}", "/" + stageName)
+                            .replace("{basePath}", stageName);
+                }
+            }
+            if (StringUtils.isBlank(resolvedUrl)) {
+                return null;
+            }
+            APIURLsDTO urls = new APIURLsDTO();
+            if (StringUtils.startsWithIgnoreCase(resolvedUrl, APIConstants.HTTP_PROTOCOL_URL_PREFIX)) {
+                urls.setHttp(resolvedUrl);
+            } else {
+                urls.setHttps(resolvedUrl);
+            }
+            return urls;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
 
     private static APIEndpointURLsDTO fromAPIRevisionToEndpoints(APIDTO apidto, Environment environment,
                                                                  String host, String customGatewayUrl,
@@ -539,7 +641,26 @@ public class APIMappingUtil {
             if (!StringUtils.contains(customGatewayUrl, "://")) {
                 customGatewayUrl = APIConstants.HTTPS_PROTOCOL_URL_PREFIX + customGatewayUrl;
             }
+            URL customUrl;
+            try {
+                customUrl = new URL(customGatewayUrl);
+            } catch (MalformedURLException e) {
+                throw new APIManagementException("Error occurred while parsing the custom gateway URL", e);
+            }
             vHost = VHost.fromEndpointUrls(new String[]{customGatewayUrl});
+            // Set HTTP port and context if HTTP transport is enabled
+            if (apidto.getTransport().contains(APIConstants.HTTP_PROTOCOL)) {
+                String protocol = customUrl.getProtocol();
+                int port = customUrl.getPort();
+
+                if (APIConstants.HTTP_PROTOCOL.equals(protocol)) {
+                    vHost.setHttpPort(port < 0 ? VHost.DEFAULT_HTTP_PORT : port);
+                } else {
+                    vHost.setHttpPort(VHost.DEFAULT_HTTP_PORT);
+                }
+
+                vHost.setHttpContext(customUrl.getPath());
+            }
             context = context.replace("/t/" + tenantDomain, "");
         }
 
@@ -553,11 +674,39 @@ public class APIMappingUtil {
         boolean isGQLSubscription = StringUtils.equalsIgnoreCase(APIConstants.GRAPHQL_API, apidto.getType())
                 && isGraphQLSubscriptionsAvailable(apidto);
         if (!isWs) {
-            if (apidto.getTransport().contains(APIConstants.HTTP_PROTOCOL)) {
-                apiurLsDTO.setHttp(vHost.getHttpUrl() + context);
-            }
-            if (apidto.getTransport().contains(APIConstants.HTTPS_PROTOCOL)) {
-                apiurLsDTO.setHttps(vHost.getHttpsUrl() + context);
+            if (apidto.isInitiatedFromGateway()) {
+                APIURLsDTO extractedURLs;
+                extractedURLs = extractEndpointUrlsForDiscoveredApi(apidto);
+                if (extractedURLs == null) {
+                    if (apidto.getTransport().contains(APIConstants.HTTP_PROTOCOL)) {
+                        apiurLsDTO.setHttp(vHost.getHttpUrl() + context);
+                    }
+                    if (apidto.getTransport().contains(APIConstants.HTTPS_PROTOCOL)) {
+                        apiurLsDTO.setHttps(vHost.getHttpsUrl() + context);
+                    }
+                } else {
+                    apiurLsDTO = extractedURLs;
+                }
+            } else {
+                String externalReference = APIUtil.getApiExternalApiMappingReferenceByApiId(apidto.getId(),
+                        environment.getUuid());
+                // Retrieve gateway deployer to determine if this is an external gateway deployment
+                GatewayDeployer gatewayDeployer = GatewayHolder.getTenantGatewayInstance(tenantDomain,
+                        environment.getName());
+                // Only append context if not using external gateway (execution URLs already include full path)
+                String contextToAppend = (gatewayDeployer != null && externalReference != null) ? "" : context;
+                String httpUrl = (gatewayDeployer != null && externalReference != null) ?
+                        gatewayDeployer.getAPIExecutionURL(externalReference, GatewayDeployer.HttpScheme.HTTP) :
+                        vHost.getHttpUrl();
+                String httpsUrl = (gatewayDeployer != null && externalReference != null) ?
+                        gatewayDeployer.getAPIExecutionURL(externalReference, GatewayDeployer.HttpScheme.HTTPS) :
+                        vHost.getHttpsUrl();
+                if (apidto.getTransport().contains(APIConstants.HTTP_PROTOCOL)) {
+                    apiurLsDTO.setHttp(httpUrl + contextToAppend);
+                }
+                if (apidto.getTransport().contains(APIConstants.HTTPS_PROTOCOL)) {
+                    apiurLsDTO.setHttps(httpsUrl + contextToAppend);
+                }
             }
         }
         if (isWs || isGQLSubscription) {
@@ -820,6 +969,8 @@ public class APIMappingUtil {
         apiInfoDTO.setIsSubscriptionAvailable(isSubscriptionAvailable(apiTenant, subscriptionAvailability,
                 subscriptionAllowedTenants));
         apiInfoDTO.setGatewayVendor(apiProduct.getGatewayVendor());
+        apiInfoDTO.setEgress(apiProduct.isEgress() == 1);
+        apiInfoDTO.setDisplayName(apiProduct.getDisplayName());
 
         return apiInfoDTO;
     }
@@ -845,6 +996,7 @@ public class APIMappingUtil {
         apiInfoDTO.setProvider(apiId.getProviderName());
         apiInfoDTO.setLifeCycleStatus(api.getStatus());
         apiInfoDTO.setType(api.getType());
+        apiInfoDTO.setSubtype(api.getSubtype());
         apiInfoDTO.setAvgRating(String.valueOf(api.getRating()));
         String providerName = api.getId().getProviderName();
         apiInfoDTO.setProvider(APIUtil.replaceEmailDomainBack(providerName));
@@ -886,6 +1038,10 @@ public class APIMappingUtil {
         apiInfoDTO.setIsSubscriptionAvailable(isSubscriptionAvailable(apiTenant, subscriptionAvailability,
                 subscriptionAllowedTenants));
         apiInfoDTO.setGatewayVendor(api.getGatewayVendor());
+        apiInfoDTO.setGatewayType(api.getGatewayType());
+        apiInfoDTO.setMonetizedInfo(api.isMonetizationEnabled());
+        apiInfoDTO.setEgress(api.isEgress() == 1);
+        apiInfoDTO.setDisplayName(api.getDisplayName());
 
         return apiInfoDTO;
     }
@@ -1097,6 +1253,35 @@ public class APIMappingUtil {
             apiInfoDTO.setMonetizationLabel(RestApiConstants.FREEMIUM);
         }
         apiInfoDTO.setThrottlingPolicies(throttlingPolicyNames);
+    }
+
+    /**
+     * Retrieves the value of the specified query parameter from a query string.
+     *
+     * @param query The query string containing key-value pairs.
+     * @return The value of the "kmId" parameter, or null if not found or if the query is empty or null.
+     */
+    public static String getKmIdValue(String query) {
+
+        if (StringUtils.isBlank(query)) {
+            return null;
+        }
+
+        String[] pairs = query.split("&");
+        for (String pair : pairs) {
+            String[] keyValue = pair.split(":");
+            if (keyValue.length > 0) {
+                String key = keyValue[0].trim();
+                if (key.equals("kmId")) {
+                    if (keyValue.length > 1) {
+                        return keyValue[1].trim();
+                    } else {
+                        return "";
+                    }
+                }
+            }
+        }
+        return null;
     }
 
 }

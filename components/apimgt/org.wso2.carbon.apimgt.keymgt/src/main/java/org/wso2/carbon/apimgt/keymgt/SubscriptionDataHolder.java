@@ -17,6 +17,8 @@
  */
 package org.wso2.carbon.apimgt.keymgt;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
 import org.wso2.carbon.apimgt.keymgt.model.impl.SubscriptionDataStoreImpl;
 
@@ -30,6 +32,7 @@ public class SubscriptionDataHolder {
 
     protected Map<String, SubscriptionDataStore> subscriptionStore =
             new ConcurrentHashMap<>();
+    private static final Log log = LogFactory.getLog(SubscriptionDataHolder.class);
     private static SubscriptionDataHolder instance = new SubscriptionDataHolder();
 
     public static SubscriptionDataHolder getInstance() {
@@ -65,8 +68,38 @@ public class SubscriptionDataHolder {
     }
 
     public SubscriptionDataStore getTenantSubscriptionStore(String tenantDomain) {
+        if (subscriptionStore != null && tenantDomain != null) {
+            SubscriptionDataStore subscriptionDataStore = subscriptionStore.get(tenantDomain);
+            if (subscriptionDataStore == null) {
+                synchronized (tenantDomain.concat("getTenantSubscriptionStore").intern()) {
+                    subscriptionDataStore = subscriptionStore.get(tenantDomain);
+                    if (subscriptionDataStore == null) {
+                        subscriptionDataStore = registerTenantSubscriptionStore(tenantDomain);
+                    }
+                }
+            }
+            return subscriptionDataStore;
+        }
+        return null;
+    }
 
-        return subscriptionStore.get(tenantDomain);
+    public void refreshSubscriptionStore() {
+        subscriptionStore.keySet().forEach(tenant -> {
+            // Cleaning the existing SubscriptionDataStore instance before re-population
+            SubscriptionDataStore oldStore = subscriptionStore.get(tenant);
+            if (oldStore != null) {
+                try {
+                    oldStore.destroy();
+                } catch (Throwable t) {
+                    log.warn("Error while destroying old SubscriptionDataStore for tenant: " + tenant, t);
+                }
+            }
+            subscriptionStore.put(tenant, new SubscriptionDataStoreImpl(tenant));
+            if (log.isDebugEnabled()) {
+                log.debug("Refreshing subscription data store for tenant: " + tenant);
+            }
+            initializeSubscriptionStore(tenant);
+        });
     }
 
 }

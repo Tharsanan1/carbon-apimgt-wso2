@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -34,6 +34,14 @@
             <classifier>runtime</classifier>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.wso2.carbon.apimgt</groupId>
+            <artifactId>org.wso2.carbon.apimgt.keymgt</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -57,7 +65,7 @@
                         </Export-Package>
                         <Import-Package>
                             com.google.gson.annotations.*,
-                            javax.transaction.*,
+                            javax.transaction.*; resolution:=optional,
                             org.apache.axis2.*,
                             org.apache.commons.*,
                             *;resolution:=optional

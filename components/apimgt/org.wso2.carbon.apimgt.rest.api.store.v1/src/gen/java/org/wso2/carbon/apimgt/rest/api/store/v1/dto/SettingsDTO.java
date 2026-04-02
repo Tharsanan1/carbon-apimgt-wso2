@@ -26,6 +26,7 @@ public class SettingsDTO   {
     private List<String> grantTypes = new ArrayList<String>();
     private List<String> scopes = new ArrayList<String>();
     private Boolean applicationSharingEnabled = false;
+    private Boolean isLegacyApiKeysEnabled = false;
     private Boolean mapExistingAuthApps = false;
     private String apiGatewayEndpoint = null;
     private Boolean monetizationEnabled = false;
@@ -34,10 +35,49 @@ public class SettingsDTO   {
     private SettingsIdentityProviderDTO identityProvider = null;
     private Boolean isAnonymousModeEnabled = true;
     private Boolean isPasswordChangeEnabled = true;
+    private Boolean isJWTEnabledForLoginTokens = false;
+    private Boolean orgAccessControlEnabled = null;
     private String userStorePasswordPattern = null;
     private String passwordPolicyPattern = null;
     private Integer passwordPolicyMinLength = null;
     private Integer passwordPolicyMaxLength = null;
+    private Boolean apiChatEnabled = true;
+    private Boolean aiAuthTokenProvided = false;
+    private Boolean marketplaceAssistantEnabled = true;
+    private Boolean orgWideAppUpdateEnabled = false;
+
+    @XmlType(name="DevportalModeEnum")
+    @XmlEnum(String.class)
+    public enum DevportalModeEnum {
+        HYBRID("HYBRID"),
+        MCP_ONLY("MCP_ONLY"),
+        API_ONLY("API_ONLY");
+        private String value;
+
+        DevportalModeEnum (String v) {
+            value = v;
+        }
+
+        public String value() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return String.valueOf(value);
+        }
+
+        @JsonCreator
+        public static DevportalModeEnum fromValue(String v) {
+            for (DevportalModeEnum b : DevportalModeEnum.values()) {
+                if (String.valueOf(b.value).equals(v)) {
+                    return b;
+                }
+            }
+return null;
+        }
+    }
+    private DevportalModeEnum devportalMode = DevportalModeEnum.HYBRID;
 
   /**
    **/
@@ -47,7 +87,7 @@ public class SettingsDTO   {
   }
 
   
-  @ApiModelProperty(value = "")
+  @ApiModelProperty(example = "[\"refresh_token\",\"urn:ietf:params:oauth:grant-type:saml2-bearer\",\"password\",\"client_credentials\",\"iwa:ntlm\",\"authorization_code\",\"urn:ietf:params:oauth:grant-type:jwt-bearer\"]", value = "")
   @JsonProperty("grantTypes")
   public List<String> getGrantTypes() {
     return grantTypes;
@@ -64,7 +104,7 @@ public class SettingsDTO   {
   }
 
   
-  @ApiModelProperty(value = "")
+  @ApiModelProperty(example = "[\"apim:api_key\",\"apim:app_import_export\",\"apim:app_manage\",\"apim:store_settings\",\"apim:sub_alert_manage\",\"apim:sub_manage\",\"apim:subscribe\",\"openid\"]", value = "")
   @JsonProperty("scopes")
   public List<String> getScopes() {
     return scopes;
@@ -88,6 +128,23 @@ public class SettingsDTO   {
   }
   public void setApplicationSharingEnabled(Boolean applicationSharingEnabled) {
     this.applicationSharingEnabled = applicationSharingEnabled;
+  }
+
+  /**
+   **/
+  public SettingsDTO isLegacyApiKeysEnabled(Boolean isLegacyApiKeysEnabled) {
+    this.isLegacyApiKeysEnabled = isLegacyApiKeysEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("IsLegacyApiKeysEnabled")
+  public Boolean isIsLegacyApiKeysEnabled() {
+    return isLegacyApiKeysEnabled;
+  }
+  public void setIsLegacyApiKeysEnabled(Boolean isLegacyApiKeysEnabled) {
+    this.isLegacyApiKeysEnabled = isLegacyApiKeysEnabled;
   }
 
   /**
@@ -228,6 +285,41 @@ public class SettingsDTO   {
   }
 
   /**
+   **/
+  public SettingsDTO isJWTEnabledForLoginTokens(Boolean isJWTEnabledForLoginTokens) {
+    this.isJWTEnabledForLoginTokens = isJWTEnabledForLoginTokens;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("IsJWTEnabledForLoginTokens")
+  public Boolean isIsJWTEnabledForLoginTokens() {
+    return isJWTEnabledForLoginTokens;
+  }
+  public void setIsJWTEnabledForLoginTokens(Boolean isJWTEnabledForLoginTokens) {
+    this.isJWTEnabledForLoginTokens = isJWTEnabledForLoginTokens;
+  }
+
+  /**
+   * Is Organization-based access control configuration enabled 
+   **/
+  public SettingsDTO orgAccessControlEnabled(Boolean orgAccessControlEnabled) {
+    this.orgAccessControlEnabled = orgAccessControlEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Is Organization-based access control configuration enabled ")
+  @JsonProperty("orgAccessControlEnabled")
+  public Boolean isOrgAccessControlEnabled() {
+    return orgAccessControlEnabled;
+  }
+  public void setOrgAccessControlEnabled(Boolean orgAccessControlEnabled) {
+    this.orgAccessControlEnabled = orgAccessControlEnabled;
+  }
+
+  /**
    * The &#39;PasswordJavaRegEx&#39; cofigured in the UserStoreManager
    **/
   public SettingsDTO userStorePasswordPattern(String userStorePasswordPattern) {
@@ -236,7 +328,7 @@ public class SettingsDTO   {
   }
 
   
-  @ApiModelProperty(value = "The 'PasswordJavaRegEx' cofigured in the UserStoreManager")
+  @ApiModelProperty(example = "^[\\S]{5,30}$", value = "The 'PasswordJavaRegEx' cofigured in the UserStoreManager")
   @JsonProperty("userStorePasswordPattern")
   public String getUserStorePasswordPattern() {
     return userStorePasswordPattern;
@@ -254,7 +346,7 @@ public class SettingsDTO   {
   }
 
   
-  @ApiModelProperty(value = "The regex configured in the Password Policy property 'passwordPolicy.pattern'")
+  @ApiModelProperty(example = "^[\\S]{5,30}$", value = "The regex configured in the Password Policy property 'passwordPolicy.pattern'")
   @JsonProperty("passwordPolicyPattern")
   public String getPasswordPolicyPattern() {
     return passwordPolicyPattern;
@@ -299,6 +391,95 @@ public class SettingsDTO   {
     this.passwordPolicyMaxLength = passwordPolicyMaxLength;
   }
 
+  /**
+   * Specifies whether API Chat feature is enabled.
+   **/
+  public SettingsDTO apiChatEnabled(Boolean apiChatEnabled) {
+    this.apiChatEnabled = apiChatEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Specifies whether API Chat feature is enabled.")
+  @JsonProperty("apiChatEnabled")
+  public Boolean isApiChatEnabled() {
+    return apiChatEnabled;
+  }
+  public void setApiChatEnabled(Boolean apiChatEnabled) {
+    this.apiChatEnabled = apiChatEnabled;
+  }
+
+  /**
+   * Checks if the auth token is provided for AI service usage.
+   **/
+  public SettingsDTO aiAuthTokenProvided(Boolean aiAuthTokenProvided) {
+    this.aiAuthTokenProvided = aiAuthTokenProvided;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Checks if the auth token is provided for AI service usage.")
+  @JsonProperty("aiAuthTokenProvided")
+  public Boolean isAiAuthTokenProvided() {
+    return aiAuthTokenProvided;
+  }
+  public void setAiAuthTokenProvided(Boolean aiAuthTokenProvided) {
+    this.aiAuthTokenProvided = aiAuthTokenProvided;
+  }
+
+  /**
+   * Specifies whether Marketplace Assistant feature is enabled.
+   **/
+  public SettingsDTO marketplaceAssistantEnabled(Boolean marketplaceAssistantEnabled) {
+    this.marketplaceAssistantEnabled = marketplaceAssistantEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Specifies whether Marketplace Assistant feature is enabled.")
+  @JsonProperty("marketplaceAssistantEnabled")
+  public Boolean isMarketplaceAssistantEnabled() {
+    return marketplaceAssistantEnabled;
+  }
+  public void setMarketplaceAssistantEnabled(Boolean marketplaceAssistantEnabled) {
+    this.marketplaceAssistantEnabled = marketplaceAssistantEnabled;
+  }
+
+  /**
+   **/
+  public SettingsDTO orgWideAppUpdateEnabled(Boolean orgWideAppUpdateEnabled) {
+    this.orgWideAppUpdateEnabled = orgWideAppUpdateEnabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("orgWideAppUpdateEnabled")
+  public Boolean isOrgWideAppUpdateEnabled() {
+    return orgWideAppUpdateEnabled;
+  }
+  public void setOrgWideAppUpdateEnabled(Boolean orgWideAppUpdateEnabled) {
+    this.orgWideAppUpdateEnabled = orgWideAppUpdateEnabled;
+  }
+
+  /**
+   * This indicates the mode of the Developer Portal. Possible values are: - HYBRID: Both MCP and API portals are enabled. - MCP_ONLY: Only the MCP portal is enabled. - API_ONLY: Only the API portal is enabled. 
+   **/
+  public SettingsDTO devportalMode(DevportalModeEnum devportalMode) {
+    this.devportalMode = devportalMode;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "This indicates the mode of the Developer Portal. Possible values are: - HYBRID: Both MCP and API portals are enabled. - MCP_ONLY: Only the MCP portal is enabled. - API_ONLY: Only the API portal is enabled. ")
+  @JsonProperty("devportalMode")
+  public DevportalModeEnum getDevportalMode() {
+    return devportalMode;
+  }
+  public void setDevportalMode(DevportalModeEnum devportalMode) {
+    this.devportalMode = devportalMode;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -312,6 +493,7 @@ public class SettingsDTO   {
     return Objects.equals(grantTypes, settings.grantTypes) &&
         Objects.equals(scopes, settings.scopes) &&
         Objects.equals(applicationSharingEnabled, settings.applicationSharingEnabled) &&
+        Objects.equals(isLegacyApiKeysEnabled, settings.isLegacyApiKeysEnabled) &&
         Objects.equals(mapExistingAuthApps, settings.mapExistingAuthApps) &&
         Objects.equals(apiGatewayEndpoint, settings.apiGatewayEndpoint) &&
         Objects.equals(monetizationEnabled, settings.monetizationEnabled) &&
@@ -320,15 +502,22 @@ public class SettingsDTO   {
         Objects.equals(identityProvider, settings.identityProvider) &&
         Objects.equals(isAnonymousModeEnabled, settings.isAnonymousModeEnabled) &&
         Objects.equals(isPasswordChangeEnabled, settings.isPasswordChangeEnabled) &&
+        Objects.equals(isJWTEnabledForLoginTokens, settings.isJWTEnabledForLoginTokens) &&
+        Objects.equals(orgAccessControlEnabled, settings.orgAccessControlEnabled) &&
         Objects.equals(userStorePasswordPattern, settings.userStorePasswordPattern) &&
         Objects.equals(passwordPolicyPattern, settings.passwordPolicyPattern) &&
         Objects.equals(passwordPolicyMinLength, settings.passwordPolicyMinLength) &&
-        Objects.equals(passwordPolicyMaxLength, settings.passwordPolicyMaxLength);
+        Objects.equals(passwordPolicyMaxLength, settings.passwordPolicyMaxLength) &&
+        Objects.equals(apiChatEnabled, settings.apiChatEnabled) &&
+        Objects.equals(aiAuthTokenProvided, settings.aiAuthTokenProvided) &&
+        Objects.equals(marketplaceAssistantEnabled, settings.marketplaceAssistantEnabled) &&
+        Objects.equals(orgWideAppUpdateEnabled, settings.orgWideAppUpdateEnabled) &&
+        Objects.equals(devportalMode, settings.devportalMode);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(grantTypes, scopes, applicationSharingEnabled, mapExistingAuthApps, apiGatewayEndpoint, monetizationEnabled, recommendationEnabled, isUnlimitedTierPaid, identityProvider, isAnonymousModeEnabled, isPasswordChangeEnabled, userStorePasswordPattern, passwordPolicyPattern, passwordPolicyMinLength, passwordPolicyMaxLength);
+    return Objects.hash(grantTypes, scopes, applicationSharingEnabled, isLegacyApiKeysEnabled, mapExistingAuthApps, apiGatewayEndpoint, monetizationEnabled, recommendationEnabled, isUnlimitedTierPaid, identityProvider, isAnonymousModeEnabled, isPasswordChangeEnabled, isJWTEnabledForLoginTokens, orgAccessControlEnabled, userStorePasswordPattern, passwordPolicyPattern, passwordPolicyMinLength, passwordPolicyMaxLength, apiChatEnabled, aiAuthTokenProvided, marketplaceAssistantEnabled, orgWideAppUpdateEnabled, devportalMode);
   }
 
   @Override
@@ -339,6 +528,7 @@ public class SettingsDTO   {
     sb.append("    grantTypes: ").append(toIndentedString(grantTypes)).append("\n");
     sb.append("    scopes: ").append(toIndentedString(scopes)).append("\n");
     sb.append("    applicationSharingEnabled: ").append(toIndentedString(applicationSharingEnabled)).append("\n");
+    sb.append("    isLegacyApiKeysEnabled: ").append(toIndentedString(isLegacyApiKeysEnabled)).append("\n");
     sb.append("    mapExistingAuthApps: ").append(toIndentedString(mapExistingAuthApps)).append("\n");
     sb.append("    apiGatewayEndpoint: ").append(toIndentedString(apiGatewayEndpoint)).append("\n");
     sb.append("    monetizationEnabled: ").append(toIndentedString(monetizationEnabled)).append("\n");
@@ -347,10 +537,17 @@ public class SettingsDTO   {
     sb.append("    identityProvider: ").append(toIndentedString(identityProvider)).append("\n");
     sb.append("    isAnonymousModeEnabled: ").append(toIndentedString(isAnonymousModeEnabled)).append("\n");
     sb.append("    isPasswordChangeEnabled: ").append(toIndentedString(isPasswordChangeEnabled)).append("\n");
+    sb.append("    isJWTEnabledForLoginTokens: ").append(toIndentedString(isJWTEnabledForLoginTokens)).append("\n");
+    sb.append("    orgAccessControlEnabled: ").append(toIndentedString(orgAccessControlEnabled)).append("\n");
     sb.append("    userStorePasswordPattern: ").append(toIndentedString(userStorePasswordPattern)).append("\n");
     sb.append("    passwordPolicyPattern: ").append(toIndentedString(passwordPolicyPattern)).append("\n");
     sb.append("    passwordPolicyMinLength: ").append(toIndentedString(passwordPolicyMinLength)).append("\n");
     sb.append("    passwordPolicyMaxLength: ").append(toIndentedString(passwordPolicyMaxLength)).append("\n");
+    sb.append("    apiChatEnabled: ").append(toIndentedString(apiChatEnabled)).append("\n");
+    sb.append("    aiAuthTokenProvided: ").append(toIndentedString(aiAuthTokenProvided)).append("\n");
+    sb.append("    marketplaceAssistantEnabled: ").append(toIndentedString(marketplaceAssistantEnabled)).append("\n");
+    sb.append("    orgWideAppUpdateEnabled: ").append(toIndentedString(orgWideAppUpdateEnabled)).append("\n");
+    sb.append("    devportalMode: ").append(toIndentedString(devportalMode)).append("\n");
     sb.append("}");
     return sb.toString();
   }

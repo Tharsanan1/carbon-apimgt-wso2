@@ -2,12 +2,14 @@ package org.wso2.carbon.apimgt.impl;
 
 import org.apache.axiom.om.OMAttribute;
 import org.apache.axiom.om.OMElement;
+import org.apache.axiom.om.OMException;
 import org.apache.axiom.om.util.AXIOMUtil;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.model.Mediation;
 import org.wso2.carbon.apimgt.api.model.policy.PolicyConstants;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
@@ -19,6 +21,7 @@ import org.wso2.carbon.registry.core.Registry;
 import org.wso2.carbon.registry.core.RegistryConstants;
 import org.wso2.carbon.registry.core.Resource;
 import org.wso2.carbon.registry.core.exceptions.RegistryException;
+import org.wso2.carbon.registry.core.exceptions.ResourceNotFoundException;
 import org.wso2.carbon.user.api.UserStoreException;
 
 import javax.xml.namespace.QName;
@@ -96,19 +99,24 @@ public class GlobalMediationPolicyImpl {
                                     mediation.setType(resourceType);
                                     //Add mediation to the mediation list
                                     mediationList.add(mediation);
-                                } catch (XMLStreamException e) {
+                                } catch (XMLStreamException | OMException e) {
                                     //If any exception been caught flow may continue with the next mediation policy
                                     log.error("Error occurred while getting omElement out of " +
                                             "mediation content from " + sequence, e);
                                 } catch (IOException e) {
                                     log.error("Error occurred while converting resource " +
                                             "contentStream in to string in " + sequence, e);
+                                } catch (Exception e) {
+                                    log.error("An unexpected error occurred during mediation in " + sequence, e);
                                 }
                             }
                         }
                     }
                 }
             }
+        } catch (ResourceNotFoundException e) {
+            ExceptionCodes errorHandler = ExceptionCodes.GLOBAL_MEDIATION_POLICIES_NOT_FOUND;
+            throw new APIManagementException(errorHandler);
         } catch (RegistryException e) {
             String msg = "Failed to get global mediation policies";
             throw new APIManagementException(msg, e);

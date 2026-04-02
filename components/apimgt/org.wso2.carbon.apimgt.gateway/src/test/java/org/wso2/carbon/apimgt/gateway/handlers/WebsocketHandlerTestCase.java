@@ -26,6 +26,8 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeKey;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,22 +39,28 @@ import org.powermock.modules.junit4.PowerMockRunner;
 import org.wso2.carbon.apimgt.common.gateway.constants.GraphQLConstants;
 import org.wso2.carbon.apimgt.gateway.dto.GraphQLOperationDTO;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket.WebSocketApiConstants;
+import org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket.WebSocketUtils;
 import org.wso2.carbon.apimgt.gateway.inbound.InboundMessageContext;
 import org.wso2.carbon.apimgt.gateway.inbound.InboundMessageContextDataHolder;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.InboundProcessorResponseDTO;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.utils.InboundWebsocketProcessorUtil;
+import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.dto.VerbInfoDTO;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * Test class for WebsocketHandler
  */
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({InboundWebsocketProcessorUtil.class, APIUtil.class})
+@PrepareForTest({InboundWebsocketProcessorUtil.class, APIUtil.class, ServiceReferenceHolder.class, WebsocketUtil.class,
+        WebSocketUtils.class})
 public class WebsocketHandlerTestCase {
 
     private static final String channelIdString = "11111";
@@ -82,6 +90,14 @@ public class WebsocketHandlerTestCase {
                 APIConstants.API_TYPE_WS, APIConstants.PUBLISHED_STATUS, false);
         graphQLAPI = new API(UUID.randomUUID().toString(), 2, "admin", "GraphQLAPI", "1.0.0", "graphql", "Unlimited",
                 APIConstants.GRAPHQL_API, APIConstants.PUBLISHED_STATUS, false);
+
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        ServiceReferenceHolder serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
+        PowerMockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
+        APIManagerConfiguration apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
+        PowerMockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
+
+        PowerMockito.mockStatic(WebsocketUtil.class);
     }
 
     /*
@@ -115,6 +131,7 @@ public class WebsocketHandlerTestCase {
         PowerMockito.when(InboundWebsocketProcessorUtil.authenticateToken(Mockito.anyObject())).thenReturn(responseDTO);
         PowerMockito.when(InboundWebsocketProcessorUtil.doThrottle(Mockito.anyInt(), Mockito.anyObject(),
                 Mockito.anyObject(), Mockito.anyObject())).thenReturn(responseDTO);
+        PowerMockito.when(WebsocketUtil.validateDenyPolicies(Mockito.anyObject())).thenReturn(responseDTO);
         websocketHandler.write(channelHandlerContext, msg, channelPromise);
         Assert.assertTrue((InboundMessageContextDataHolder.getInstance().getInboundMessageContextMap()
                 .containsKey(channelIdString)));// No error has occurred context exists in data-holder map.
@@ -175,6 +192,8 @@ public class WebsocketHandlerTestCase {
         PowerMockito.when(InboundWebsocketProcessorUtil.authenticateToken(inboundMessageContext))
                 .thenReturn(responseDTO);
         //happy path
+        PowerMockito.when(WebsocketUtil.validateDenyPolicies(Mockito.anyObject())).thenReturn(responseDTO);
+        setChannelAttributeMap(inboundMessageContext);
         websocketHandler.write(channelHandlerContext, msg, channelPromise);
         Assert.assertTrue((InboundMessageContextDataHolder.getInstance().getInboundMessageContextMap()
                 .containsKey(channelIdString)));// No error has occurred context exists in data-holder map.
@@ -195,5 +214,59 @@ public class WebsocketHandlerTestCase {
         websocketHandler.write(channelHandlerContext, msg, channelPromise);
         Assert.assertTrue((InboundMessageContextDataHolder.getInstance().getInboundMessageContextMap()
                 .containsKey(channelIdString)));
+    }
+
+    private void setChannelAttributeMap(InboundMessageContext inboundMessageContext) {
+        ChannelHandlerContext ctx = Mockito.mock(ChannelHandlerContext.class);
+        inboundMessageContext.setCtx(ctx);
+        Channel channel = Mockito.mock(Channel.class);
+        Mockito.when(ctx.channel()).thenReturn(channel);
+        PowerMockito.mockStatic(WebSocketUtils.class);
+        Mockito.when(channel.attr(WebSocketUtils.WSO2_PROPERTIES)).thenReturn(getChannelAttributeMap());
+        PowerMockito.when(WebSocketUtils.getApiProperties(ctx)).thenReturn(new HashMap<>());
+    }
+
+    private Attribute<Map<String, Object>> getChannelAttributeMap() {
+        return new Attribute<Map<String, Object>>() {
+            @Override
+            public AttributeKey<Map<String, Object>> key() {
+                return null;
+            }
+
+            @Override
+            public Map<String, Object> get() {
+                return null;
+            }
+
+            @Override
+            public void set(Map<String, Object> stringObjectMap) {
+
+            }
+
+            @Override
+            public Map<String, Object> getAndSet(Map<String, Object> stringObjectMap) {
+                return null;
+            }
+
+            @Override
+            public Map<String, Object> setIfAbsent(Map<String, Object> stringObjectMap) {
+                return null;
+            }
+
+            @Override
+            public Map<String, Object> getAndRemove() {
+                return null;
+            }
+
+            @Override
+            public boolean compareAndSet(Map<String, Object> stringObjectMap, Map<String, Object> t1) {
+                return false;
+            }
+
+            @Override
+            public void remove() {
+
+            }
+        };
     }
 }

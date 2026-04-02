@@ -27,6 +27,9 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.wso2.carbon.apimgt.common.gateway.constants.JWTConstants;
 import org.wso2.carbon.apimgt.common.gateway.exception.JWTGeneratorException;
 import org.wso2.carbon.apimgt.common.gateway.jwtgenerator.JWTSignatureAlg;
 
@@ -41,6 +44,7 @@ import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -73,45 +77,68 @@ public final class JWTUtil {
         }
     }
 
+    public static String generateHeader(Certificate publicCert, String signatureAlgorithm)
+            throws JWTGeneratorException {
+        return generateHeader(publicCert, signatureAlgorithm, false, false, false);
+    }
+
     /**
      * Utility method to generate JWT header with public certificate thumbprint for signature verification.
      *
-     * @param publicCert         - The public certificate which needs to include in the header as thumbprint
-     * @param signatureAlgorithm signature algorithm which needs to include in the header
+     * @param publicCert         The public certificate which needs to include in the header as thumbprint
+     * @param signatureAlgorithm Signature algorithm which needs to include in the header
+     * @param useKid             Specifies whether the header should include the kid property
+     * @param useSHA256Hash      Specifies whether to use SHA-256 algorithm to generate the certificate thumbprint
      * @throws JWTGeneratorException
      */
-    public static String generateHeader(Certificate publicCert, String signatureAlgorithm) throws
-            JWTGeneratorException {
 
+    public static String generateHeader(Certificate publicCert, String signatureAlgorithm, boolean useKid,
+                                        boolean useSHA256Hash, boolean encodeX5tWithoutPadding)
+            throws JWTGeneratorException {
+
+        /*
+         * Sample header
+         * {"typ":"JWT", "alg":"SHA256withRSA", "x5t":"a_jhNus21KVuoFx65LmkW2O_l10",
+         * "kid":"a_jhNus21KVuoFx65LmkW2O_l10"}
+         * {"typ":"JWT", "alg":"[2]", "x5t":"[1]"}
+         * */
         try {
-            //generate the SHA-1 thumbprint of the certificate
-            MessageDigest digestValue = MessageDigest.getInstance("SHA-1");
+            X509Certificate x509Certificate = (X509Certificate) publicCert;
+
+            String hashingAlgorithm = useSHA256Hash ? JWTConstants.SHA_256 : JWTConstants.SHA_1;
+            //generate the thumbprint of the certificate
+            MessageDigest digestValue = MessageDigest.getInstance(hashingAlgorithm);
             byte[] der = publicCert.getEncoded();
             digestValue.update(der);
             byte[] digestInBytes = digestValue.digest();
             String publicCertThumbprint = hexify(digestInBytes);
             String base64UrlEncodedThumbPrint;
-            base64UrlEncodedThumbPrint = java.util.Base64.getUrlEncoder()
-                    .encodeToString(publicCertThumbprint.getBytes("UTF-8"));
-            StringBuilder jwtHeader = new StringBuilder();
-            /*
-             * Sample header
-             * {"typ":"JWT", "alg":"SHA256withRSA", "x5t":"a_jhNus21KVuoFx65LmkW2O_l10",
-             * "kid":"a_jhNus21KVuoFx65LmkW2O_l10_RS256"}
-             * {"typ":"JWT", "alg":"[2]", "x5t":"[1]", "x5t":"[1]"}
-             * */
-            jwtHeader.append("{\"typ\":\"JWT\",");
-            jwtHeader.append("\"alg\":\"");
-            jwtHeader.append(getJWSCompliantAlgorithmCode(signatureAlgorithm));
-            jwtHeader.append("\",");
+            if (encodeX5tWithoutPadding) {
+                base64UrlEncodedThumbPrint = java.util.Base64.getUrlEncoder().withoutPadding()
+                        .encodeToString(publicCertThumbprint.getBytes("UTF-8"));
+            } else {
+                base64UrlEncodedThumbPrint = java.util.Base64.getUrlEncoder()
+                        .encodeToString(publicCertThumbprint.getBytes("UTF-8"));
+            }
 
-            jwtHeader.append("\"x5t\":\"");
-            jwtHeader.append(base64UrlEncodedThumbPrint);
-            jwtHeader.append("\"}");
+            JSONObject jwtHeader = new JSONObject();
+            jwtHeader.put("typ", "JWT");
+            jwtHeader.put("alg", getJWSCompliantAlgorithmCode(signatureAlgorithm));
+            if (useSHA256Hash) {
+                jwtHeader.put(JWTConstants.X5T256_PARAMETER, base64UrlEncodedThumbPrint);
+            } else {
+                jwtHeader.put(JWTConstants.X5T_PARAMETER, base64UrlEncodedThumbPrint);
+            }
+
+            if (useKid) {
+                jwtHeader.put("kid", getKID(x509Certificate));
+            }
             return jwtHeader.toString();
 
         } catch (NoSuchAlgorithmException | CertificateEncodingException | UnsupportedEncodingException e) {
             throw new JWTGeneratorException("Error in generating public certificate thumbprint", e);
+        } catch (JSONException e) {
+            throw new JWTGeneratorException("Encountered an error while generating JWT header json object", e);
         }
     }
 
@@ -132,6 +159,19 @@ public final class JWTUtil {
             buf.append(hexDigits[aByte & 0x0f]);
         }
         return buf.toString();
+    }
+
+    /**
+     * Helper method to add kid claim into to JWT_HEADER.
+     *
+     * @param cert X509 certificate
+     * @return KID
+     */
+    public static String getKID(X509Certificate cert) {
+        String serialNumber = cert.getSerialNumber().toString();
+        String issuerName = cert.getIssuerDN().getName();
+        String kid = issuerName + "#" + serialNumber;
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(kid.getBytes(StandardCharsets.UTF_8));
     }
 
     /**

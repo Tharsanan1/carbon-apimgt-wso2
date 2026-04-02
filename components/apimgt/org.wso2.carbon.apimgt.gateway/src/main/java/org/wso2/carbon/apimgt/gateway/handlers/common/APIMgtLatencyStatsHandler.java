@@ -109,11 +109,12 @@ public class APIMgtLatencyStatsHandler extends AbstractHandler {
         org.apache.axis2.context.MessageContext.setCurrentMessageContext(axis2MC);
         if (messageContext.getProperty(APIMgtGatewayConstants.BACKEND_REQUEST_END_TIME) == null) {
             messageContext.setProperty(APIMgtGatewayConstants.BACKEND_REQUEST_END_TIME, System.currentTimeMillis());
-            if (APIUtil.isAnalyticsEnabled()) {
-                long executionStartTime = Long.parseLong((String) messageContext.getProperty(APIMgtGatewayConstants
-                        .BACKEND_REQUEST_START_TIME));
-                messageContext.setProperty(APIMgtGatewayConstants.BACKEND_LATENCY, System.currentTimeMillis() -
-                        executionStartTime);
+            if (APIUtil.isAnalyticsEnabled()
+                    && messageContext.getProperty(APIMgtGatewayConstants.BACKEND_REQUEST_START_TIME) != null) {
+                long executionStartTime = Long.parseLong(
+                        (String) messageContext.getProperty(APIMgtGatewayConstants.BACKEND_REQUEST_START_TIME));
+                messageContext.setProperty(APIMgtGatewayConstants.BACKEND_LATENCY,
+                        System.currentTimeMillis() - executionStartTime);
             }
         }
         return true;
@@ -130,7 +131,9 @@ public class APIMgtLatencyStatsHandler extends AbstractHandler {
                         swagger = localEntryObj.getValue().toString();
                         OpenAPIParser parser = new OpenAPIParser();
                         ParseOptions parseOptions = new ParseOptions();
+                        parseOptions.setResolve(true);
                         parseOptions.setResolveFully(true);
+                        parseOptions.setResolveCombinators(false);
                         openAPI = parser.readContents(swagger, null, parseOptions).getOpenAPI();
                         // HTTP headers should be case insensitive as for HTTP 1.1 RFC
                         // Thus converting headers to lowercase for schema validation.
@@ -182,6 +185,7 @@ public class APIMgtLatencyStatsHandler extends AbstractHandler {
         List<Parameter> headerParameters = parameters.stream()
                 .filter(param -> param.getIn().equalsIgnoreCase("header"))
                 .filter(param -> !param.getName().equalsIgnoreCase(Headers.CONTENT_TYPE)) // Ignore content-type header
+                .filter(param -> !param.getName().equalsIgnoreCase(Headers.ACCEPT)) // Ignore accept header
                 .collect(Collectors.toList());
         List<Parameter> modifiedHeaderParameters = headerParameters.stream()
                 .map(APIMgtLatencyStatsHandler::replaceLowerCaseHeaderName).collect(Collectors.toList());

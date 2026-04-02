@@ -33,47 +33,15 @@ public class APIProductDTO   {
   
     private String id = null;
     private String name = null;
+    private String displayName = null;
     private String context = null;
+    private String version = null;
     private String description = null;
     private String provider = null;
     private Boolean hasThumbnail = null;
-
-    @XmlType(name="StateEnum")
-    @XmlEnum(String.class)
-    public enum StateEnum {
-        CREATED("CREATED"),
-        PUBLISHED("PUBLISHED"),
-        DEPRECATED("DEPRECATED"),
-        RETIRED("RETIRED"),
-        BLOCKED("BLOCKED"),
-        PROTOTYPED("PROTOTYPED");
-        private String value;
-
-        StateEnum (String v) {
-            value = v;
-        }
-
-        public String value() {
-            return value;
-        }
-
-        @Override
-        public String toString() {
-            return String.valueOf(value);
-        }
-
-        @JsonCreator
-        public static StateEnum fromValue(String v) {
-            for (StateEnum b : StateEnum.values()) {
-                if (String.valueOf(b.value).equals(v)) {
-                    return b;
-                }
-            }
-return null;
-        }
-    }
-    private StateEnum state = StateEnum.CREATED;
+    private String state = "CREATED";
     private Boolean enableSchemaValidation = null;
+    private Boolean isDefaultVersion = null;
     private Boolean isRevision = null;
     private String revisionedApiProductId = null;
     private Integer revisionId = null;
@@ -184,6 +152,7 @@ return null;
     private List<String> policies = new ArrayList<String>();
     private String apiThrottlingPolicy = null;
     private String authorizationHeader = null;
+    private String apiKeyHeader = null;
     private List<String> securityScheme = new ArrayList<String>();
 
     @XmlType(name="SubscriptionAvailabilityEnum")
@@ -228,11 +197,14 @@ return null;
     private APICorsConfigurationDTO corsConfiguration = null;
     private String createdTime = null;
     private String lastUpdatedTime = null;
+    private String lastUpdatedTimestamp = null;
     private String gatewayVendor = null;
     private List<ProductAPIDTO> apis = new ArrayList<ProductAPIDTO>();
     private List<APIScopeDTO> scopes = new ArrayList<APIScopeDTO>();
     private List<String> categories = new ArrayList<String>();
     private String workflowStatus = null;
+    private List<String> audiences = new ArrayList<String>();
+    private Boolean egress = false;
 
   /**
    * UUID of the api product 
@@ -272,6 +244,24 @@ return null;
   }
 
   /**
+   * Human-friendly name shown in UI. Length limited to DB column size.
+   **/
+  public APIProductDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Pizza Shack API Product", value = "Human-friendly name shown in UI. Length limited to DB column size.")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
+  }
+
+  /**
    **/
   public APIProductDTO context(String context) {
     this.context = context;
@@ -286,6 +276,23 @@ return null;
   }
   public void setContext(String context) {
     this.context = context;
+  }
+
+  /**
+   **/
+  public APIProductDTO version(String version) {
+    this.version = version;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1.0.0", value = "")
+  @JsonProperty("version")
+ @Pattern(regexp="^[^~!@#;:%^*()+={}|\\\\<>\"',&/$\\[\\]\\s+/]+$") @Size(min=1,max=30)  public String getVersion() {
+    return version;
+  }
+  public void setVersion(String version) {
+    this.version = version;
   }
 
   /**
@@ -342,20 +349,20 @@ return null;
   }
 
   /**
-   * State of the API product. Only published api products are visible on the Developer Portal 
+   * State of the API product. Only published API products are visible on the Developer Portal 
    **/
-  public APIProductDTO state(StateEnum state) {
+  public APIProductDTO state(String state) {
     this.state = state;
     return this;
   }
 
   
-  @ApiModelProperty(value = "State of the API product. Only published api products are visible on the Developer Portal ")
+  @ApiModelProperty(example = "CREATED", value = "State of the API product. Only published API products are visible on the Developer Portal ")
   @JsonProperty("state")
-  public StateEnum getState() {
+  public String getState() {
     return state;
   }
-  public void setState(StateEnum state) {
+  public void setState(String state) {
     this.state = state;
   }
 
@@ -374,6 +381,23 @@ return null;
   }
   public void setEnableSchemaValidation(Boolean enableSchemaValidation) {
     this.enableSchemaValidation = enableSchemaValidation;
+  }
+
+  /**
+   **/
+  public APIProductDTO isDefaultVersion(Boolean isDefaultVersion) {
+    this.isDefaultVersion = isDefaultVersion;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "")
+  @JsonProperty("isDefaultVersion")
+  public Boolean isIsDefaultVersion() {
+    return isDefaultVersion;
+  }
+  public void setIsDefaultVersion(Boolean isDefaultVersion) {
+    this.isDefaultVersion = isDefaultVersion;
   }
 
   /**
@@ -658,6 +682,24 @@ return null;
   }
 
   /**
+   * Name of the API key header used for invoking the API. If it is not set, default value &#x60;apiKey&#x60; will be used. 
+   **/
+  public APIProductDTO apiKeyHeader(String apiKeyHeader) {
+    this.apiKeyHeader = apiKeyHeader;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "ApiKey", value = "Name of the API key header used for invoking the API. If it is not set, default value `apiKey` will be used. ")
+  @JsonProperty("apiKeyHeader")
+  public String getApiKeyHeader() {
+    return apiKeyHeader;
+  }
+  public void setApiKeyHeader(String apiKeyHeader) {
+    this.apiKeyHeader = apiKeyHeader;
+  }
+
+  /**
    * Types of API security, the current API secured with. It can be either OAuth2 or mutual SSL or both. If it is not set OAuth2 will be set as the security for the current API. 
    **/
   public APIProductDTO securityScheme(List<String> securityScheme) {
@@ -837,6 +879,23 @@ return null;
 
   /**
    **/
+  public APIProductDTO lastUpdatedTimestamp(String lastUpdatedTimestamp) {
+    this.lastUpdatedTimestamp = lastUpdatedTimestamp;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+  @JsonProperty("lastUpdatedTimestamp")
+  public String getLastUpdatedTimestamp() {
+    return lastUpdatedTimestamp;
+  }
+  public void setLastUpdatedTimestamp(String lastUpdatedTimestamp) {
+    this.lastUpdatedTimestamp = lastUpdatedTimestamp;
+  }
+
+  /**
+   **/
   public APIProductDTO gatewayVendor(String gatewayVendor) {
     this.gatewayVendor = gatewayVendor;
     return this;
@@ -924,6 +983,42 @@ return null;
     this.workflowStatus = workflowStatus;
   }
 
+  /**
+   * The audiences of the API for jwt validation. Accepted values are any String values
+   **/
+  public APIProductDTO audiences(List<String> audiences) {
+    this.audiences = audiences;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "The audiences of the API for jwt validation. Accepted values are any String values")
+  @JsonProperty("audiences")
+  public List<String> getAudiences() {
+    return audiences;
+  }
+  public void setAudiences(List<String> audiences) {
+    this.audiences = audiences;
+  }
+
+  /**
+   * Whether the APIProduct is EGRESS or not
+   **/
+  public APIProductDTO egress(Boolean egress) {
+    this.egress = egress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Whether the APIProduct is EGRESS or not")
+  @JsonProperty("egress")
+  public Boolean isEgress() {
+    return egress;
+  }
+  public void setEgress(Boolean egress) {
+    this.egress = egress;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -936,12 +1031,15 @@ return null;
     APIProductDTO apIProduct = (APIProductDTO) o;
     return Objects.equals(id, apIProduct.id) &&
         Objects.equals(name, apIProduct.name) &&
+        Objects.equals(displayName, apIProduct.displayName) &&
         Objects.equals(context, apIProduct.context) &&
+        Objects.equals(version, apIProduct.version) &&
         Objects.equals(description, apIProduct.description) &&
         Objects.equals(provider, apIProduct.provider) &&
         Objects.equals(hasThumbnail, apIProduct.hasThumbnail) &&
         Objects.equals(state, apIProduct.state) &&
         Objects.equals(enableSchemaValidation, apIProduct.enableSchemaValidation) &&
+        Objects.equals(isDefaultVersion, apIProduct.isDefaultVersion) &&
         Objects.equals(isRevision, apIProduct.isRevision) &&
         Objects.equals(revisionedApiProductId, apIProduct.revisionedApiProductId) &&
         Objects.equals(revisionId, apIProduct.revisionId) &&
@@ -958,6 +1056,7 @@ return null;
         Objects.equals(policies, apIProduct.policies) &&
         Objects.equals(apiThrottlingPolicy, apIProduct.apiThrottlingPolicy) &&
         Objects.equals(authorizationHeader, apIProduct.authorizationHeader) &&
+        Objects.equals(apiKeyHeader, apIProduct.apiKeyHeader) &&
         Objects.equals(securityScheme, apIProduct.securityScheme) &&
         Objects.equals(subscriptionAvailability, apIProduct.subscriptionAvailability) &&
         Objects.equals(subscriptionAvailableTenants, apIProduct.subscriptionAvailableTenants) &&
@@ -968,16 +1067,19 @@ return null;
         Objects.equals(corsConfiguration, apIProduct.corsConfiguration) &&
         Objects.equals(createdTime, apIProduct.createdTime) &&
         Objects.equals(lastUpdatedTime, apIProduct.lastUpdatedTime) &&
+        Objects.equals(lastUpdatedTimestamp, apIProduct.lastUpdatedTimestamp) &&
         Objects.equals(gatewayVendor, apIProduct.gatewayVendor) &&
         Objects.equals(apis, apIProduct.apis) &&
         Objects.equals(scopes, apIProduct.scopes) &&
         Objects.equals(categories, apIProduct.categories) &&
-        Objects.equals(workflowStatus, apIProduct.workflowStatus);
+        Objects.equals(workflowStatus, apIProduct.workflowStatus) &&
+        Objects.equals(audiences, apIProduct.audiences) &&
+        Objects.equals(egress, apIProduct.egress);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, context, description, provider, hasThumbnail, state, enableSchemaValidation, isRevision, revisionedApiProductId, revisionId, responseCachingEnabled, cacheTimeout, visibility, visibleRoles, visibleTenants, accessControl, accessControlRoles, apiType, transport, tags, policies, apiThrottlingPolicy, authorizationHeader, securityScheme, subscriptionAvailability, subscriptionAvailableTenants, additionalProperties, additionalPropertiesMap, monetization, businessInformation, corsConfiguration, createdTime, lastUpdatedTime, gatewayVendor, apis, scopes, categories, workflowStatus);
+    return Objects.hash(id, name, displayName, context, version, description, provider, hasThumbnail, state, enableSchemaValidation, isDefaultVersion, isRevision, revisionedApiProductId, revisionId, responseCachingEnabled, cacheTimeout, visibility, visibleRoles, visibleTenants, accessControl, accessControlRoles, apiType, transport, tags, policies, apiThrottlingPolicy, authorizationHeader, apiKeyHeader, securityScheme, subscriptionAvailability, subscriptionAvailableTenants, additionalProperties, additionalPropertiesMap, monetization, businessInformation, corsConfiguration, createdTime, lastUpdatedTime, lastUpdatedTimestamp, gatewayVendor, apis, scopes, categories, workflowStatus, audiences, egress);
   }
 
   @Override
@@ -987,12 +1089,15 @@ return null;
     
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
+    sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
     sb.append("    hasThumbnail: ").append(toIndentedString(hasThumbnail)).append("\n");
     sb.append("    state: ").append(toIndentedString(state)).append("\n");
     sb.append("    enableSchemaValidation: ").append(toIndentedString(enableSchemaValidation)).append("\n");
+    sb.append("    isDefaultVersion: ").append(toIndentedString(isDefaultVersion)).append("\n");
     sb.append("    isRevision: ").append(toIndentedString(isRevision)).append("\n");
     sb.append("    revisionedApiProductId: ").append(toIndentedString(revisionedApiProductId)).append("\n");
     sb.append("    revisionId: ").append(toIndentedString(revisionId)).append("\n");
@@ -1009,6 +1114,7 @@ return null;
     sb.append("    policies: ").append(toIndentedString(policies)).append("\n");
     sb.append("    apiThrottlingPolicy: ").append(toIndentedString(apiThrottlingPolicy)).append("\n");
     sb.append("    authorizationHeader: ").append(toIndentedString(authorizationHeader)).append("\n");
+    sb.append("    apiKeyHeader: ").append(toIndentedString(apiKeyHeader)).append("\n");
     sb.append("    securityScheme: ").append(toIndentedString(securityScheme)).append("\n");
     sb.append("    subscriptionAvailability: ").append(toIndentedString(subscriptionAvailability)).append("\n");
     sb.append("    subscriptionAvailableTenants: ").append(toIndentedString(subscriptionAvailableTenants)).append("\n");
@@ -1019,11 +1125,14 @@ return null;
     sb.append("    corsConfiguration: ").append(toIndentedString(corsConfiguration)).append("\n");
     sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
     sb.append("    lastUpdatedTime: ").append(toIndentedString(lastUpdatedTime)).append("\n");
+    sb.append("    lastUpdatedTimestamp: ").append(toIndentedString(lastUpdatedTimestamp)).append("\n");
     sb.append("    gatewayVendor: ").append(toIndentedString(gatewayVendor)).append("\n");
     sb.append("    apis: ").append(toIndentedString(apis)).append("\n");
     sb.append("    scopes: ").append(toIndentedString(scopes)).append("\n");
     sb.append("    categories: ").append(toIndentedString(categories)).append("\n");
     sb.append("    workflowStatus: ").append(toIndentedString(workflowStatus)).append("\n");
+    sb.append("    audiences: ").append(toIndentedString(audiences)).append("\n");
+    sb.append("    egress: ").append(toIndentedString(egress)).append("\n");
     sb.append("}");
     return sb.toString();
   }

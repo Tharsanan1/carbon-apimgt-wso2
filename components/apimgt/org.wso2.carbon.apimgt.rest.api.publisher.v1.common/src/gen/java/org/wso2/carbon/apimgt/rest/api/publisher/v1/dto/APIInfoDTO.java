@@ -28,6 +28,7 @@ public class APIInfoDTO   {
   
     private String id = null;
     private String name = null;
+    private String displayName = null;
     private String description = null;
     private String context = null;
     private List<APIInfoAdditionalPropertiesDTO> additionalProperties = new ArrayList<APIInfoAdditionalPropertiesDTO>();
@@ -35,6 +36,7 @@ public class APIInfoDTO   {
     private String version = null;
     private String provider = null;
     private String type = null;
+    private String subtype = "DEFAULT";
 
     @XmlType(name="AudienceEnum")
     @XmlEnum(String.class)
@@ -67,14 +69,24 @@ return null;
         }
     }
     private AudienceEnum audience = null;
+    private List<String> audiences = new ArrayList<String>();
     private String lifeCycleStatus = null;
     private String workflowStatus = null;
     private Boolean hasThumbnail = null;
     private List<String> securityScheme = new ArrayList<String>();
     private String createdTime = null;
     private String updatedTime = null;
+    private String updatedBy = null;
     private String gatewayVendor = null;
+    private String gatewayType = "wso2/synapse";
     private Boolean advertiseOnly = null;
+    private Boolean monetizedInfo = null;
+    private String businessOwner = null;
+    private String businessOwnerEmail = null;
+    private String technicalOwner = null;
+    private String technicalOwnerEmail = null;
+    private Boolean egress = false;
+    private Boolean initiatedFromGateway = false;
 
   /**
    **/
@@ -108,6 +120,24 @@ return null;
   }
   public void setName(String name) {
     this.name = name;
+  }
+
+  /**
+   * Display name of the API. This is the name that will be displayed in the Publisher and DevPortal. If not provided, the name will be used as the display name. 
+   **/
+  public APIInfoDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Calculator API", value = "Display name of the API. This is the name that will be displayed in the Publisher and DevPortal. If not provided, the name will be used as the display name. ")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
   }
 
   /**
@@ -234,6 +264,24 @@ return null;
   }
 
   /**
+   * Subtype of the API.
+   **/
+  public APIInfoDTO subtype(String subtype) {
+    this.subtype = subtype;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "AIAPI", value = "Subtype of the API.")
+  @JsonProperty("subtype")
+  public String getSubtype() {
+    return subtype;
+  }
+  public void setSubtype(String subtype) {
+    this.subtype = subtype;
+  }
+
+  /**
    * The audience of the API. Accepted values are PUBLIC, SINGLE
    **/
   public APIInfoDTO audience(AudienceEnum audience) {
@@ -249,6 +297,24 @@ return null;
   }
   public void setAudience(AudienceEnum audience) {
     this.audience = audience;
+  }
+
+  /**
+   * The audiences of the API for jwt validation. Accepted values are any String values
+   **/
+  public APIInfoDTO audiences(List<String> audiences) {
+    this.audiences = audiences;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "The audiences of the API for jwt validation. Accepted values are any String values")
+  @JsonProperty("audiences")
+  public List<String> getAudiences() {
+    return audiences;
+  }
+  public void setAudiences(List<String> audiences) {
+    this.audiences = audiences;
   }
 
   /**
@@ -355,6 +421,23 @@ return null;
 
   /**
    **/
+  public APIInfoDTO updatedBy(String updatedBy) {
+    this.updatedBy = updatedBy;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "wso2.system.user", value = "")
+  @JsonProperty("updatedBy")
+  public String getUpdatedBy() {
+    return updatedBy;
+  }
+  public void setUpdatedBy(String updatedBy) {
+    this.updatedBy = updatedBy;
+  }
+
+  /**
+   **/
   public APIInfoDTO gatewayVendor(String gatewayVendor) {
     this.gatewayVendor = gatewayVendor;
     return this;
@@ -368,6 +451,24 @@ return null;
   }
   public void setGatewayVendor(String gatewayVendor) {
     this.gatewayVendor = gatewayVendor;
+  }
+
+  /**
+   * Accepts one of the following. wso2/synapse, wso2/apk.
+   **/
+  public APIInfoDTO gatewayType(String gatewayType) {
+    this.gatewayType = gatewayType;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "wso2/synapse", value = "Accepts one of the following. wso2/synapse, wso2/apk.")
+  @JsonProperty("gatewayType")
+  public String getGatewayType() {
+    return gatewayType;
+  }
+  public void setGatewayType(String gatewayType) {
+    this.gatewayType = gatewayType;
   }
 
   /**
@@ -387,6 +488,127 @@ return null;
     this.advertiseOnly = advertiseOnly;
   }
 
+  /**
+   **/
+  public APIInfoDTO monetizedInfo(Boolean monetizedInfo) {
+    this.monetizedInfo = monetizedInfo;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "")
+  @JsonProperty("monetizedInfo")
+  public Boolean isMonetizedInfo() {
+    return monetizedInfo;
+  }
+  public void setMonetizedInfo(Boolean monetizedInfo) {
+    this.monetizedInfo = monetizedInfo;
+  }
+
+  /**
+   **/
+  public APIInfoDTO businessOwner(String businessOwner) {
+    this.businessOwner = businessOwner;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Business Owner", value = "")
+  @JsonProperty("businessOwner")
+  public String getBusinessOwner() {
+    return businessOwner;
+  }
+  public void setBusinessOwner(String businessOwner) {
+    this.businessOwner = businessOwner;
+  }
+
+  /**
+   **/
+  public APIInfoDTO businessOwnerEmail(String businessOwnerEmail) {
+    this.businessOwnerEmail = businessOwnerEmail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "businessowner@abc.com", value = "")
+  @JsonProperty("businessOwnerEmail")
+  public String getBusinessOwnerEmail() {
+    return businessOwnerEmail;
+  }
+  public void setBusinessOwnerEmail(String businessOwnerEmail) {
+    this.businessOwnerEmail = businessOwnerEmail;
+  }
+
+  /**
+   **/
+  public APIInfoDTO technicalOwner(String technicalOwner) {
+    this.technicalOwner = technicalOwner;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Technical Owner", value = "")
+  @JsonProperty("TechnicalOwner")
+  public String getTechnicalOwner() {
+    return technicalOwner;
+  }
+  public void setTechnicalOwner(String technicalOwner) {
+    this.technicalOwner = technicalOwner;
+  }
+
+  /**
+   **/
+  public APIInfoDTO technicalOwnerEmail(String technicalOwnerEmail) {
+    this.technicalOwnerEmail = technicalOwnerEmail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "technicalowner@abc.com", value = "")
+  @JsonProperty("TechnicalOwnerEmail")
+  public String getTechnicalOwnerEmail() {
+    return technicalOwnerEmail;
+  }
+  public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+    this.technicalOwnerEmail = technicalOwnerEmail;
+  }
+
+  /**
+   * Whether the API is EGRESS or not
+   **/
+  public APIInfoDTO egress(Boolean egress) {
+    this.egress = egress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Whether the API is EGRESS or not")
+  @JsonProperty("egress")
+  public Boolean isEgress() {
+    return egress;
+  }
+  public void setEgress(Boolean egress) {
+    this.egress = egress;
+  }
+
+  /**
+   * Whether the API is initiated from the gateway or not. This is used to identify whether the API is created from the Publisher or from the Gateway. 
+   **/
+  public APIInfoDTO initiatedFromGateway(Boolean initiatedFromGateway) {
+    this.initiatedFromGateway = initiatedFromGateway;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Whether the API is initiated from the gateway or not. This is used to identify whether the API is created from the Publisher or from the Gateway. ")
+  @JsonProperty("initiatedFromGateway")
+  public Boolean isInitiatedFromGateway() {
+    return initiatedFromGateway;
+  }
+  public void setInitiatedFromGateway(Boolean initiatedFromGateway) {
+    this.initiatedFromGateway = initiatedFromGateway;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -399,6 +621,7 @@ return null;
     APIInfoDTO apIInfo = (APIInfoDTO) o;
     return Objects.equals(id, apIInfo.id) &&
         Objects.equals(name, apIInfo.name) &&
+        Objects.equals(displayName, apIInfo.displayName) &&
         Objects.equals(description, apIInfo.description) &&
         Objects.equals(context, apIInfo.context) &&
         Objects.equals(additionalProperties, apIInfo.additionalProperties) &&
@@ -406,20 +629,31 @@ return null;
         Objects.equals(version, apIInfo.version) &&
         Objects.equals(provider, apIInfo.provider) &&
         Objects.equals(type, apIInfo.type) &&
+        Objects.equals(subtype, apIInfo.subtype) &&
         Objects.equals(audience, apIInfo.audience) &&
+        Objects.equals(audiences, apIInfo.audiences) &&
         Objects.equals(lifeCycleStatus, apIInfo.lifeCycleStatus) &&
         Objects.equals(workflowStatus, apIInfo.workflowStatus) &&
         Objects.equals(hasThumbnail, apIInfo.hasThumbnail) &&
         Objects.equals(securityScheme, apIInfo.securityScheme) &&
         Objects.equals(createdTime, apIInfo.createdTime) &&
         Objects.equals(updatedTime, apIInfo.updatedTime) &&
+        Objects.equals(updatedBy, apIInfo.updatedBy) &&
         Objects.equals(gatewayVendor, apIInfo.gatewayVendor) &&
-        Objects.equals(advertiseOnly, apIInfo.advertiseOnly);
+        Objects.equals(gatewayType, apIInfo.gatewayType) &&
+        Objects.equals(advertiseOnly, apIInfo.advertiseOnly) &&
+        Objects.equals(monetizedInfo, apIInfo.monetizedInfo) &&
+        Objects.equals(businessOwner, apIInfo.businessOwner) &&
+        Objects.equals(businessOwnerEmail, apIInfo.businessOwnerEmail) &&
+        Objects.equals(technicalOwner, apIInfo.technicalOwner) &&
+        Objects.equals(technicalOwnerEmail, apIInfo.technicalOwnerEmail) &&
+        Objects.equals(egress, apIInfo.egress) &&
+        Objects.equals(initiatedFromGateway, apIInfo.initiatedFromGateway);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, description, context, additionalProperties, additionalPropertiesMap, version, provider, type, audience, lifeCycleStatus, workflowStatus, hasThumbnail, securityScheme, createdTime, updatedTime, gatewayVendor, advertiseOnly);
+    return Objects.hash(id, name, displayName, description, context, additionalProperties, additionalPropertiesMap, version, provider, type, subtype, audience, audiences, lifeCycleStatus, workflowStatus, hasThumbnail, securityScheme, createdTime, updatedTime, updatedBy, gatewayVendor, gatewayType, advertiseOnly, monetizedInfo, businessOwner, businessOwnerEmail, technicalOwner, technicalOwnerEmail, egress, initiatedFromGateway);
   }
 
   @Override
@@ -429,6 +663,7 @@ return null;
     
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("    additionalProperties: ").append(toIndentedString(additionalProperties)).append("\n");
@@ -436,15 +671,26 @@ return null;
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
     sb.append("    type: ").append(toIndentedString(type)).append("\n");
+    sb.append("    subtype: ").append(toIndentedString(subtype)).append("\n");
     sb.append("    audience: ").append(toIndentedString(audience)).append("\n");
+    sb.append("    audiences: ").append(toIndentedString(audiences)).append("\n");
     sb.append("    lifeCycleStatus: ").append(toIndentedString(lifeCycleStatus)).append("\n");
     sb.append("    workflowStatus: ").append(toIndentedString(workflowStatus)).append("\n");
     sb.append("    hasThumbnail: ").append(toIndentedString(hasThumbnail)).append("\n");
     sb.append("    securityScheme: ").append(toIndentedString(securityScheme)).append("\n");
     sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
     sb.append("    updatedTime: ").append(toIndentedString(updatedTime)).append("\n");
+    sb.append("    updatedBy: ").append(toIndentedString(updatedBy)).append("\n");
     sb.append("    gatewayVendor: ").append(toIndentedString(gatewayVendor)).append("\n");
+    sb.append("    gatewayType: ").append(toIndentedString(gatewayType)).append("\n");
     sb.append("    advertiseOnly: ").append(toIndentedString(advertiseOnly)).append("\n");
+    sb.append("    monetizedInfo: ").append(toIndentedString(monetizedInfo)).append("\n");
+    sb.append("    businessOwner: ").append(toIndentedString(businessOwner)).append("\n");
+    sb.append("    businessOwnerEmail: ").append(toIndentedString(businessOwnerEmail)).append("\n");
+    sb.append("    technicalOwner: ").append(toIndentedString(technicalOwner)).append("\n");
+    sb.append("    technicalOwnerEmail: ").append(toIndentedString(technicalOwnerEmail)).append("\n");
+    sb.append("    egress: ").append(toIndentedString(egress)).append("\n");
+    sb.append("    initiatedFromGateway: ").append(toIndentedString(initiatedFromGateway)).append("\n");
     sb.append("}");
     return sb.toString();
   }

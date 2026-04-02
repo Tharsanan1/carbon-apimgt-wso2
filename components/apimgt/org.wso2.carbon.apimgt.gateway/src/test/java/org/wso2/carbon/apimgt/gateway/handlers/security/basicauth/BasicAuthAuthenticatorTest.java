@@ -17,6 +17,7 @@
 package org.wso2.carbon.apimgt.gateway.handlers.security.basicauth;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import org.apache.http.HttpHeaders;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.junit.Assert;
@@ -25,6 +26,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
@@ -36,12 +38,14 @@ import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.dto.BasicAuthValidationInfoDTO;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 import java.util.TreeMap;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({OpenAPIUtils.class, BasicAuthAuthenticator.class, BasicAuthCredentialValidator.class,
-        ServiceReferenceHolder.class})
+        ServiceReferenceHolder.class, BasicAuthClientPool.class, APIUtil.class})
+@PowerMockIgnore("javax.management.*")
 public class BasicAuthAuthenticatorTest {
     private MessageContext messageContext;
     private org.apache.axis2.context.MessageContext axis2MsgCntxt;
@@ -53,16 +57,42 @@ public class BasicAuthAuthenticatorTest {
     @Before
     public void setup() throws Exception {
         PowerMockito.mockStatic(OpenAPIUtils.class);
+        PowerMockito.mockStatic(APIUtil.class);
         PowerMockito.when(OpenAPIUtils.getResourceAuthenticationScheme(Mockito.any(), Mockito.any()))
                 .thenReturn(APIConstants.AUTH_APPLICATION_OR_USER_LEVEL_TOKEN);
 
-        messageContext = Mockito.mock(Axis2MessageContext.class);
         axis2MsgCntxt = Mockito.mock(org.apache.axis2.context.MessageContext.class);
-        Mockito.when(axis2MsgCntxt.getProperty(APIMgtGatewayConstants.REQUEST_RECEIVED_TIME)).thenReturn("1506576365");
-        Mockito.when(((Axis2MessageContext) messageContext).getAxis2MessageContext()).thenReturn(axis2MsgCntxt);
-        Mockito.when((messageContext.getProperty(APIMgtGatewayConstants.OPEN_API_OBJECT)))
-                .thenReturn(Mockito.mock(OpenAPI.class));
+        messageContext = new Axis2MessageContext(axis2MsgCntxt, null,null);
+        messageContext.setProperty(APIMgtGatewayConstants.REQUEST_RECEIVED_TIME,"1506576365");
+        messageContext.setProperty(APIMgtGatewayConstants.OPEN_API_OBJECT, Mockito.mock(OpenAPI.class));
+        messageContext.setProperty(BasicAuthAuthenticator.PUBLISHER_TENANT_DOMAIN, "carbon.super");
 
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        ServiceReferenceHolder serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
+        apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
+        Mockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
+        Mockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
+        Mockito.when(apiManagerConfiguration.getFirstProperty(APIConstants.REMOVE_OAUTH_HEADERS_FROM_MESSAGE))
+                .thenReturn("true");
+
+        // Mock configuration properties for BasicAuthClientPool
+        Mockito.when(apiManagerConfiguration.getFirstProperty(
+                APIMgtGatewayConstants.BASIC_AUTH_VALIDATOR_CONNECTION_POOL_MAX_IDLE)).thenReturn("100");
+        Mockito.when(apiManagerConfiguration.getFirstProperty(
+                APIMgtGatewayConstants.BASIC_AUTH_VALIDATOR_CONNECTION_POOL_INIT_IDLE_CAPACITY)).thenReturn("50");
+        Mockito.when(apiManagerConfiguration.getFirstProperty(
+                APIMgtGatewayConstants.BASIC_AUTH_VALIDATOR_CONNECTION_POOL_MAX_ACTIVE)).thenReturn("100");
+        Mockito.when(apiManagerConfiguration.getFirstProperty(
+                APIMgtGatewayConstants.BASIC_AUTH_VALIDATOR_CONNECTION_POOL_MAX_WAIT_MILLIS)).thenReturn("30000");
+
+        // Mock BasicAuthClientPool
+        PowerMockito.mockStatic(BasicAuthClientPool.class);
+        BasicAuthClientPool mockClientPool = Mockito.mock(BasicAuthClientPool.class);
+        PowerMockito.when(BasicAuthClientPool.getInstance()).thenReturn(mockClientPool);
+
+        // Mock BasicAuthClient
+        BasicAuthClient mockBasicAuthClient = Mockito.mock(BasicAuthClient.class);
+        Mockito.when(mockClientPool.get()).thenReturn(mockBasicAuthClient);
         basicAuthAuthenticator = new BasicAuthAuthenticator(CUSTOM_AUTH_HEADER, true, UNLIMITED_THROTTLE_POLICY);
         BasicAuthCredentialValidator basicAuthCredentialValidator = Mockito.mock(BasicAuthCredentialValidator.class);
         BasicAuthValidationInfoDTO basicAuthValidationInfoDTO = new BasicAuthValidationInfoDTO();
@@ -100,16 +130,6 @@ public class BasicAuthAuthenticatorTest {
             return false;
         });
         PowerMockito.whenNew(BasicAuthCredentialValidator.class).withNoArguments().thenReturn(basicAuthCredentialValidator);
-        Mockito.when(messageContext.getProperty(BasicAuthAuthenticator.PUBLISHER_TENANT_DOMAIN)).
-                thenReturn("carbon.super");
-
-        PowerMockito.mockStatic(ServiceReferenceHolder.class);
-        ServiceReferenceHolder serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
-        apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
-        Mockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
-        Mockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
-        Mockito.when(apiManagerConfiguration.getFirstProperty(APIConstants.REMOVE_OAUTH_HEADERS_FROM_MESSAGE))
-                .thenReturn("true");
     }
 
     @Test
@@ -132,18 +152,7 @@ public class BasicAuthAuthenticatorTest {
         Assert.assertFalse(authenticationResponse.isAuthenticated());
         Assert.assertEquals(authenticationResponse.getErrorCode(), APISecurityConstants.API_AUTH_MISSING_CREDENTIALS);
     }
-
-    @Test
-    public void testAuthenticateWithInvalidBasicHeader_1() {
-        TreeMap transportHeaders = new TreeMap();
-        transportHeaders.put(CUSTOM_AUTH_HEADER, "Basic xxxxxxx"); //Throw Decode64 exception
-        Mockito.when(axis2MsgCntxt.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS)).thenReturn(transportHeaders);
-
-        AuthenticationResponse authenticationResponse = basicAuthAuthenticator.authenticate(messageContext);
-        Assert.assertFalse(authenticationResponse.isAuthenticated());
-        Assert.assertEquals(authenticationResponse.getErrorCode(), APISecurityConstants.API_AUTH_INVALID_CREDENTIALS);
-    }
-
+    
     @Test
     public void testAuthenticateWithInvalidBasicHeader_2() {
         TreeMap transportHeaders = new TreeMap();
@@ -177,6 +186,7 @@ public class BasicAuthAuthenticatorTest {
         Assert.assertTrue(basicAuthAuthenticator.authenticate(messageContext).isAuthenticated());
         transportHeaders = (TreeMap) axis2MsgCntxt.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
         Assert.assertNull(transportHeaders.get(CUSTOM_AUTH_HEADER));
+        Assert.assertEquals(messageContext.getProperty(APIMgtGatewayConstants.END_USER_NAME),"test_username@carbon.super");
     }
 
     @Test
@@ -208,5 +218,17 @@ public class BasicAuthAuthenticatorTest {
                 (TreeMap) axis2MsgCntxt.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
         Assert.assertNotNull(transportHeaders.get(CUSTOM_AUTH_HEADER));
         Assert.assertEquals(transportHeaders.get(CUSTOM_AUTH_HEADER), "Basic dGVzdF91c2VybmFtZTp0ZXN0X3Bhc3N3b3Jk");
+    }
+
+    /**
+     * Test case for getSecurityHeader method when security header is null
+     * The null should be handled and HttpHeaders.AUTHORIZATION should be returned
+     */
+    @Test public void testSetSecurityHeaderWithNullHeader() throws Exception {
+        PowerMockito.when(APIUtil.getOAuthConfigurationFromAPIMConfig(Mockito.anyString())).thenReturn(null);
+        BasicAuthAuthenticator basicAuthAuthenticatorWithNullHeader = new BasicAuthAuthenticator(null, true,
+                UNLIMITED_THROTTLE_POLICY);
+        String actualHeader = basicAuthAuthenticatorWithNullHeader.getSecurityHeader();
+        Assert.assertEquals(HttpHeaders.AUTHORIZATION, actualHeader);
     }
 }

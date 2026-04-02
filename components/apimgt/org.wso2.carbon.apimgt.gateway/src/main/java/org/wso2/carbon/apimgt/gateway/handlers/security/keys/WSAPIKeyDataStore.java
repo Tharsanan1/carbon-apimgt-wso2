@@ -18,6 +18,7 @@ package org.wso2.carbon.apimgt.gateway.handlers.security.keys;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import org.wso2.carbon.apimgt.gateway.MethodStats;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
@@ -107,11 +108,11 @@ public class WSAPIKeyDataStore implements APIKeyDataStore {
 
     @Override
     public APIKeyValidationInfoDTO validateSubscription(String context, String version, int appId,
-                                                        String tenantDomain)
+                                                        String tenantDomain, String keyType)
             throws APISecurityException {
         APIKeyValidatorClient client = new APIKeyValidatorClient();
         try {
-            return client.validateSubscription(context, version, appId, tenantDomain);
+            return client.validateSubscription(context, version, appId, tenantDomain, keyType);
         } catch (APISecurityException ex) {
             throw new APISecurityException(ex.getErrorCode(),
                     "Resource forbidden", ex);
@@ -144,5 +145,12 @@ public class WSAPIKeyDataStore implements APIKeyDataStore {
     public Map<String, Scope> retrieveScopes(String tenantDomain) {
         APIKeyValidatorClient client = new APIKeyValidatorClient();
         return client.retrieveScopes(tenantDomain);
+    }
+
+    @Override
+    public APIKeyValidationInfoDTO validateAPIKeySubscription(String apiContext, String apiVersion, String tenantDomain,
+                                                              APIKeyInfo apiKeyInfo) throws APISecurityException {
+        APIKeyValidatorClient client = new APIKeyValidatorClient();
+        return client.validateAPIKeySubscription(apiContext, apiVersion, tenantDomain, apiKeyInfo);
     }
 }

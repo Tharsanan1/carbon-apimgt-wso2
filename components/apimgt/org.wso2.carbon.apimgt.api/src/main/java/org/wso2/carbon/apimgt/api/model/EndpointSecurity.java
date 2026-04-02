@@ -17,9 +17,12 @@
  */
 package org.wso2.carbon.apimgt.api.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.HashMap;
 import java.util.Map;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EndpointSecurity {
 
     private String uniqueIdentifier = null;
@@ -40,9 +43,32 @@ public class EndpointSecurity {
 
     private String clientSecret = null;
 
+    private String apiKeyIdentifier = null;
+
+    private String apiKeyValue = null;
+
+    private String apiKeyIdentifierType = null;
+
+    private String accessKey = null;
+    private String secretKey = null;
+    private String region = null;
+    private String service = null;
+
     private String customParameters = null;
 
     private Map additionalProperties = new HashMap();
+
+    private int connectionTimeoutDuration = -1;
+
+    private int connectionRequestTimeoutDuration = -1;
+
+    private int socketTimeoutDuration = -1;
+
+    private ProxyConfigs proxyConfigs;
+
+    private TokenEndpointConnectionConfigType connectionTimeoutConfigType;
+
+    private TokenEndpointConnectionConfigType proxyConfigType;
 
     public EndpointSecurity(EndpointSecurity endpointSecurity) {
 
@@ -57,11 +83,23 @@ public class EndpointSecurity {
         this.clientSecret = endpointSecurity.clientSecret;
         this.customParameters = endpointSecurity.customParameters;
         this.additionalProperties = endpointSecurity.additionalProperties;
-
+        this.connectionTimeoutDuration = endpointSecurity.connectionTimeoutDuration;
+        this.connectionRequestTimeoutDuration = endpointSecurity.connectionRequestTimeoutDuration;
+        this.socketTimeoutDuration = endpointSecurity.socketTimeoutDuration;
+        this.proxyConfigs = endpointSecurity.proxyConfigs;
+        this.connectionTimeoutConfigType = endpointSecurity.connectionTimeoutConfigType;
+        this.proxyConfigType = endpointSecurity.proxyConfigType;
     }
 
     public EndpointSecurity() {
 
+    }
+    public ProxyConfigs getProxyConfigs() {
+        return proxyConfigs;
+    }
+
+    public void setProxyConfigs(ProxyConfigs proxyConfigs) {
+        this.proxyConfigs = proxyConfigs;
     }
 
     public String getUniqueIdentifier() {
@@ -173,14 +211,198 @@ public class EndpointSecurity {
 
         this.additionalProperties = additionalProperties;
     }
+    public String getApiKeyIdentifier() {
+
+        return apiKeyIdentifier;
+    }
+
+    public void setApiKeyIdentifier(String apiKeyIdentifier) {
+
+        this.apiKeyIdentifier = apiKeyIdentifier;
+    }
+
+    public String getApiKeyValue() {
+
+        return apiKeyValue;
+    }
+
+    public void setApiKeyValue(String apiKeyValue) {
+
+        this.apiKeyValue = apiKeyValue;
+    }
+
+    public String getApiKeyIdentifierType() {
+
+        return apiKeyIdentifierType;
+    }
+
+    public void setApiKeyIdentifierType(String apiKeyIdentifierType) {
+
+        this.apiKeyIdentifierType = apiKeyIdentifierType;
+    }
+
+    public int getConnectionTimeoutDuration() {
+        return connectionTimeoutDuration;
+    }
+
+    public void setConnectionTimeoutDuration(int connectionTimeoutDuration) {
+        this.connectionTimeoutDuration = connectionTimeoutDuration;
+    }
+
+    public int getConnectionRequestTimeoutDuration() {
+        return connectionRequestTimeoutDuration;
+    }
+
+    public void setConnectionRequestTimeoutDuration(int connectionRequestTimeoutDuration) {
+        this.connectionRequestTimeoutDuration = connectionRequestTimeoutDuration;
+    }
+
+    public int getSocketTimeoutDuration() {
+        return socketTimeoutDuration;
+    }
+
+    public void setSocketTimeoutDuration(int socketTimeoutDuration) {
+        this.socketTimeoutDuration = socketTimeoutDuration;
+    }
+
+    public TokenEndpointConnectionConfigType getConnectionTimeoutConfigType() {
+        return connectionTimeoutConfigType;
+    }
+
+    public void setConnectionTimeoutConfigType(TokenEndpointConnectionConfigType connectionTimeoutConfigType) {
+        this.connectionTimeoutConfigType = connectionTimeoutConfigType;
+    }
+
+    public TokenEndpointConnectionConfigType getProxyConfigType() {
+        return proxyConfigType;
+    }
+
+    public void setProxyConfigType(TokenEndpointConnectionConfigType proxyConfigType) {
+        this.proxyConfigType = proxyConfigType;
+    }
+
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public void setAccessKey(String accessKey) {
+        this.accessKey = accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public void setSecretKey(String secretKey) {
+        this.secretKey = secretKey;
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public void setRegion(String region) {
+        this.region = region;
+    }
+
+    public String getService() {
+        return service;
+    }
+
+    public void setService(String service) {
+        this.service = service;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ProxyConfigs {
+        private boolean proxyEnabled;
+        private String proxyHost;
+        private String proxyPort;
+        private String proxyProtocol;
+        private String proxyUsername;
+        private String proxyPassword;
+        private String proxyPasswordAlias;
+
+        public boolean isProxyEnabled() {
+            return proxyEnabled;
+        }
+
+        public void setProxyEnabled(boolean proxyEnabled) {
+            this.proxyEnabled = proxyEnabled;
+        }
+
+        public String getProxyHost() {
+            return proxyHost;
+        }
+
+        public void setProxyHost(String proxyHost) {
+            this.proxyHost = proxyHost;
+        }
+
+        public String getProxyPort() {
+            return proxyPort;
+        }
+
+        public void setProxyPort(String proxyPort) {
+            this.proxyPort = proxyPort;
+        }
+
+        public String getProxyProtocol() {
+            return proxyProtocol;
+        }
+
+        public void setProxyProtocol(String proxyProtocol) {
+            this.proxyProtocol = proxyProtocol;
+        }
+
+        public String getProxyUsername() {
+            return proxyUsername;
+        }
+
+        public void setProxyUsername(String proxyUsername) {
+            this.proxyUsername = proxyUsername;
+        }
+
+        public String getProxyPassword() {
+            return proxyPassword;
+        }
+
+        public void setProxyPassword(String proxyPassword) {
+            this.proxyPassword = proxyPassword;
+        }
+        
+        public String getProxyPasswordAlias() {
+            return proxyPasswordAlias;
+        }
+
+        public void setProxyPasswordAlias(String proxyPasswordAlias) {
+            this.proxyPasswordAlias = proxyPasswordAlias;
+        }
+    }
 
     @Override
     public String toString() {
 
-        return "EndpointSecurity{" + "uniqueIdentifier='" + uniqueIdentifier + '\'' + ", password='" + password + '\''
-                + ", type='" + type + '\'' + ", enabled=" + enabled + ", username='" + username + '\'' + ", grantType='"
-                + grantType + '\'' + ", tokenUrl='" + tokenUrl + '\'' + ", clientId='" + clientId + '\''
-                + ", clientSecret='" + clientSecret + '\'' + ", customParameters='" + customParameters + '\''
-                + ", additionalProperties=" + additionalProperties + '}';
+        return "EndpointSecurity{" +
+                "uniqueIdentifier='" + uniqueIdentifier + '\'' +
+                ", password='" + password + '\'' +
+                ", type='" + type + '\'' +
+                ", enabled=" + enabled +
+                ", username='" + username + '\'' +
+                ", grantType='" + grantType + '\'' +
+                ", tokenUrl='" + tokenUrl + '\'' +
+                ", clientId='" + clientId + '\'' +
+                ", clientSecret='" + clientSecret + '\'' +
+                ", apiKeyIdentifier='" + apiKeyIdentifier + '\'' +
+                ", apiKeyValue='" + apiKeyValue + '\'' +
+                ", apiKeyIdentifierType='" + apiKeyIdentifierType + '\'' +
+                ", customParameters='" + customParameters + '\'' +
+                ", additionalProperties=" + additionalProperties +
+                ", connectionTimeoutDuration=" + connectionTimeoutDuration +
+                ", connectionRequestTimeoutDuration=" + connectionRequestTimeoutDuration +
+                ", socketTimeoutDuration=" + socketTimeoutDuration +
+                ", connectionTimeoutConfigType=" + connectionTimeoutConfigType + '\'' +
+                ", proxyConfigType=" + proxyConfigType + '\'' +
+                '}';
     }
 }

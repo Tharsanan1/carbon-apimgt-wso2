@@ -18,6 +18,8 @@
 
 package org.wso2.carbon.apimgt.impl.importexport;
 
+import org.wso2.carbon.apimgt.impl.APIConstants;
+
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,6 +38,8 @@ public final class ImportExportConstants {
 
     // Location of the API definition file
     public static final String API_FILE_LOCATION = File.separator + "api";
+
+    public static final String MCP_SERVER_FILE_LOCATION = File.separator + "mcp_server";
 
     // Location of the API definition file
     public static final String API_PRODUCT_FILE_LOCATION = File.separator + "api_product";
@@ -68,6 +72,7 @@ public final class ImportExportConstants {
 
     public static final String JSON_EXTENSION = ".json";
     public static final String YAML_EXTENSION = ".yaml";
+    public static final String YML_EXTENSION = ".yml";
 
     // Image resource
     public static final String IMAGE_RESOURCE = "Image";
@@ -86,6 +91,7 @@ public final class ImportExportConstants {
     public static final String ENDPOINTS_CERTIFICATE_FILE = File.separator + "endpoint_certificates";
 
     public static final String CLIENT_CERTIFICATE_FILE = File.separator + "client_certificates";
+    public static final String ENDPOINTS_FILE = "endpoints";
 
     public static final String APIS_DIRECTORY = "APIs";
 
@@ -96,6 +102,9 @@ public final class ImportExportConstants {
     public static final String UPLOAD_API_FILE_NAME = "APIArchive.zip";
 
     public static final String UPLOAD_POLICY_FILE_NAME = "PolicyArchive.zip";
+    public static final String API_YAML_FILE_NAME = "api.yaml";
+    public static final String SWAGGER_YAML_FILE_NAME = "Definitions/swagger.yaml";
+    public static final String DEPLOYMENT_ENVIRONMENTS_FILE_NAME = "deployment_environments.yaml";
 
     // Location of the API swagger definition file
     public static final String JSON_SWAGGER_DEFINITION_LOCATION =
@@ -166,6 +175,7 @@ public final class ImportExportConstants {
     public static final String ALIAS_JSON_KEY = "alias";
 
     public static final String ENDPOINT_JSON_KEY = "endpoint";
+    public static final String KEY_TYPE_JSON_KEY = "keyType";
 
     public static final int REFER_REQUIRE_RE_SUBSCRIPTION_CHECK_ITEM = 1;
 
@@ -187,6 +197,7 @@ public final class ImportExportConstants {
     public static final String TYPE_API = "api";
 
     public static final String TYPE_API_PRODUCT = "api_product";
+    public static final String TYPE_MCP_SERVER = "mcp_server";
 
     public static final String TYPE_APPLICATION = "application";
 
@@ -197,10 +208,11 @@ public final class ImportExportConstants {
     public static final String TYPE_CLIENT_CERTIFICATES = "client_certificates";
 
     public static final String TYPE_DEPLOYMENT_ENVIRONMENTS = "deployment_environments";
+    public static final String DEPLOYMENT_ENVIRONMENT_VERSION = "v4.3.0";
 
     public static final String TYPE_POLICY_SPECIFICATION = "operation_policy_specification";
 
-    public static final String APIM_VERSION = "v4.2.0";
+    public static final String APIM_VERSION = "v4.7.0";
 
     public static final String ENDPOINT_CONFIG = "endpointConfig";
 
@@ -229,6 +241,7 @@ public final class ImportExportConstants {
     public static final String LOAD_BALANCE_ENDPOINTS_FIELD = "loadBalanceEndpoints";
     public static final String FAILOVER_ENDPOINTS_FIELD = "failoverEndpoints";
     public static final String DEPENDENT_APIS_FIELD = "dependentAPIs";
+    public static final String ADDITIONAL_PROPERTIES_FIELD = "additionalProperties";
 
     //Security config related constants
     public static final String ENDPOINT_NONE_SECURITY_TYPE = "NONE";
@@ -285,8 +298,12 @@ public final class ImportExportConstants {
     public static final String CLIENT_CERTIFICATES_DIRECTORY_PATH = File.separator + "Client-certificates";
     public static final String ENDPOINT_CERTIFICATES_META_DATA_FILE_PATH =
             ENDPOINT_CERTIFICATES_DIRECTORY_PATH + File.separator + "endpoint_certificates";
-    public static final String CLIENT_CERTIFICATES_META_DATA_FILE_PATH =
-            CLIENT_CERTIFICATES_DIRECTORY_PATH + File.separator + "client_certificates";
+    public static final String PRODUCTION_CLIENT_CERTIFICATES_META_DATA_FILE_PATH =
+            CLIENT_CERTIFICATES_DIRECTORY_PATH + File.separator + APIConstants.API_KEY_TYPE_PRODUCTION
+                    + File.separator + "client_certificates";
+    public static final String SANDBOX_CLIENT_CERTIFICATES_META_DATA_FILE_PATH =
+            CLIENT_CERTIFICATES_DIRECTORY_PATH + File.separator + APIConstants.API_KEY_TYPE_SANDBOX
+                    + File.separator + "client_certificates";
 
     //Deployment directory related constants
     public static final String DEPLOYMENT_DIRECTORY_NAME= "Deployment";
@@ -301,10 +318,24 @@ public final class ImportExportConstants {
     public static final String DISPLAY_ON_DEVPORTAL_OPTION = "displayOnDevportal";
 
     public static final String POLICIES_DIRECTORY = "Policies";
+    public static final String CUSTOM_BACKEND_DIRECTORY = "Sequence-Backend";
     public static final String SWAGGER_X_WSO2_APICTL_INIT = "x-wso2-apictl-init";
 
     public static final String EXPORT_POLICY_TYPE_YAML = "YAML";
     public static final String EXPORT_POLICY_TYPE_JSON = "JSON";
 
     public static final String POLICY_NAME = "name";
+
+    public static final String POLICY_TYPE_API = "api";
+    public static final String POLICY_TYPE_COMMON = "common";
+
+    // API Endpoints related constants
+    public static final String API_ENDPOINTS_TYPE = "endpoints";
+    public static final String API_ENDPOINTS_FILE_LOCATION = File.separator + "endpoints";
+
+    public static final String BACKENDS_TYPE = "backends";
+    public static final String BACKENDS_FILE_LOCATION = File.separator + "backends";
+
+    public static final String API_NAME_DELIMITER = "-";
+    public static final String INITIATED_FROM_GATEWAY_CONSTANT = "initiatedFromGateway";
 }

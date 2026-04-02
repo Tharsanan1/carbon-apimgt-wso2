@@ -41,6 +41,7 @@ import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.api.API;
 import org.apache.synapse.api.ApiUtils;
+import org.apache.synapse.api.Resource;
 import org.apache.synapse.commons.json.JsonUtil;
 import org.apache.synapse.config.xml.rest.VersionStrategyFactory;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
@@ -51,12 +52,15 @@ import org.json.JSONObject;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.throttling.APIThrottleConstants;
+import org.wso2.carbon.apimgt.gateway.internal.DataHolder;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.caching.CacheProvider;
 import org.wso2.carbon.apimgt.impl.dto.APIKeyValidationInfoDTO;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.impl.utils.GatewayCertificateMgtUtil;
 import org.wso2.carbon.apimgt.keymgt.SubscriptionDataHolder;
 import org.wso2.carbon.apimgt.keymgt.model.SubscriptionDataStore;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
@@ -75,7 +79,21 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import javax.cache.Caching;
 import javax.xml.namespace.QName;
 
@@ -425,17 +443,31 @@ public class Utils {
 
     public static Certificate getClientCertificate(org.apache.axis2.context.MessageContext axis2MessageContext)
             throws APIManagementException {
-        Object validatedCert = axis2MessageContext.getProperty(APIMgtGatewayConstants.VALIDATED_X509_CERT);
 
+        Certificate[] certs = getClientCertificatesChain(axis2MessageContext);
+        return (certs != null && certs.length > 0) ? certs[0] : null;
+    }
+
+    /**
+     * Fetches client certificate chain from axis2MessageContext.
+     * @param axis2MessageContext   Relevant axis2MessageContext
+     * @return                      Array containing client certificate chain
+     * @throws APIManagementException
+     */
+    public static Certificate[] getClientCertificatesChain(
+            org.apache.axis2.context.MessageContext axis2MessageContext) throws APIManagementException {
+
+        Object validatedCert = axis2MessageContext.getProperty(APIMgtGatewayConstants.VALIDATED_X509_CERT);
         if (validatedCert != null) {
-            return (Certificate) validatedCert;
+            return new Certificate[] { (Certificate) validatedCert };
         } else {
+            Certificate[] certs = null;
             Map headers =
                     (Map) axis2MessageContext.getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
             Object sslCertObject = axis2MessageContext.getProperty(NhttpConstants.SSL_CLIENT_AUTH_CERT);
             Certificate certificateFromMessageContext = null;
             if (sslCertObject != null) {
-                Certificate[] certs = (Certificate[]) sslCertObject;
+                certs = (Certificate[]) sslCertObject;
                 certificateFromMessageContext = certs[0];
                 axis2MessageContext.setProperty(APIMgtGatewayConstants.VALIDATED_X509_CERT, certificateFromMessageContext);
             }
@@ -445,7 +477,7 @@ public class Utils {
                             .isCertificateExistsInListenerTrustStore(certificateFromMessageContext)) {
                         Certificate certificate = getClientCertificateFromHeader(axis2MessageContext);
                         axis2MessageContext.setProperty(APIMgtGatewayConstants.VALIDATED_X509_CERT, certificate);
-                        return certificate;
+                        return new Certificate[] { certificate };
                     }
                 } catch (APIManagementException e) {
                     String msg = "Error while validating into Certificate Existence";
@@ -453,8 +485,7 @@ public class Utils {
                     throw new APIManagementException(msg, e);
                 }
             }
-
-            return certificateFromMessageContext;
+            return certs;
         }
     }
 
@@ -466,8 +497,28 @@ public class Utils {
         String certificate = (String) headers.get(Utils.getClientCertificateHeader());
         byte[] bytes;
         if (certificate != null) {
+            if (!isForwardClientCertificateHeaderEnabled()) {
+                // Remove the client certificate header to avoid forwarding to the backend services
+                headers.remove(Utils.getClientCertificateHeader());
+            }
+
             if (!isClientCertificateEncoded()) {
-                certificate = APIUtil.getX509certificateContent(certificate);
+                // Remove invalid characters, restructure line separators, and reconstruct the certificate
+                certificate = certificate
+                        .replaceAll(APIConstants.BEGIN_CERTIFICATE_STRING.concat(System.lineSeparator()), "")
+                        .replaceAll(APIConstants.BEGIN_CERTIFICATE_STRING.concat("\n"), "")
+                        .replaceAll(APIConstants.BEGIN_CERTIFICATE_STRING, "")
+                        .replaceAll(System.lineSeparator().concat(APIConstants.END_CERTIFICATE_STRING), "")
+                        .replaceAll("\n".concat(APIConstants.END_CERTIFICATE_STRING), "")
+                        .replaceAll(APIConstants.END_CERTIFICATE_STRING, "")
+                        .trim()
+                        .replaceAll(" ", System.lineSeparator())
+                        .trim();
+                certificate = APIConstants.BEGIN_CERTIFICATE_STRING
+                        .concat(System.lineSeparator())
+                        .concat(certificate)
+                        .concat(System.lineSeparator())
+                        .concat(APIConstants.END_CERTIFICATE_STRING);
                 bytes = certificate.getBytes();
             } else {
                 try {
@@ -476,7 +527,6 @@ public class Utils {
                     String msg = "Error while URL decoding certificate";
                     throw new APIManagementException(msg, e);
                 }
-
                 certificate = APIUtil.getX509certificateContent(certificate);
                 bytes = Base64.decodeBase64(certificate);
             }
@@ -505,6 +555,24 @@ public class Utils {
         return false;
     }
 
+    /**
+     * Checks whether certificate chain validation is enabled or not from API-M configurations.
+     * @return Boolean indicating certificate chain validation enable/disable state
+     */
+    public static boolean isCertificateChainValidationEnabled() {
+
+        APIManagerConfiguration apiManagerConfiguration =
+                ServiceReferenceHolder.getInstance().getAPIManagerConfiguration();
+        if (apiManagerConfiguration != null) {
+            String validateCertificateChain =
+                    apiManagerConfiguration.getFirstProperty(APIConstants.MutualSSL.ENABLE_CERTIFICATE_CHAIN_VALIDATION);
+            if (StringUtils.isNotEmpty(validateCertificateChain)) {
+                return Boolean.parseBoolean(validateCertificateChain);
+            }
+        }
+        return false;
+    }
+
     private static boolean isClientCertificateEncoded() {
         APIManagerConfiguration apiManagerConfiguration =
                 ServiceReferenceHolder.getInstance().getAPIManagerConfiguration();
@@ -518,6 +586,45 @@ public class Utils {
             }
         }
         return true;
+    }
+
+    /**
+     * Checks whether forwarding client certificate header is enabled or not from API-M configurations.
+     * @return Boolean indicating forwarding client certificate header enable/disable state
+     */
+    public static boolean isForwardClientCertificateHeaderEnabled() {
+        APIManagerConfiguration apiManagerConfiguration =
+                ServiceReferenceHolder.getInstance().getAPIManagerConfiguration();
+        if (apiManagerConfiguration != null) {
+            String firstProperty = apiManagerConfiguration
+                    .getFirstProperty(APIConstants.MutualSSL.FORWARD_CLIENT_CERTIFICATE_HEADER);
+            return Boolean.parseBoolean(firstProperty);
+        }
+        return false;
+    }
+
+
+    /**
+     * Fetches certificate for the given distinguished name from listener trust store.
+     * @param certSubjectDN             Distinguished name of the certificate
+     * @return                          X509Certificate
+     * @throws APIManagementException
+     */
+    public static X509Certificate getCertificateFromListenerTrustStore(String certSubjectDN)
+            throws APIManagementException {
+
+        Enumeration<String> aliases = GatewayCertificateMgtUtil.getAliasesFromListenerTrustStore();
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            Certificate certificate = GatewayCertificateMgtUtil.getCertificateFromListenerTrustStore(alias);
+            if (certificate instanceof X509Certificate) {
+                X509Certificate x509Certificate = (X509Certificate) certificate;
+                if (StringUtils.equals(x509Certificate.getSubjectDN().getName(), certSubjectDN)) {
+                    return x509Certificate;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -613,22 +720,57 @@ public class Utils {
                                                                                           String tenantDomain) {
         TreeMap<String, org.wso2.carbon.apimgt.keymgt.model.entity.API> selectedAPIMap =
                 new TreeMap<>(new ContextLengthSorter());
-        SubscriptionDataStore tenantSubscriptionStore =
-                SubscriptionDataHolder.getInstance().getTenantSubscriptionStore(tenantDomain);
-        if (tenantSubscriptionStore != null) {
-            Map<String, org.wso2.carbon.apimgt.keymgt.model.entity.API> contextAPIMap =
-                    tenantSubscriptionStore.getAllAPIsByContextList();
-            if (contextAPIMap != null) {
-                contextAPIMap.forEach((context, api) -> {
-                    if (ApiUtils.matchApiPath(path, context)) {
-                        selectedAPIMap.put(context, api);
-                    }
-                });
+        Map<String, org.wso2.carbon.apimgt.keymgt.model.entity.API> contextAPIMap = null;
+        if (GatewayUtils.isOnDemandLoading()) {
+            Map<String, Map<String, org.wso2.carbon.apimgt.keymgt.model.entity.API>> tenantAPIMap =
+                    DataHolder.getInstance().getTenantAPIMap();
+            if (tenantAPIMap != null && tenantAPIMap.containsKey(tenantDomain)) {
+                contextAPIMap = tenantAPIMap.get(tenantDomain);
             }
+        } else {
+            SubscriptionDataStore tenantSubscriptionStore =
+                    SubscriptionDataHolder.getInstance().getTenantSubscriptionStore(tenantDomain);
+            if (tenantSubscriptionStore != null) {
+                contextAPIMap = tenantSubscriptionStore.getAllAPIsByContextList();
+            }
+        }
+
+        if (contextAPIMap != null) {
+            contextAPIMap.forEach((context, api) -> {
+                if (ApiUtils.matchApiPath(path, context)) {
+                    selectedAPIMap.put(context, api);
+                }
+            });
         }
 
         return selectedAPIMap;
     }
+
+    /**
+     * Get the security scheme of the given API
+     *
+     * @param context      API context
+     * @param version      API version
+     * @param tenantDomain Tenant domain
+     * @return List of security schemes
+     */
+    public static List<String> getSecuritySchemeOfWebSocketAPI(String context, String version, String tenantDomain) {
+
+        List<String> securitySchemeList = new ArrayList<>();
+        SubscriptionDataStore tenantSubscriptionStore =
+                SubscriptionDataHolder.getInstance().getTenantSubscriptionStore(tenantDomain);
+        if (tenantSubscriptionStore != null) {
+            org.wso2.carbon.apimgt.keymgt.model.entity.API api = tenantSubscriptionStore.getApiByContextAndVersion(context, version);
+            if (api != null) {
+                String securityScheme = api.getSecurityScheme();
+                if (securityScheme != null) {
+                    securitySchemeList = Arrays.asList(securityScheme.split(","));
+                }
+            }
+        }
+        return securitySchemeList;
+    }
+
     private static class ContextLengthSorter implements Comparator<String> {
 
         @Override
@@ -652,6 +794,19 @@ public class Utils {
     }
 
     /**
+     * Evaluate current request transport and message context to check if it is a MCP request execution path.
+     *
+     * @param messageContext MessageContext
+     * @return true if MCP request execution path
+     */
+    public static boolean isMCPRequest(MessageContext messageContext) {
+        org.apache.axis2.context.MessageContext axis2MC = ((Axis2MessageContext) messageContext).
+                getAxis2MessageContext();
+        String apiType = (String) messageContext.getProperty(APIMgtGatewayConstants.API_TYPE);
+        return APIConstants.API_TYPE_MCP.equals(apiType);
+    }
+
+    /**
      * @param certificate SSL Certificate
      * @return X509Certificate
      */
@@ -664,5 +819,127 @@ public class Utils {
             log.error("Error while converting client certificate", e);
         }
         return null;
+    }
+
+    /**
+     * Convert Certificate array to X509Certificate list.
+     * @param certificates  Certificate array that should be converted
+     * @return              X509Certificate list
+     */
+    public static List<X509Certificate> convertCertificatesToX509Certificates(Certificate[] certificates) {
+
+        List<X509Certificate> x509Certificates = new ArrayList<>();
+
+        for (Certificate certificate : certificates) {
+            if (certificate instanceof X509Certificate) {
+                x509Certificates.add((X509Certificate) certificate);
+            } else {
+                log.warn("Certificate can not be converted in to X509Certificate.");
+            }
+        }
+        return x509Certificates;
+    }
+
+    /**
+     * Using the api context to match API path to get the invoked API from an API Collection.
+     *
+     * @param messageContext MessageContext
+     * @return selected API based on the API path
+     */
+    public static API getAPIByContext(MessageContext messageContext) {
+        API selectedApi = null;
+        //getting the API collection from the synapse configuration to find the invoked API
+        Collection<API> apiSet = messageContext.getEnvironment().getSynapseConfiguration().getAPIs();
+        List<API> duplicateApiSet = new ArrayList<>(apiSet);
+        //obtaining required parameters to execute findResource method
+        String requestPath = ApiUtils.getFullRequestPath(messageContext);
+        for (API api : duplicateApiSet) {
+            if (ApiUtils.matchApiPath(requestPath, api.getContext())) {
+                selectedApi = api;
+                break;
+            }
+        }
+        return selectedApi;
+    }
+
+    /**
+     * Select acceptable resources from the set of all resources based on requesting methods.
+     *
+     * @return set of acceptable resources
+     */
+    @Deprecated // Use getAcceptableResources(Resource[], String, String, MessageContext) instead
+    public static Set<Resource> getAcceptableResources(Resource[] allAPIResources,
+                                                       String httpMethod,
+                                                       String corsRequestMethod) {
+        return getAcceptableResources(allAPIResources, httpMethod, corsRequestMethod, null);
+    }
+
+    /**
+     * Select acceptable resources from the set of all resources based on requesting methods.
+     *
+     * @return set of acceptable resources
+     */
+    public static Set<Resource> getAcceptableResources(Resource[] allAPIResources, String httpMethod,
+                                                       String corsRequestMethod, MessageContext messageContext) {
+        if (messageContext != null) {
+            Object cachedResources = messageContext.getProperty("ACCEPTABLE_RESOURCES");
+            if (cachedResources instanceof Set) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Returning cached acceptable resources for method: " + httpMethod);
+                }
+                return (Set<Resource>) cachedResources;
+            }
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Computing acceptable resources for method: " + httpMethod + ", CORS method: "
+                    + corsRequestMethod);
+        }
+        List<Resource> acceptableResourcesList = new LinkedList<>();
+        List<Resource> optionsResourcesList = new LinkedList<>();
+        boolean isOptionsRequest = RESTConstants.METHOD_OPTIONS.equals(httpMethod);
+
+        for (Resource resource : allAPIResources) {
+            log.debug("Evaluating resource for acceptable methods");
+            String[] methods = resource.getMethods();
+            if (methods == null) {
+                continue;
+            }
+
+            List<String> methodList = Arrays.asList(methods);
+
+            // Handle OPTIONS request with single OPTIONS method defined
+            if (isOptionsRequest && methods.length == 1 && methodList.contains(httpMethod)) {
+                optionsResourcesList.add(resource);
+            } else if ((isOptionsRequest && methodList.contains(corsRequestMethod)) ||
+                    methodList.contains(httpMethod)) {
+                acceptableResourcesList.add(resource);
+            }
+        }
+
+        Set<Resource> result = new LinkedHashSet<>();
+        result.addAll(optionsResourcesList);
+        result.addAll(acceptableResourcesList);
+        if (log.isDebugEnabled()) {
+            log.debug("Found " + result.size() + " acceptable resources for method: " + httpMethod);
+        }
+        return result;
+    }
+
+    /**
+     * Obtain the selected resource from the message context for CORSRequestHandler.
+     *
+     * @return selected resource
+     */
+    public static Resource getSelectedResource(MessageContext messageContext,
+                                               String httpMethod, String corsRequestMethod) {
+        Resource selectedResource = null;
+        Resource resource = (Resource) messageContext.getProperty(RESTConstants.SELECTED_RESOURCE);
+        String [] resourceMethods = resource.getMethods();
+        if ((RESTConstants.METHOD_OPTIONS.equals(httpMethod) && resourceMethods != null
+                && Arrays.asList(resourceMethods).contains(corsRequestMethod))
+                || (resourceMethods != null && Arrays.asList(resourceMethods).contains(httpMethod))) {
+            selectedResource = resource;
+        }
+        return selectedResource;
     }
 }

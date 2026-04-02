@@ -22,6 +22,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelId;
+import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
@@ -32,6 +33,8 @@ import io.netty.handler.codec.http.websocketx.WebSocketCloseStatus;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
+import org.apache.axis2.context.ConfigurationContext;
+import org.apache.axis2.engine.AxisConfiguration;
 import org.apache.http.HttpHeaders;
 import org.junit.Assert;
 import org.junit.Before;
@@ -41,16 +44,19 @@ import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.wso2.carbon.apimgt.common.gateway.constants.GraphQLConstants;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket.WebSocketApiConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket.WebSocketUtils;
 import org.wso2.carbon.apimgt.gateway.inbound.InboundMessageContext;
 import org.wso2.carbon.apimgt.gateway.inbound.InboundMessageContextDataHolder;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.InboundProcessorResponseDTO;
-import org.wso2.carbon.apimgt.gateway.inbound.websocket.InboundWebSocketProcessor;
+import org.wso2.carbon.apimgt.gateway.inbound.websocket.WebSocketProcessor;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.utils.InboundWebsocketProcessorUtil;
+import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.gateway.utils.APIMgtGoogleAnalyticsUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
+import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.dto.APIKeyValidationInfoDTO;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.keymgt.model.entity.API;
@@ -65,7 +71,7 @@ import java.util.UUID;
  */
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({ WebSocketUtils.class, InboundWebsocketProcessorUtil.class,
-        APIUtil.class, WebsocketInboundHandler.class })
+        APIUtil.class, WebsocketInboundHandler.class, ServiceReferenceHolder.class, WebsocketUtil.class})
 public class WebsocketInboundHandlerTestCase {
 
     private static final String channelIdString = "11111";
@@ -78,18 +84,19 @@ public class WebsocketInboundHandlerTestCase {
     private static final String APPLICATION_CONSUMER_KEY = "NdYZFnAfUa7uST1giZrmIq8he8Ya";
     private String SUPER_TENANT_DOMAIN = "carbon.super";
     private ChannelHandlerContext channelHandlerContext;
-    private InboundWebSocketProcessor inboundWebSocketProcessor;
+    private WebSocketProcessor inboundWebSocketProcessor;
     private WebsocketInboundHandler websocketInboundHandler;
     private org.wso2.carbon.apimgt.keymgt.model.entity.API websocketAPI;
 
     @Before
     public void setup() throws Exception {
-        inboundWebSocketProcessor = Mockito.mock(InboundWebSocketProcessor.class);
+        inboundWebSocketProcessor = Mockito.mock(WebSocketProcessor.class);
         channelHandlerContext = Mockito.mock(ChannelHandlerContext.class);
         Channel channel = Mockito.mock(Channel.class);
         Attribute attribute = Mockito.mock(Attribute.class);
         ChannelId channelId = Mockito.mock(ChannelId.class);
         Mockito.when(channel.attr(AttributeKey.valueOf("API_PROPERTIES"))).thenReturn(attribute);
+        Mockito.when(channel.attr(AttributeKey.valueOf("API_CONTEXT_URI"))).thenReturn(attribute);
         Mockito.when(channelHandlerContext.channel()).thenReturn(channel);
         Mockito.when(channel.id()).thenReturn(channelId);
         Mockito.when(channelId.asLongText()).thenReturn(channelIdString);
@@ -112,12 +119,20 @@ public class WebsocketInboundHandlerTestCase {
             }
 
             @Override
-            public InboundWebSocketProcessor initializeWebSocketProcessor() {
+            public WebSocketProcessor initializeWebSocketProcessor() {
                 return inboundWebSocketProcessor;
             }
         };
         websocketAPI = new API(UUID.randomUUID().toString(), 1, "admin", "WSAPI", "1.0.0", "/wscontext", "Unlimited",
                 APIConstants.API_TYPE_WS, APIConstants.PUBLISHED_STATUS, false);
+
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        ServiceReferenceHolder serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
+        PowerMockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
+        APIManagerConfiguration apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
+        PowerMockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
+
+        PowerMockito.mockStatic(WebsocketUtil.class);
     }
 
     @Test
@@ -153,8 +168,20 @@ public class WebsocketInboundHandlerTestCase {
                 "ws://localhost:8080/graphql");
         fullHttpRequest.headers().set(headerName, headerValue);
         fullHttpRequest.headers().set(HttpHeaders.UPGRADE, strWebSocket);
+        ServiceReferenceHolder   serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        APIManagerConfiguration apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
+        ConfigurationContext configurationContext = Mockito.mock(ConfigurationContext.class);
+        AxisConfiguration axisConfiguration = Mockito.mock(AxisConfiguration.class);
+        ChannelPipeline channelPipeline = Mockito.mock(ChannelPipeline.class);
+        PowerMockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
+        Mockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
+        Mockito.when(serviceReferenceHolder.getServerConfigurationContext()).thenReturn(configurationContext);
+        Mockito.when(configurationContext.getAxisConfiguration()).thenReturn(axisConfiguration);
+        Mockito.when(channelHandlerContext.channel().pipeline()).thenReturn(channelPipeline);
         Mockito.when(inboundWebSocketProcessor.handleHandshake(fullHttpRequest, channelHandlerContext,
                 inboundMessageContext)).thenReturn(responseDTO);
+        PowerMockito.when(WebsocketUtil.validateDenyPolicies(Mockito.anyObject())).thenReturn(responseDTO);
         websocketInboundHandler.channelRead(channelHandlerContext, fullHttpRequest);
         validateApiProperties(apiProperties, infoDTO, inboundMessageContext);
 
@@ -191,6 +218,7 @@ public class WebsocketInboundHandlerTestCase {
         Mockito.when(msg.content()).thenReturn(content);
         InboundProcessorResponseDTO responseDTO = new InboundProcessorResponseDTO();
         Mockito.when(inboundWebSocketProcessor.handleRequest(msg, inboundMessageContext)).thenReturn(responseDTO);
+        PowerMockito.when(WebsocketUtil.validateDenyPolicies(Mockito.anyObject())).thenReturn(responseDTO);
         websocketInboundHandler.channelRead(channelHandlerContext, msg);
         Assert.assertTrue((InboundMessageContextDataHolder.getInstance().getInboundMessageContextMap()
                 .containsKey(channelIdString)));// No error has occurred context exists in data-holder map.
@@ -213,11 +241,20 @@ public class WebsocketInboundHandlerTestCase {
     public void exceptionCaughtTest() throws Exception {
         Throwable cause = new CorruptedWebSocketFrameException(WebSocketCloseStatus.MESSAGE_TOO_BIG,
                 "Max frame length of 65536 has been exceeded.");
-        Attribute<Object> attributes = Mockito.mock(Attribute.class);
+        Attribute<Object> apiPropertiesAttributes = Mockito.mock(Attribute.class);
+        Attribute<Object> contextUriAttributes = Mockito.mock(Attribute.class);
+
         Mockito.when(channelHandlerContext.channel().attr(AttributeKey.valueOf("API_PROPERTIES")))
-                .thenReturn(attributes);
+                .thenReturn(apiPropertiesAttributes);
+        Mockito.when(channelHandlerContext.channel().attr(AttributeKey.valueOf("API_CONTEXT_URI")))
+                .thenReturn(contextUriAttributes);
+
         HashMap apiProperties = new HashMap();
-        Mockito.when((HashMap)attributes.get()).thenReturn(apiProperties);
+        HashMap apiContextUriAttributes = new HashMap();
+
+        Mockito.when((HashMap)apiPropertiesAttributes.get()).thenReturn(apiProperties);
+        Mockito.when((HashMap)contextUriAttributes.get()).thenReturn(apiContextUriAttributes);
+
         websocketInboundHandler.exceptionCaught(channelHandlerContext, cause);
         Assert.assertEquals(apiProperties.get("api.ut.WS_SC"), 1009);
     }

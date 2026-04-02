@@ -303,4 +303,59 @@ public class SystemApplicationDAO {
             log.error("Error while rolling back the transaction.", e1);
         }
     }
+
+    /**
+     * Method to check whether PKCE is enabled for the application identified by the consumer key
+     * @param consumerKey consumer key of the sysetm app
+     * @return true is PKCE is enabled, false otherwise
+     * @throws APIMgtDAOException
+     */
+    public static boolean isPKCEEnabled(String consumerKey) throws APIMgtDAOException {
+        boolean isPKCEMandatory = false;
+        String sql = "SELECT PKCE_MANDATORY FROM IDN_OAUTH_CONSUMER_APPS WHERE CONSUMER_KEY = ? ";
+
+        try (Connection connection = APIMgtDBUtil.getConnection()) {
+            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                preparedStatement.setString(1,  consumerKey);
+                try (ResultSet result = preparedStatement.executeQuery()) {
+                    if (result.next()) {
+                        isPKCEMandatory = result.getBoolean("PKCE_MANDATORY");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new APIMgtDAOException("Error while checking for whether PKCE is enabled for System Application by " +
+                    "consumer key: " + consumerKey, e);
+        }
+        return isPKCEMandatory;
+    }
+
+    /**
+     * Method to check whether BypassClientCredentials is enabled for the application identified by the
+     * consumerkey.
+     *
+     * @param consumerKey consumer key of the system app
+     * @return true is Bypass Client Credentials is enabled, false otherwise
+     * @throws APIMgtDAOException
+     */
+    public static boolean isBypassClientCredentials(String consumerKey) throws APIMgtDAOException {
+        boolean bypassClientCredentials = false;
+        String sql = SQLConstants.SystemApplicationConstants.GET_BYPASS_CLIENT_CREDENTIALS_ENABLED;
+
+        try (Connection connection = APIMgtDBUtil.getConnection()) {
+            try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
+                preparedStatement.setString(1, consumerKey);
+                preparedStatement.setString(2, "bypassClientCredentials");
+                try (ResultSet result = preparedStatement.executeQuery()) {
+                    if (result.next()) {
+                        bypassClientCredentials = result.getBoolean("PROPERTY_VALUE");
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new APIMgtDAOException("Error while checking for whether BypassClientCredentials "
+                    + "is enabled for System Application by consumer key: " + consumerKey, e);
+        }
+        return bypassClientCredentials;
+    }
 }

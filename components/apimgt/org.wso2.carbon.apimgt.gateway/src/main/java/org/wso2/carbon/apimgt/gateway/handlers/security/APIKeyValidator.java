@@ -28,34 +28,42 @@ import org.apache.synapse.rest.RESTConstants;
 import org.apache.synapse.rest.RESTUtils;
 import org.apache.synapse.api.Resource;
 import org.apache.synapse.api.dispatch.RESTDispatcher;
-import org.wso2.carbon.apimgt.api.APIDefinition;
-import org.wso2.carbon.apimgt.api.APIManagementException;
+import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
+import org.wso2.carbon.apimgt.api.model.APIOperationMapping;
+import org.wso2.carbon.apimgt.api.model.BackendOperation;
+import org.wso2.carbon.apimgt.api.model.BackendOperationMapping;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
+import org.wso2.carbon.apimgt.api.model.subscription.URLMapping;
 import org.wso2.carbon.apimgt.gateway.APIMgtGatewayConstants;
 import org.wso2.carbon.apimgt.gateway.MethodStats;
 import org.wso2.carbon.apimgt.gateway.handlers.Utils;
 import org.wso2.carbon.apimgt.gateway.handlers.security.keys.APIKeyDataStore;
 import org.wso2.carbon.apimgt.gateway.handlers.security.keys.WSAPIKeyDataStore;
 import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.gateway.mcp.request.McpRequest;
+import org.wso2.carbon.apimgt.gateway.mcp.request.Params;
 import org.wso2.carbon.apimgt.gateway.utils.GatewayUtils;
 import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.caching.CacheProvider;
-import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import org.wso2.carbon.apimgt.impl.dto.APIInfoDTO;
 import org.wso2.carbon.apimgt.impl.dto.APIKeyValidationInfoDTO;
+import org.wso2.carbon.apimgt.impl.dto.ExtendedJWTConfigurationDto;
 import org.wso2.carbon.apimgt.impl.dto.ResourceInfoDTO;
 import org.wso2.carbon.apimgt.impl.dto.VerbInfoDTO;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.impl.utils.JWTUtil;
 import org.wso2.carbon.apimgt.keymgt.model.entity.Scope;
 import org.wso2.carbon.apimgt.keymgt.service.TokenValidationContext;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
+import org.wso2.carbon.identity.oauth.config.OAuthServerConfiguration;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -134,6 +142,7 @@ public class APIKeyValidator {
             throws APISecurityException {
 
         String prefixedVersion = apiVersion;
+        boolean valid;
         //Check if client has invoked the default version API.
         if (defaultVersionInvoked) {
             //Prefix the version so that it looks like _default_1.0 (_default_<version>)).
@@ -164,8 +173,19 @@ public class APIKeyValidator {
                         getGatewayTokenCache().remove(apiKey);
                         // Put into invalid token cache
                         getInvalidTokenCache().put(apiKey, cachedToken);
+                        info.setExpired(true);
                     }
-                    return info;
+                    if (info.getEndUserToken() == null) {
+                        return info;
+                    }
+                    long timestampSkew = getTimeStampSkewInSeconds() * 1000;
+                    ExtendedJWTConfigurationDto jwtConfigurationDto =
+                            getApiManagerConfiguration().getJwtConfigurationDto();
+                    valid = JWTUtil.isJWTValid(
+                            info.getEndUserToken(), jwtConfigurationDto.getJwtDecoding(), timestampSkew);
+                    if (valid) {
+                        return info;
+                    }
                 }
             } else {
                 // Check token available in invalidToken Cache
@@ -230,6 +250,10 @@ public class APIKeyValidator {
 
     protected void endTenantFlow() {
         PrivilegedCarbonContext.endTenantFlow();
+    }
+
+    protected long getTimeStampSkewInSeconds() {
+        return OAuthServerConfiguration.getInstance().getTimeStampSkewInSeconds();
     }
 
     protected void startTenantFlow() {
@@ -318,8 +342,41 @@ public class APIKeyValidator {
         String apiContext = (String) synCtx.getProperty(RESTConstants.REST_API_CONTEXT);
         String apiVersion = (String) synCtx.getProperty(RESTConstants.SYNAPSE_REST_API_VERSION);
         String fullRequestPath = (String) synCtx.getProperty(RESTConstants.REST_FULL_REQUEST_PATH);
-
         String electedResource = (String) synCtx.getProperty(APIConstants.API_ELECTED_RESOURCE);
+
+        org.wso2.carbon.apimgt.keymgt.model.entity.API api = GatewayUtils.getAPI(synCtx);
+        if (api != null && api.getApiType() != null && StringUtils.equals(api.getApiType(),
+                APIConstants.API_TYPE_MCP)) {
+            McpRequest requestBody = (McpRequest) synCtx.getProperty(APIMgtGatewayConstants.MCP_REQUEST_BODY);
+            if (requestBody != null) {
+                Params params = requestBody.getParams();
+                String toolName = params != null ? params.getToolName() : null;
+                if (!StringUtils.isEmpty(toolName)) {
+                    URLMapping extendedOperation = api.getUrlMappings()
+                            .stream()
+                            .filter(operation -> operation.getUrlPattern().equals(toolName))
+                            .findFirst()
+                            .orElse(null);
+                    if (extendedOperation != null) {
+                        BackendOperation backendOperation = null;
+                        if (StringUtils.equals(api.getSubtype(), APIConstants.API_SUBTYPE_DIRECT_BACKEND) ||
+                                StringUtils.equals(api.getSubtype(), APIConstants.API_SUBTYPE_SERVER_PROXY)) {
+                            BackendOperationMapping backendAPIOperationMapping = extendedOperation.getBackendOperationMapping();
+                            backendOperation = backendAPIOperationMapping.getBackendOperation();
+                        } else if (StringUtils.equals(api.getSubtype(), APIConstants.API_SUBTYPE_EXISTING_API))  {
+                            APIOperationMapping existingAPIOperationMapping = extendedOperation.getApiOperationMapping();
+                            backendOperation = existingAPIOperationMapping.getBackendOperation();
+                            apiContext = existingAPIOperationMapping.getApiContext();
+                            apiVersion = existingAPIOperationMapping.getApiVersion();
+                        }
+                        if (backendOperation != null) {
+                            httpMethod = backendOperation.getVerb().toString();
+                            electedResource = backendOperation.getTarget();
+                        }
+                    }
+                }
+            }
+        }
         ArrayList<String> resourceArray = null;
 
         if (electedResource != null) {
@@ -330,7 +387,13 @@ public class APIKeyValidator {
             }
         }
 
-        String requestPath = getRequestPath(synCtx, apiContext, apiVersion, fullRequestPath);
+        String requestPath = null;
+        if (api != null && StringUtils.equals(api.getSubtype(), APIConstants.API_SUBTYPE_EXISTING_API)) {
+            requestPath = electedResource;
+        } else {
+            requestPath = getRequestPath(synCtx, apiContext, apiVersion, fullRequestPath);
+        }
+
         if ("".equals(requestPath)) {
             requestPath = "/";
         }
@@ -372,6 +435,7 @@ public class APIKeyValidator {
                 return verbInfoList;
             }
         } else {
+            // This block won't get executed for MCP Servers and GraphQL APIs
             API selectedApi = Utils.getSelectedAPI(synCtx);
             Resource selectedResource = null;
             String resourceString;
@@ -379,14 +443,33 @@ public class APIKeyValidator {
             if (selectedApi != null) {
                 Resource[] selectedAPIResources = selectedApi.getResources();
 
-                Set<Resource> acceptableResources = new LinkedHashSet<Resource>();
+                List<Resource> acceptableResourcesList = new LinkedList<>();
+                List<Resource> optionsResourcesList = new LinkedList<>();
+                boolean isOptionsRequest = RESTConstants.METHOD_OPTIONS.equals(httpMethod);
 
                 for (Resource resource : selectedAPIResources) {
-                    //If the requesting method is OPTIONS or if the Resource contains the requesting method
-                    if (RESTConstants.METHOD_OPTIONS.equals(httpMethod) ||
-                            (resource.getMethods() != null && Arrays.asList(resource.getMethods()).contains(httpMethod))) {
-                        acceptableResources.add(resource);
+                    log.debug("Evaluating resource for acceptable methods");
+                    String[] methods = resource.getMethods();
+                    if (methods == null) {
+                        continue;
                     }
+
+                    List<String> methodList = Arrays.asList(methods);
+
+                    // Handle OPTIONS request with single OPTIONS method defined
+                    if (isOptionsRequest && methods.length == 1 && methodList.contains(httpMethod)) {
+                        optionsResourcesList.add(resource);
+                    } else if (isOptionsRequest || methodList.contains(httpMethod)) {
+                        acceptableResourcesList.add(resource);
+                    }
+                }
+
+                Set<Resource> acceptableResources = new LinkedHashSet<>();
+                acceptableResources.addAll(optionsResourcesList);
+                acceptableResources.addAll(acceptableResourcesList);
+                if (log.isDebugEnabled()) {
+                    log.debug("Found " + acceptableResources.size() +
+                            " acceptable resources for method: " + httpMethod);
                 }
 
                 if (acceptableResources.size() > 0) {
@@ -394,7 +477,11 @@ public class APIKeyValidator {
                         Resource resource = dispatcher.findResource(synCtx, acceptableResources);
                         if (resource != null && Arrays.asList(resource.getMethods()).contains(httpMethod)) {
                             selectedResource = resource;
-                            break;
+                            if (selectedResource.getDispatcherHelper()
+                                    .getString() != null && !selectedResource.getDispatcherHelper().getString()
+                                    .contains("/*")) {
+                                break;
+                            }
                         }
                     }
                 }
@@ -464,7 +551,15 @@ public class APIKeyValidator {
             for (ResourceInfoDTO resourceInfoDTO : apiInfoDTO.getResources()) {
                 Set<VerbInfoDTO> verbDTOList = resourceInfoDTO.getHttpVerbs();
                 for (VerbInfoDTO verb : verbDTOList) {
-                    if (verb.getHttpVerb().equals(httpMethod)) {
+                    //mcp direct_endpoint scenario
+                    String httpVerb = verb.getHttpVerb();
+                    if (verb.getBackendAPIOperationMapping() != null) {
+                        BackendOperation backendOperation = verb.getBackendAPIOperationMapping().getBackendOperation();
+                        if (backendOperation != null) {
+                            httpVerb = backendOperation.getVerb().toString();
+                        }
+                    }
+                    if (httpVerb.equals(httpMethod)) {
                         for (String resourceString : resourceArray) {
                             if (isResourcePathMatching(resourceString, resourceInfoDTO)) {
                                 resourceCacheKey = APIUtil.getResourceInfoDTOCacheKey(apiContext, apiVersion,
@@ -509,6 +604,18 @@ public class APIKeyValidator {
     private boolean isResourcePathMatching(String resourceString, ResourceInfoDTO resourceInfoDTO) {
         String resource = resourceString.trim();
         String urlPattern = resourceInfoDTO.getUrlPattern().trim();
+
+        //MCP direct_ep
+        if (resourceInfoDTO.getHttpVerbs() != null && !resourceInfoDTO.getHttpVerbs().isEmpty()) {
+            VerbInfoDTO verbInfoDTO = (VerbInfoDTO) resourceInfoDTO.getHttpVerbs().toArray()[0];
+            BackendOperationMapping backendAPIOperationMapping = verbInfoDTO.getBackendAPIOperationMapping();
+            if (backendAPIOperationMapping != null) {
+                BackendOperation backendOperation = backendAPIOperationMapping.getBackendOperation();
+                if (backendOperation != null) {
+                    urlPattern = backendOperation.getTarget();
+                }
+            }
+        }
 
         if (resource.equalsIgnoreCase(urlPattern)) {
             return true;
@@ -569,6 +676,13 @@ public class APIKeyValidator {
             verbInfoDTO.setThrottlingConditions(uriTemplate.getThrottlingConditions());
             verbInfoDTO.setConditionGroups(uriTemplate.getConditionGroups());
             verbInfoDTO.setApplicableLevel(uriTemplate.getApplicableLevel());
+
+            //MCP
+            BackendOperationMapping backendAPIOperationMapping = uriTemplate.getBackendOperationMapping();
+            if (backendAPIOperationMapping != null) {
+                verbInfoDTO.setBackendOperationMapping(backendAPIOperationMapping);
+            }
+
             resourceInfoDTO.getHttpVerbs().add(verbInfoDTO);
         }
 
@@ -706,21 +820,7 @@ public class APIKeyValidator {
             throws APISecurityException {
         if (uriTemplates == null) {
             synchronized (this) {
-                if (uriTemplates == null) {
-                    String swagger = (String) messageContext.getProperty(APIMgtGatewayConstants.OPEN_API_STRING);
-                    if (swagger != null) {
-                        APIDefinition oasParser;
-                        try {
-                            oasParser = OASParserUtil.getOASParser(swagger);
-                            uriTemplates = new ArrayList<>();
-                            uriTemplates.addAll(oasParser.getURITemplates(swagger));
-                            return uriTemplates;
-                        } catch (APIManagementException e) {
-                            log.error("Error while parsing swagger content to get URI Templates", e);
-                        }
-                    }
-                    uriTemplates = dataStore.getAPIProductURITemplates(context, apiVersion);
-                }
+                uriTemplates = dataStore.getAPIProductURITemplates(context, apiVersion);
             }
         }
         return uriTemplates;
@@ -737,9 +837,9 @@ public class APIKeyValidator {
     }
 
     public APIKeyValidationInfoDTO validateSubscription(String context, String version, int appID,
-                                                        String tenantDomain)
+                                                        String tenantDomain, String keyType)
             throws APISecurityException {
-        return dataStore.validateSubscription(context, version, appID,tenantDomain);
+        return dataStore.validateSubscription(context, version, appID,tenantDomain, keyType);
     }
 
     /**
@@ -758,5 +858,10 @@ public class APIKeyValidator {
 
     public Map<String, Scope> retrieveScopes(String tenantDomain) {
         return dataStore.retrieveScopes(tenantDomain);
+    }
+
+    public APIKeyValidationInfoDTO validateAPIKeySubscription(String apiContext, String apiVersion, String tenantDomain,
+                                                              APIKeyInfo apiKeyInfo) throws APISecurityException {
+        return dataStore.validateAPIKeySubscription(apiContext, apiVersion, tenantDomain, apiKeyInfo);
     }
 }

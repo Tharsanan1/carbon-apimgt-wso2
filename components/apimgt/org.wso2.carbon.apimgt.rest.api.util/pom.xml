@@ -17,7 +17,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -40,7 +40,7 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.ops4j.pax.logging</groupId>
+            <groupId>org.wso2.org.ops4j.pax.logging</groupId>
             <artifactId>pax-logging-api</artifactId>
             <scope>provided</scope>
         </dependency>
@@ -138,6 +138,10 @@
             <classifier>runtime</classifier>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-rs-security-cors</artifactId>
+        </dependency>
 
     </dependencies>
 
@@ -146,6 +150,13 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-opens java.base/java.lang=ALL-UNNAMED 
+                        --add-opens java.base/java.io=ALL-UNNAMED 
+                        --add-opens java.base/java.util=ALL-UNNAMED 
+                    </argLine>
+                </configuration>
                 <dependencies>
                     <dependency>
                         <groupId>org.apache.maven.surefire</groupId>
@@ -189,4 +200,3 @@
     </build>
 
 </project>
-

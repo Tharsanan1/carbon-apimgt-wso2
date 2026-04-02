@@ -22,6 +22,13 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.wso2.carbon.apimgt.common.gateway.util.JWTUtil;
 
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+
 /**
  * Test cases for {@link JWTUtil}
  */
@@ -46,5 +53,66 @@ public class JWTUtilTestCase {
     @Test
     public void testGetJWTClaimsWhenJWTNotAvailable() {
         Assert.assertNull(JWTUtil.getJWTClaims(null));
+    }
+
+    @Test
+    public void testJWTHeader() throws Exception {
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        X509Certificate cert = (X509Certificate) certificateFactory.generateCertificate(
+                Files.newInputStream(Paths.get("src/test/resources/cnf/certificate.pem"))
+        );
+        String signatureAlgorithm = "SHA256withRSA";
+
+        //Use SHA-256 as the certificate hashing algorithm
+        String jwt = JWTUtil.generateHeader(cert, signatureAlgorithm, true, true, false);
+        Assert.assertNotNull(jwt);
+        Assert.assertTrue(jwt.contains("kid"));
+
+        String encodedThumbprint = generateCertThumbprint(cert, "SHA-256");
+        //Check if the encoded thumbprint matches with the JWT header's x5t#S256
+        Assert.assertTrue(jwt.contains(encodedThumbprint));
+        Assert.assertTrue(jwt.contains("x5t#S256"));
+
+        //Use SHA-1 as the certificate hashing algorithm
+        jwt = JWTUtil.generateHeader(cert, signatureAlgorithm, false, false, false);
+        Assert.assertNotNull(jwt);
+        Assert.assertFalse(jwt.contains("kid"));
+
+        encodedThumbprint = generateCertThumbprint(cert, "SHA-1");
+        //Check if the encoded thumbprint matches with the JWT header's x5t
+        Assert.assertTrue(jwt.contains(encodedThumbprint));
+        Assert.assertTrue(jwt.contains("x5t"));
+    }
+
+    private String generateCertThumbprint(Certificate cert, String hashingAlgorithm) throws Exception {
+        //Get the public certificate's thumbprint and base64url encode it
+        byte[] der = cert.getEncoded();
+        MessageDigest digestValue = MessageDigest.getInstance(hashingAlgorithm);
+        digestValue.update(der);
+        byte[] digestInBytes = digestValue.digest();
+        String publicCertThumbprint = hexify(digestInBytes);
+        return java.util.Base64.getUrlEncoder()
+                .encodeToString(publicCertThumbprint.getBytes("UTF-8"));
+    }
+
+    /**
+     * Helper method to hexify a byte array.
+     *
+     * @param bytes - The input byte array
+     * @return hexadecimal representation
+     */
+    private String hexify(byte bytes[]) {
+
+        char[] hexDigits = {'0', '1', '2', '3', '4', '5', '6', '7',
+                '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+
+        StringBuilder buf = new StringBuilder(bytes.length * 2);
+
+        for (byte aByte : bytes) {
+            buf.append(hexDigits[(aByte & 0xf0) >> 4]);
+            buf.append(hexDigits[aByte & 0x0f]);
+        }
+
+        return buf.toString();
     }
 }

@@ -22,12 +22,14 @@ import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.common.analytics.collectors.AnalyticsCustomDataProvider;
 import org.wso2.carbon.apimgt.common.gateway.jwtgenerator.AbstractAPIMgtGatewayJWTGenerator;
 import org.wso2.carbon.apimgt.gateway.handlers.analytics.Constants;
+import org.wso2.carbon.apimgt.gateway.inbound.websocket.WebSocketProcessor;
 import org.wso2.carbon.apimgt.gateway.throttling.ThrottleDataHolder;
 import org.wso2.carbon.apimgt.gateway.throttling.publisher.ThrottleDataPublisher;
 import org.wso2.carbon.apimgt.gateway.utils.redis.RedisCacheUtils;
 import org.wso2.carbon.apimgt.impl.APIManagerAnalyticsConfiguration;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.APIManagerConfigurationService;
+import org.wso2.carbon.apimgt.api.LLMProviderService;
 import org.wso2.carbon.apimgt.impl.caching.CacheInvalidationService;
 import org.wso2.carbon.apimgt.impl.dto.RedisConfig;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
@@ -46,9 +48,12 @@ import org.wso2.carbon.base.api.ServerConfigurationService;
 import org.wso2.carbon.core.util.KeyStoreManager;
 import org.wso2.carbon.endpoint.service.EndpointAdmin;
 import org.wso2.carbon.localentry.service.LocalEntryAdmin;
+import org.wso2.carbon.mediation.initializer.services.SynapseConfigurationService;
 import org.wso2.carbon.mediation.security.vault.MediationSecurityAdminService;
 import org.wso2.carbon.rest.api.service.RestApiAdmin;
 import org.wso2.carbon.sequences.services.SequenceAdmin;
+import org.wso2.carbon.tenant.mgt.services.TenantMgtService;
+import org.wso2.carbon.user.core.service.RealmService;
 import org.wso2.carbon.utils.ConfigurationContextService;
 import org.wso2.carbon.utils.multitenancy.MultitenantConstants;
 import redis.clients.jedis.JedisPool;
@@ -70,7 +75,7 @@ public class ServiceReferenceHolder {
 
     private ConfigurationContextService cfgCtxService;
     private APIManagerConfigurationService amConfigService;
-    public ThrottleDataHolder throttleDataHolder;
+    private final ThrottleDataHolder throttleDataHolder = ThrottleDataHolder.getInstance();
     private ThrottleProperties throttleProperties;
     private ConfigurationContext axis2ConfigurationContext;
     private TracingService tracingService;
@@ -83,11 +88,13 @@ public class ServiceReferenceHolder {
     private MediationSecurityAdminService mediationSecurityAdminService;
     private ThrottleDataPublisher throttleDataPublisher;
     private Map<String,AbstractAPIMgtGatewayJWTGenerator> apiMgtGatewayJWTGenerators  = new HashMap<>();
+    private Map<String, LLMProviderService> llmProviderServiceMap = new HashMap();
     private TracingTracer tracer;
     private TelemetryTracer telemetryTracer;
     private CacheInvalidationService cacheInvalidationService;
     private RevokedTokenService revokedTokenService;
     private APIThrottleDataService throttleDataService;
+    private SynapseConfigurationService synapseConfigurationService;
     private Certificate publicCert;
     private PrivateKey privateKey;
 
@@ -98,13 +105,16 @@ public class ServiceReferenceHolder {
 
     private Set<String> activeTenants = new ConcurrentSkipListSet<>();
     private JedisPool redisPool;
-    public void setThrottleDataHolder(ThrottleDataHolder throttleDataHolder) {
-        this.throttleDataHolder = throttleDataHolder;
-    }
+    private TenantMgtService tenantMgtService;
+    private RealmService realmService;
+
     public ThrottleDataHolder getThrottleDataHolder() {
         return throttleDataHolder;
     }
     private ArtifactRetriever artifactRetriever;
+    private long gatewayCount = 1L;
+
+    private WebSocketProcessor websocketprocessor = null;
 
     private ServiceReferenceHolder() {
 
@@ -392,6 +402,10 @@ public class ServiceReferenceHolder {
         return activeTenants.contains(tenantDomain);
     }
 
+    public Set<String> getActiveTenants() {
+        return activeTenants;
+    }
+
     public void setRedisCacheUtil(RedisCacheUtils redisCacheUtils) {
 
     }
@@ -437,5 +451,60 @@ public class ServiceReferenceHolder {
                 log.error("Error in obtaining custom publisher class", e);
             }
         }
+    }
+
+    public SynapseConfigurationService getSynapseConfigurationService() {
+        return synapseConfigurationService;
+    }
+
+    public void setSynapseConfigurationService(SynapseConfigurationService synapseConfigurationService) {
+        this.synapseConfigurationService = synapseConfigurationService;
+    }
+
+    public long getGatewayCount() {
+        return gatewayCount;
+    }
+
+    public void setGatewayCount(long gatewayCount) {
+        this.gatewayCount = gatewayCount;
+    }
+
+    public void addLLMProviderService(String type, LLMProviderService llmProviderService) {
+
+        llmProviderServiceMap.put(type, llmProviderService);
+    }
+
+    public void removeLLMProviderService(String type) {
+
+        llmProviderServiceMap.remove(type);
+    }
+
+    public LLMProviderService getLLMProviderService(String type) {
+
+        return llmProviderServiceMap.get(type);
+    }
+
+    public void setWebsocketProcessor(WebSocketProcessor websocketprocessor) {
+        this.websocketprocessor = websocketprocessor;
+    }
+
+    public WebSocketProcessor getWebsocketProcessor() {
+        return websocketprocessor;
+    }
+
+    public void setTenantMgtService(TenantMgtService tenantMgtService) {
+        this.tenantMgtService= tenantMgtService;
+    }
+
+    public TenantMgtService getTenantMgtService() {
+        return tenantMgtService;
+    }
+
+    public RealmService getRealmService() {
+        return realmService;
+    }
+
+    public void setRealmService(RealmService realmService) {
+        this.realmService = realmService;
     }
 }

@@ -31,13 +31,13 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
 import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.core.classloader.annotations.SuppressStaticInitializationFor;
 import org.powermock.modules.junit4.PowerMockRunner;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.BlockConditionNotFoundException;
 import org.wso2.carbon.apimgt.api.FaultGatewaysException;
+import org.wso2.carbon.apimgt.api.doc.model.APIResource;
 import org.wso2.carbon.apimgt.api.dto.UserApplicationAPIUsage;
 import org.wso2.carbon.apimgt.api.model.API;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
@@ -54,15 +54,13 @@ import org.wso2.carbon.apimgt.api.model.CORSConfiguration;
 import org.wso2.carbon.apimgt.api.model.Documentation;
 import org.wso2.carbon.apimgt.api.model.Documentation.DocumentSourceType;
 import org.wso2.carbon.apimgt.api.model.Documentation.DocumentVisibility;
-import org.wso2.carbon.apimgt.api.model.DocumentationContent;
 import org.wso2.carbon.apimgt.api.model.DocumentationType;
 import org.wso2.carbon.apimgt.api.model.KeyManager;
 import org.wso2.carbon.apimgt.api.model.OperationPolicy;
 import org.wso2.carbon.apimgt.api.model.OperationPolicyData;
-import org.wso2.carbon.apimgt.api.model.ResourceFile;
+import org.wso2.carbon.apimgt.api.model.OperationPolicySpecification;
 import org.wso2.carbon.apimgt.api.model.SubscribedAPI;
 import org.wso2.carbon.apimgt.api.model.Subscriber;
-import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.URITemplate;
 import org.wso2.carbon.apimgt.api.model.policy.APIPolicy;
 import org.wso2.carbon.apimgt.api.model.policy.ApplicationPolicy;
@@ -78,7 +76,6 @@ import org.wso2.carbon.apimgt.impl.certificatemgt.CertificateManagerImpl;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.GatewayArtifactsMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.ScopesDAO;
-import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import org.wso2.carbon.apimgt.impl.dto.GatewayArtifactSynchronizerProperties;
 import org.wso2.carbon.apimgt.impl.dto.KeyManagerDto;
 import org.wso2.carbon.apimgt.impl.dto.WorkflowDTO;
@@ -89,6 +86,7 @@ import org.wso2.carbon.apimgt.impl.importexport.APIImportExportException;
 import org.wso2.carbon.apimgt.impl.importexport.ImportExportAPI;
 import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
+import org.wso2.carbon.apimgt.impl.utils.MCPUtils;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowConstants;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowException;
 import org.wso2.carbon.apimgt.impl.workflow.WorkflowExecutor;
@@ -99,18 +97,16 @@ import org.wso2.carbon.apimgt.persistence.dto.MediationInfo;
 import org.wso2.carbon.apimgt.persistence.dto.Organization;
 import org.wso2.carbon.apimgt.persistence.dto.PublisherAPI;
 import org.wso2.carbon.apimgt.persistence.dto.PublisherAPIInfo;
-import org.wso2.carbon.apimgt.persistence.dto.PublisherAPIProduct;
 import org.wso2.carbon.apimgt.persistence.dto.PublisherAPISearchResult;
 import org.wso2.carbon.apimgt.persistence.dto.UserContext;
 import org.wso2.carbon.apimgt.persistence.exceptions.APIPersistenceException;
 import org.wso2.carbon.apimgt.persistence.exceptions.MediationPolicyPersistenceException;
 import org.wso2.carbon.apimgt.persistence.utils.RegistryPersistenceUtil;
+import org.wso2.carbon.apimgt.spec.parser.definitions.OASParserUtil;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
-import org.wso2.carbon.governance.api.exception.GovernanceException;
 import org.wso2.carbon.governance.api.generic.GenericArtifactManager;
 import org.wso2.carbon.governance.api.generic.dataobjects.GenericArtifact;
 import org.wso2.carbon.governance.api.util.GovernanceUtils;
-import org.wso2.carbon.governance.custom.lifecycles.checklist.util.LifecycleBeanPopulator;
 import org.wso2.carbon.registry.core.Collection;
 import org.wso2.carbon.registry.core.Registry;
 import org.wso2.carbon.registry.core.Resource;
@@ -130,16 +126,15 @@ import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.List;
-import java.util.UUID;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.ArrayList;
-
+import java.util.UUID;
 import javax.cache.Caching;
 import javax.xml.namespace.QName;
 import javax.xml.stream.XMLInputFactory;
@@ -158,11 +153,11 @@ import static org.wso2.carbon.apimgt.impl.token.ClaimsRetriever.DEFAULT_DIALECT_
 @SuppressStaticInitializationFor("org.wso2.carbon.context.PrivilegedCarbonContext")
 @PrepareForTest({ ServiceReferenceHolder.class, ApiMgtDAO.class, APIUtil.class, APIGatewayManager.class,
         GovernanceUtils.class, PrivilegedCarbonContext.class, WorkflowExecutorFactory.class, JavaUtils.class,
-        APIProviderImpl.class, APIManagerFactory.class, RegistryUtils.class, LifecycleBeanPopulator.class,
+        APIProviderImpl.class, APIManagerFactory.class, RegistryUtils.class,
         Caching.class, PaginationContext.class, MultitenantUtils.class, AbstractAPIManager.class, OASParserUtil.class,
         KeyManagerHolder.class, CertificateManagerImpl.class , PublisherAPI.class, Organization.class,
-        APIPersistence.class, GatewayArtifactsMgtDAO.class, RegistryPersistenceUtil.class})
-@PowerMockIgnore("org.mockito.*")
+        APIPersistence.class, GatewayArtifactsMgtDAO.class, RegistryPersistenceUtil.class, MCPUtils.class})
+
 public class APIProviderImplTest {
 
     private ApiMgtDAO apimgtDAO;
@@ -189,7 +184,6 @@ public class APIProviderImplTest {
         PowerMockito.mockStatic(RegistryUtils.class);
         PowerMockito.mockStatic(GovernanceUtils.class);
         PowerMockito.mockStatic(WorkflowExecutorFactory.class);
-        PowerMockito.mockStatic(LifecycleBeanPopulator.class);
         PowerMockito.mockStatic(KeyManagerHolder.class);
         PowerMockito.mockStatic(Caching.class);
         PowerMockito.mockStatic(PaginationContext.class);
@@ -452,6 +446,15 @@ public class APIProviderImplTest {
     }
 
     @Test
+    public void testGetBlockConditionsByConditionTypeAndValue() throws APIManagementException {
+        APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apimgtDAO, scopesDAO);
+        List<BlockConditionsDTO> list = new ArrayList<>();
+        Mockito.when(apimgtDAO.getBlockConditionsByConditionTypeAndValue(Mockito.anyString(), Mockito.anyString(),
+                Mockito.anyString())).thenReturn(list);
+        assertNotNull(apiProvider.getLightweightBlockConditions("conditionType", "conditionValue"));
+    }
+
+    @Test
     public void testUpdateBlockCondition() throws APIManagementException {
         APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apimgtDAO, scopesDAO);
         Mockito.when(apimgtDAO.updateBlockConditionState(1, "testState")).thenReturn(false, true);
@@ -544,6 +547,7 @@ public class APIProviderImplTest {
         PowerMockito.when(realmService.getTenantUserRealm(-1234)).thenReturn(userRealm);
         PowerMockito.when(userRealm.getUserStoreManager()).thenReturn(userStoreManager);
         PowerMockito.when(userStoreManager.isExistingUser("admin")).thenReturn(true);
+        PowerMockito.when(MultitenantUtils.getTenantAwareUsername("admin")).thenReturn("admin");
 
         SortedMap<String, String> claimValues = new TreeMap<String, String>();
         claimValues.put("claim1", "http://wso2.org/claim1");
@@ -739,7 +743,7 @@ public class APIProviderImplTest {
     private APIProduct createMockAPIProduct(String provider) {
 
         APIProductIdentifier productIdentifier = new APIProductIdentifier(provider, APIConstants.API_PRODUCT,
-                APIConstants.API_PRODUCT_VERSION);
+                APIConstants.API_PRODUCT_VERSION_1_0_0);
         APIProduct apiProduct = new APIProduct(productIdentifier);
         apiProduct.setContext("/test");
         apiProduct.setState(APIConstants.CREATED);
@@ -912,7 +916,7 @@ public class APIProviderImplTest {
                 + "\"org.wso2.carbon.apimgt.impl.token.DefaultClaimsRetriever\",\"Title\":\"Version $2 of $1 Released\","
                 + "\"Template\":\" <html> <body> <h3 style=\\\"color:Black;\\\">We’re happy to announce the arrival of"
                 + " the next major version $2 of $1 API which is now available in Our API Store.</h3><a href=\\\"https:"
-                + "//localhost:9443/store\\\">Click here to Visit WSO2 API Store</a></body></html>\"}]}],"
+                + "//localhost:9443/devportal\\\">Click here to Visit WSO2 API Store</a></body></html>\"}]}],"
                 + "\"DefaultRoles\":{\"PublisherRole\":{\"CreateOnTenantLoad\":true,\"RoleName\":"
                 + "\"Internal/publisher\"},\"CreatorRole\":{\"CreateOnTenantLoad\":true,\"RoleName\":"
                 + "\"Internal/creator\"},\"SubscriberRole\":{\"CreateOnTenantLoad\":true}}}";
@@ -1161,6 +1165,7 @@ public class APIProviderImplTest {
         Mockito.when(apimgtDAO.getMostRecentRevisionId(Mockito.anyString())).thenReturn(0);
         Mockito.when(APIUtil.getAPIIdentifierFromUUID(Mockito.anyString())).thenReturn(apiId);
         Mockito.when(APIUtil.getAPIPath(apiId)).thenReturn(apiPath);
+        Mockito.when(apimgtDAO.getAPITypeFromUUID(Mockito.anyString())).thenReturn(APIConstants.API_TYPE_HTTP);
         PowerMockito.when(apiPersistenceInstance.addAPIRevision(any(Organization.class), Mockito.anyString(), Mockito.anyInt()))
                 .thenReturn("b55e0fc3-9829-4432-b99e-02056dc91838");
         Mockito.when(APIUtil.getTenantConfig(Mockito.anyString())).thenReturn(new JSONObject());
@@ -1197,6 +1202,7 @@ public class APIProviderImplTest {
         Mockito.when(apimgtDAO.getMostRecentRevisionId(Mockito.anyString())).thenReturn(0);
         Mockito.when(APIUtil.getAPIIdentifierFromUUID(Mockito.anyString())).thenReturn(apiId);
         Mockito.when(APIUtil.getAPIPath(apiId)).thenReturn(apiPath);
+        Mockito.when(apimgtDAO.getAPITypeFromUUID(Mockito.anyString())).thenReturn(APIConstants.API_TYPE_HTTP);
 
         PowerMockito.when(apiPersistenceInstance.addAPIRevision(any(Organization.class), Mockito.anyString(), Mockito.anyInt()))
                 .thenReturn("b55e0fc3-9829-4432-b99e-02056dc91838");
@@ -1237,6 +1243,7 @@ public class APIProviderImplTest {
         Mockito.when(APIUtil.getAPIIdentifierFromUUID(Mockito.anyString())).thenReturn(apiId);
         Mockito.when(APIUtil.getAPIPath(apiId)).thenReturn(apiPath);
         Mockito.when(APIUtil.getTenantConfig(Mockito.anyString())).thenReturn(new JSONObject());
+        Mockito.when(apimgtDAO.getAPITypeFromUUID(Mockito.anyString())).thenReturn(APIConstants.API_TYPE_HTTP);
         PowerMockito.when(apiPersistenceInstance.addAPIRevision(any(Organization.class), Mockito.anyString(), Mockito.anyInt()))
                 .thenReturn("b55e0fc3-9829-4432-b99e-02056dc91838");
         try {
@@ -1258,24 +1265,54 @@ public class APIProviderImplTest {
     public void testRestoreAPIRevision() throws APIManagementException, APIPersistenceException {
         ImportExportAPI importExportAPI = Mockito.mock(ImportExportAPI.class);
         ArtifactSaver artifactSaver = Mockito.mock(ArtifactSaver.class);
-        APIProviderImplWrapper apiProvider =
-                new APIProviderImplWrapper(apiPersistenceInstance, apimgtDAO, importExportAPI, gatewayArtifactsMgtDAO,
-                        artifactSaver);
         APIIdentifier apiId = new APIIdentifier("admin", "PizzaShackAPI", "1.0.0",
                 "63e1e37e-a5b8-4be6-86a5-d6ae0749f131");
+        APIIdentifier revisionedApiId = new APIIdentifier("admin", "PizzaShackAPI", "1.0.0",
+                "b55e0fc3-9829-4432-b99e-02056dc91838");
         API api = new API(apiId);
         api.setContext("/test");
         api.setStatus(APIConstants.CREATED);
         String apiPath = "/apimgt/applicationdata/provider/admin/PizzaShackAPI/1.0.0/api";
 
+        Set<URITemplate> uriTemplates = new HashSet<URITemplate>();
+
+        URITemplate uriTemplate1 = new URITemplate();
+        uriTemplate1.setHTTPVerb("POST");
+        uriTemplate1.setAuthType("Application");
+        uriTemplate1.setUriTemplate("/add");
+        uriTemplate1.setThrottlingTier("Gold");
+        uriTemplates.add(uriTemplate1);
+
+        List<APIResource> productResources = new ArrayList<>();
+
+        API revisionedApi = new API(revisionedApiId);
+        revisionedApi.setRevisionedApiId("63e1e37e-a5b8-4be6-86a5-d6ae0749f131");
+        revisionedApi.setRevision(true);
+        revisionedApi.setUriTemplates(uriTemplates);
+
         APIRevision apiRevision = new APIRevision();
         apiRevision.setApiUUID("63e1e37e-a5b8-4be6-86a5-d6ae0749f131");
         apiRevision.setDescription("test description revision 1");
+
+        APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apiPersistenceInstance, apimgtDAO,
+                importExportAPI, gatewayArtifactsMgtDAO, artifactSaver) {
+            @Override
+            public API getAPIbyUUID(String uuid, String org) {
+                return revisionedApi;
+            }
+
+            @Override
+            public List<APIResource> getUsedProductResources(String uuid) {
+                return productResources;
+            }
+        };
+
         Mockito.when(apimgtDAO.getRevisionCountByAPI(Mockito.anyString())).thenReturn(0);
         Mockito.when(apimgtDAO.getMostRecentRevisionId(Mockito.anyString())).thenReturn(0);
         Mockito.when(APIUtil.getAPIIdentifierFromUUID(Mockito.anyString())).thenReturn(apiId);
         Mockito.when(APIUtil.getAPIPath(apiId)).thenReturn(apiPath);
         Mockito.when(APIUtil.getTenantConfig(Mockito.anyString())).thenReturn(new JSONObject());
+        Mockito.when(apimgtDAO.getAPITypeFromUUID(Mockito.anyString())).thenReturn(APIConstants.API_TYPE_HTTP);
         PowerMockito.when(apiPersistenceInstance.addAPIRevision(any(Organization.class), Mockito.anyString(), Mockito.anyInt()))
                 .thenReturn("b55e0fc3-9829-4432-b99e-02056dc91838");
         try {
@@ -1284,6 +1321,10 @@ public class APIProviderImplTest {
             Assert.fail(e.getMessage());
         }
         Mockito.when(apimgtDAO.getRevisionByRevisionUUID(Mockito.anyString())).thenReturn(apiRevision);
+        Mockito.when(apimgtDAO.getAPIOperationMappingsReferencedByAPIID(Mockito.anyInt())).thenReturn(new HashMap<>());
+        PowerMockito.mockStatic(MCPUtils.class);
+        PowerMockito.doNothing().when(MCPUtils.class);
+        MCPUtils.validateMCPResources(Mockito.anyString(), Mockito.anyString(), Mockito.anySet());
         PowerMockito.doNothing().when(apiPersistenceInstance).restoreAPIRevision(any(Organization.class),
                 Mockito.anyString(), Mockito.anyString(), Mockito.anyInt());
         try {
@@ -1321,6 +1362,7 @@ public class APIProviderImplTest {
         Mockito.when(APIUtil.getAPIIdentifierFromUUID(Mockito.anyString())).thenReturn(apiId);
         Mockito.when(APIUtil.getAPIPath(apiId)).thenReturn(apiPath);
         Mockito.when(APIUtil.getTenantConfig(Mockito.anyString())).thenReturn(new JSONObject());
+        Mockito.when(apimgtDAO.getAPITypeFromUUID(Mockito.anyString())).thenReturn(APIConstants.API_TYPE_HTTP);
         PowerMockito.when(apiPersistenceInstance.addAPIRevision(any(Organization.class), Mockito.anyString(), Mockito.anyInt()))
                 .thenReturn("b55e0fc3-9829-4432-b99e-02056dc91838");
         try {
@@ -1364,7 +1406,7 @@ public class APIProviderImplTest {
     }
 
     @Test
-    public void testOperationPolicyListingWhenMediationPoliciesExists() throws APIManagementException {
+    public void testApiPolicyListingWhenMediationPoliciesExists() throws APIManagementException {
 
         APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apimgtDAO, scopesDAO);
         APIIdentifier apiId = new APIIdentifier("admin", "PizzaShackAPI", "1.0.0",
@@ -1402,17 +1444,15 @@ public class APIProviderImplTest {
                 APIConstants.DEFAULT_POLICY_VERSION, api.getUuid(), null, superTenantDomain, false)).thenReturn(null);
 
         PowerMockito.when(APIUtil.isSequenceDefined(Mockito.anyString())).thenReturn(true);
-        apiProvider.loadMediationPoliciesAsOperationPoliciesToAPI(api, superTenantDomain);
+        apiProvider.loadMediationPoliciesFromMigratedAPIToAPI(api, superTenantDomain);
 
-        Assert.assertNotNull(uriTemplate1.getOperationPolicies());
-        Assert.assertNotNull(uriTemplate2.getOperationPolicies());
-        Assert.assertEquals(uriTemplate1.getOperationPolicies().size(), 3);
-        Assert.assertEquals(uriTemplate2.getOperationPolicies().size(), 3);
-        Assert.assertEquals(uriTemplate1.getOperationPolicies().get(0).getPolicyName(), "test-sequence");
+        Assert.assertNotNull(api.getApiPolicies());
+        Assert.assertEquals(api.getApiPolicies().size(), 3);
+        Assert.assertEquals(api.getApiPolicies().get(0).getPolicyName(), "test-sequence");
     }
 
     @Test
-    public void testOperationPolicyListingWhenMediationPoliciesExistsAndPolicyAlreadyMigrated() throws APIManagementException {
+    public void testApiPolicyListingWhenMediationPoliciesExistsAndPolicyAlreadyMigrated() throws APIManagementException {
 
         APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apimgtDAO, scopesDAO);
         APIIdentifier apiId = new APIIdentifier("admin", "PizzaShackAPI", "1.0.0",
@@ -1454,25 +1494,24 @@ public class APIProviderImplTest {
                 APIConstants.DEFAULT_POLICY_VERSION, api.getUuid(), null, superTenantDomain, false)).thenReturn(policyData);
 
         PowerMockito.when(APIUtil.isSequenceDefined(Mockito.anyString())).thenReturn(true);
-        apiProvider.loadMediationPoliciesAsOperationPoliciesToAPI(api, superTenantDomain);
+        apiProvider.loadMediationPoliciesFromMigratedAPIToAPI(api, superTenantDomain);
 
-        for (URITemplate template : api.getUriTemplates()) {
-            for (OperationPolicy policy : template.getOperationPolicies()) {
-                if (APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST.equals(policy.getDirection())) {
-                    Assert.assertEquals(policy.getPolicyId(), policyId);
-                }
-                if (APIConstants.OPERATION_SEQUENCE_TYPE_RESPONSE.equals(policy.getDirection())) {
-                    Assert.assertNull(policy.getPolicyId());
-                }
-                if (APIConstants.OPERATION_SEQUENCE_TYPE_FAULT.equals(policy.getDirection())) {
-                    Assert.assertEquals(policy.getPolicyId(), policyId);
-                }
+
+        for (OperationPolicy policy : api.getApiPolicies()) {
+            if (APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST.equals(policy.getDirection())) {
+                Assert.assertEquals(policy.getPolicyId(), policyId);
+            }
+            if (APIConstants.OPERATION_SEQUENCE_TYPE_RESPONSE.equals(policy.getDirection())) {
+                Assert.assertNull(policy.getPolicyId());
+            }
+            if (APIConstants.OPERATION_SEQUENCE_TYPE_FAULT.equals(policy.getDirection())) {
+                Assert.assertEquals(policy.getPolicyId(), policyId);
             }
         }
     }
 
     @Test
-    public void testMigrationOfMediationPoliciesToOperationPolicies()
+    public void testMigrationOfMediationPoliciesToAPIPolicies()
             throws APIManagementException, MediationPolicyPersistenceException {
 
         String apiuuid = "63e1e37e-a5b8-4be6-86a5-d6ae0749f131";
@@ -1492,6 +1531,12 @@ public class APIProviderImplTest {
 
         OperationPolicyData policyData = new OperationPolicyData();
         policyData.setPolicyId("11111");
+        OperationPolicySpecification policySpecification = new OperationPolicySpecification();
+        policySpecification.setCategory(OperationPolicySpecification.PolicyCategory.Mediation);
+        policySpecification.setName("in-policy");
+        policySpecification.setDisplayName("in-policy");
+        policySpecification.setDescription("This is a mediation policy migrated to an operation policy.");
+        policyData.setSpecification(policySpecification);
 
         PowerMockito.when(apiPersistenceInstance.getAllMediationPolicies(any(Organization.class), any(String.class))).thenReturn(localPolicies);
         PowerMockito.when(apiPersistenceInstance.getMediationPolicy(any(Organization.class), any(String.class), any(String.class))).thenReturn(mediationPolicy);
@@ -1509,12 +1554,14 @@ public class APIProviderImplTest {
         appliedPolicy.setOrder(1);
         appliedPolicy.setDirection(APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST);
 
+        List<OperationPolicy> policyList = new ArrayList<>();
+        policyList.add(APIProviderImpl.cloneOperationPolicy(appliedPolicy));
+
         URITemplate uriTemplate1 = new URITemplate();
         uriTemplate1.setHTTPVerb("POST");
         uriTemplate1.setAuthType("Application");
         uriTemplate1.setUriTemplate("/add");
         uriTemplate1.setThrottlingTier("Gold");
-        uriTemplate1.addOperationPolicy(APIProviderImpl.cloneOperationPolicy(appliedPolicy));
         uriTemplates.add(uriTemplate1);
 
         URITemplate uriTemplate2 = new URITemplate();
@@ -1522,11 +1569,11 @@ public class APIProviderImplTest {
         uriTemplate2.setAuthType("Application");
         uriTemplate2.setUriTemplate("/update");
         uriTemplate2.setThrottlingTier("Gold");
-        uriTemplate2.addOperationPolicy(APIProviderImpl.cloneOperationPolicy(appliedPolicy));
         uriTemplates.add(uriTemplate2);
 
         api.setUriTemplates(uriTemplates);
         api.setInSequence("in-policy");
+        api.setApiPolicies(policyList);
 
         PowerMockito.when(APIUtil.isSequenceDefined(api.getInSequence())).thenReturn(true);
 
@@ -1538,13 +1585,11 @@ public class APIProviderImplTest {
 
         apiProvider.migrateMediationPoliciesOfAPI(api, superTenantDomain, false);
 
-        for (URITemplate template : api.getUriTemplates()) {
-            for (OperationPolicy policy : template.getOperationPolicies()) {
-                if (APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST.equals(policy.getDirection())) {
-                    Assert.assertEquals(policy.getPolicyId(), "11111");
-                } else {
-                    Assert.fail("template " + template.getUriTemplate() + " should not contain other paths for operation policies");
-                }
+        for (OperationPolicy policy : api.getApiPolicies()) {
+            if (APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST.equals(policy.getDirection())) {
+                Assert.assertEquals(policy.getPolicyId(), "11111");
+            } else {
+                Assert.fail("should not contain other paths for api policies");
             }
         }
         Assert.assertNull(api.getInSequence());
@@ -1553,7 +1598,7 @@ public class APIProviderImplTest {
 
 
     @Test
-    public void testMigrationOfMediationPoliciesToOperationPoliciesIfPoliciesAlreadyMigrated()
+    public void testMigrationOfMediationPoliciesToAPIPoliciesIfPoliciesAlreadyMigrated()
             throws APIManagementException, MediationPolicyPersistenceException {
 
         String apiuuid = "63e1e37e-a5b8-4be6-86a5-d6ae0749f131";
@@ -1590,12 +1635,14 @@ public class APIProviderImplTest {
         appliedPolicy.setOrder(1);
         appliedPolicy.setDirection(APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST);
 
+        List<OperationPolicy> policyList = new ArrayList<>();
+        policyList.add(APIProviderImpl.cloneOperationPolicy(appliedPolicy));
+
         URITemplate uriTemplate1 = new URITemplate();
         uriTemplate1.setHTTPVerb("POST");
         uriTemplate1.setAuthType("Application");
         uriTemplate1.setUriTemplate("/add");
         uriTemplate1.setThrottlingTier("Gold");
-        uriTemplate1.addOperationPolicy(APIProviderImpl.cloneOperationPolicy(appliedPolicy));
         uriTemplates.add(uriTemplate1);
 
         URITemplate uriTemplate2 = new URITemplate();
@@ -1603,11 +1650,11 @@ public class APIProviderImplTest {
         uriTemplate2.setAuthType("Application");
         uriTemplate2.setUriTemplate("/update");
         uriTemplate2.setThrottlingTier("Gold");
-        uriTemplate2.addOperationPolicy(APIProviderImpl.cloneOperationPolicy(appliedPolicy));
         uriTemplates.add(uriTemplate2);
 
         api.setUriTemplates(uriTemplates);
         api.setInSequence("in-policy");
+        api.setApiPolicies(policyList);
 
         PowerMockito.when(APIUtil.isSequenceDefined(api.getInSequence())).thenReturn(true);
 
@@ -1616,13 +1663,11 @@ public class APIProviderImplTest {
 
         apiProvider.migrateMediationPoliciesOfAPI(api, superTenantDomain, false);
 
-        for (URITemplate template : api.getUriTemplates()) {
-            for (OperationPolicy policy : template.getOperationPolicies()) {
-                if (APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST.equals(policy.getDirection())) {
-                    Assert.assertEquals(policy.getPolicyId(), "11111");
-                } else {
-                    Assert.fail("template " + template.getUriTemplate() + " should not contain other paths for operation policies");
-                }
+        for (OperationPolicy policy : api.getApiPolicies()) {
+            if (APIConstants.OPERATION_SEQUENCE_TYPE_REQUEST.equals(policy.getDirection())) {
+                Assert.assertEquals(policy.getPolicyId(), "11111");
+            } else {
+                Assert.fail("Should not contain other paths for API policies");
             }
         }
 
@@ -1660,9 +1705,7 @@ public class APIProviderImplTest {
                 Mockito.anyString(),
                 Mockito.anyInt(),
                 Mockito.anyInt(),
-                Mockito.any(UserContext.class),
-                Mockito.anyString(),
-                Mockito.anyString())).thenReturn(returnSearchAPIs);
+                Mockito.any(UserContext.class))).thenReturn(returnSearchAPIs);
 
         APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apiPersistenceInstance, apimgtDAO, scopesDAO);
 
@@ -1695,9 +1738,7 @@ public class APIProviderImplTest {
                 Mockito.anyString(),
                 Mockito.anyInt(),
                 Mockito.anyInt(),
-                Mockito.any(UserContext.class),
-                Mockito.anyString(),
-                Mockito.anyString())).thenReturn(null);
+                Mockito.any(UserContext.class))).thenReturn(null);
 
         APIProviderImplWrapper apiProvider = new APIProviderImplWrapper(apiPersistenceInstance, apimgtDAO, scopesDAO);
 

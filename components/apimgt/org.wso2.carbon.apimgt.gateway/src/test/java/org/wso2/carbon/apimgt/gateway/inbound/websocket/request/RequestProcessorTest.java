@@ -26,15 +26,20 @@ import org.mockito.Mockito;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.wso2.carbon.apimgt.gateway.handlers.WebsocketUtil;
+import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityException;
 import org.wso2.carbon.apimgt.gateway.inbound.InboundMessageContext;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.InboundProcessorResponseDTO;
 import org.wso2.carbon.apimgt.gateway.inbound.websocket.utils.InboundWebsocketProcessorUtil;
+import org.wso2.carbon.apimgt.gateway.internal.ServiceReferenceHolder;
+import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
+import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 
 /**
  * Test class for RequestProcessor.
  */
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({ InboundWebsocketProcessorUtil.class })
+@PrepareForTest({ InboundWebsocketProcessorUtil.class, ServiceReferenceHolder.class, APIUtil.class, WebsocketUtil.class})
 public class RequestProcessorTest {
     private RequestProcessor requestProcessor;
     private int msgSize = 22;
@@ -42,25 +47,36 @@ public class RequestProcessorTest {
     private InboundMessageContext inboundMessageContext;
 
     @Before
-    public void setup() {
+    public void setup() throws Exception {
         requestProcessor = new RequestProcessor();
         PowerMockito.mockStatic(InboundWebsocketProcessorUtil.class);
         inboundMessageContext = Mockito.mock(InboundMessageContext.class);
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        ServiceReferenceHolder serviceReferenceHolder = Mockito.mock(ServiceReferenceHolder.class);
+        PowerMockito.when(ServiceReferenceHolder.getInstance()).thenReturn(serviceReferenceHolder);
+        APIManagerConfiguration apiManagerConfiguration = Mockito.mock(APIManagerConfiguration.class);
+        PowerMockito.when(serviceReferenceHolder.getAPIManagerConfiguration()).thenReturn(apiManagerConfiguration);
+
+        PowerMockito.mockStatic(APIUtil.class);
+        PowerMockito.when(APIUtil.getOAuthConfigurationFromAPIMConfig(Mockito.anyString())).thenReturn("");
+
+        PowerMockito.mockStatic(WebsocketUtil.class);
     }
 
     @Test
-    public void testHandleRequest() {
+    public void testHandleRequest() throws APISecurityException {
         InboundProcessorResponseDTO responseDTO = new InboundProcessorResponseDTO();
         PowerMockito.when(InboundWebsocketProcessorUtil.authenticateToken(inboundMessageContext))
                 .thenReturn(responseDTO);
         PowerMockito.when(InboundWebsocketProcessorUtil.doThrottle(msgSize, null, inboundMessageContext, responseDTO))
                 .thenReturn(responseDTO);
+        PowerMockito.when(WebsocketUtil.validateDenyPolicies(Mockito.anyObject())).thenReturn(responseDTO);
         responseDTO = requestProcessor.handleRequest(msgSize, msgText, inboundMessageContext);
         Assert.assertFalse(responseDTO.isError());
     }
 
     @Test
-    public void testHandleRequestAuthenticationTokenError() {
+    public void testHandleRequestAuthenticationTokenError() throws APISecurityException {
         InboundProcessorResponseDTO errorResponseDTO = new InboundProcessorResponseDTO();
         errorResponseDTO.setError(true);
         PowerMockito.when(InboundWebsocketProcessorUtil.authenticateToken(inboundMessageContext))
@@ -71,7 +87,7 @@ public class RequestProcessorTest {
     }
 
     @Test
-    public void testHandleRequestDoThrottleError() {
+    public void testHandleRequestDoThrottleError() throws APISecurityException {
         InboundProcessorResponseDTO responseDTO = new InboundProcessorResponseDTO();
         InboundProcessorResponseDTO errorResponseDTO = new InboundProcessorResponseDTO();
         errorResponseDTO.setError(true);
@@ -79,6 +95,7 @@ public class RequestProcessorTest {
                 .thenReturn(responseDTO);
         PowerMockito.when(InboundWebsocketProcessorUtil.doThrottle(msgSize, null, inboundMessageContext, responseDTO))
                 .thenReturn(errorResponseDTO);
+        PowerMockito.when(WebsocketUtil.validateDenyPolicies(Mockito.anyObject())).thenReturn(responseDTO);
         responseDTO = requestProcessor.handleRequest(msgSize, msgText, inboundMessageContext);
         Assert.assertTrue(responseDTO.isError());
     }

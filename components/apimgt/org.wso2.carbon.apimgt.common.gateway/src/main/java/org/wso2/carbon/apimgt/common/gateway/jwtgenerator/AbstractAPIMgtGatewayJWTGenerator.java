@@ -20,8 +20,10 @@ package org.wso2.carbon.apimgt.common.gateway.jwtgenerator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jwt.JWTClaimsSet;
+import net.minidev.json.JSONObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.json.JSONException;
 import org.wso2.carbon.apimgt.common.gateway.constants.JWTConstants;
 import org.wso2.carbon.apimgt.common.gateway.dto.JWTConfigurationDto;
 import org.wso2.carbon.apimgt.common.gateway.dto.JWTInfoDto;
@@ -33,6 +35,7 @@ import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -47,12 +50,14 @@ public abstract class AbstractAPIMgtGatewayJWTGenerator {
     public static final String NONE = "NONE";
     public static final String SHA256_WITH_RSA = "SHA256withRSA";
     public static final String API_GATEWAY_ID = "wso2.org/products/am";
-    public JWTConfigurationDto jwtConfigurationDto;
+    protected JWTConfigurationDto jwtConfigurationDto;
 
     private static volatile long ttl = -1L;
-    public String dialectURI;
+    private String dialectURI;
 
-    public String signatureAlgorithm;
+    private String signatureAlgorithm;
+
+    private boolean useSHA256Hash = false;
 
     public AbstractAPIMgtGatewayJWTGenerator() {
     }
@@ -68,6 +73,7 @@ public abstract class AbstractAPIMgtGatewayJWTGenerator {
                 || SHA256_WITH_RSA.equals(signatureAlgorithm))) {
             signatureAlgorithm = SHA256_WITH_RSA;
         }
+        useSHA256Hash = jwtConfigurationDto.useSHA256Hash();
 
     }
 
@@ -104,19 +110,22 @@ public abstract class AbstractAPIMgtGatewayJWTGenerator {
 
     public String buildHeader() throws JWTGeneratorException {
         String jwtHeader = null;
+        X509Certificate x509Certificate = (X509Certificate) jwtConfigurationDto.getPublicCert();
 
-        if (NONE.equals(signatureAlgorithm)) {
-            StringBuilder jwtHeaderBuilder = new StringBuilder();
-            jwtHeaderBuilder.append("{\"typ\":\"JWT\",");
-            jwtHeaderBuilder.append("\"alg\":\"");
-            jwtHeaderBuilder.append(JWTUtil.getJWSCompliantAlgorithmCode(NONE));
-            jwtHeaderBuilder.append('\"');
-            jwtHeaderBuilder.append('}');
-
-            jwtHeader = jwtHeaderBuilder.toString();
-
-        } else if (SHA256_WITH_RSA.equals(signatureAlgorithm)) {
-            jwtHeader = addCertToHeader();
+        try {
+            if (NONE.equals(signatureAlgorithm)) {
+                JSONObject jwtHeaderBuilder = new JSONObject();
+                jwtHeaderBuilder.put("typ", "JWT");
+                jwtHeaderBuilder.put("alg", JWTUtil.getJWSCompliantAlgorithmCode(NONE));
+                if (jwtConfigurationDto.useKid()) {
+                    jwtHeaderBuilder.put("kid", JWTUtil.getKID(x509Certificate));
+                }
+                jwtHeader = jwtHeaderBuilder.toJSONString();
+            } else if (SHA256_WITH_RSA.equals(signatureAlgorithm)) {
+                jwtHeader = addCertToHeader();
+            }
+        } catch (JSONException e) {
+            throw new JWTGeneratorException("Encountered an error while generating JWT header json object", e);
         }
         return jwtHeader;
     }
@@ -140,7 +149,8 @@ public abstract class AbstractAPIMgtGatewayJWTGenerator {
 
         try {
             Certificate publicCert = jwtConfigurationDto.getPublicCert();
-            return JWTUtil.generateHeader(publicCert, signatureAlgorithm);
+            return JWTUtil.generateHeader(publicCert, signatureAlgorithm, jwtConfigurationDto.useKid(),
+                    useSHA256Hash, jwtConfigurationDto.isEncodeX5tWithoutPadding());
         } catch (Exception e) {
             String error = "Error in obtaining keystore";
             throw new JWTGeneratorException(error, e);
@@ -164,7 +174,8 @@ public abstract class AbstractAPIMgtGatewayJWTGenerator {
         ObjectMapper mapper = new ObjectMapper();
         for (Map.Entry<String, Object> claimEntry : claims.entrySet()) {
             Object claimVal = claimEntry.getValue();
-            if (claimVal instanceof String && claimEntry.toString().contains("{")) {
+            if (claimVal instanceof String && claimVal.toString().startsWith("{") &&
+                    claimVal.toString().endsWith("}")) {
                 try {
                     Map<String, String> map = mapper.readValue(claimVal.toString(), Map.class);
                     jwtClaimSetBuilder.claim(claimEntry.getKey(), map);
@@ -198,17 +209,26 @@ public abstract class AbstractAPIMgtGatewayJWTGenerator {
         //Adding JWT standard claim
         jwtClaimSetBuilder.jwtID(UUID.randomUUID().toString());
         JWTClaimsSet jwtClaimsSet = jwtClaimSetBuilder.build();
-        return jwtClaimsSet.toJSONObject().toString();
+        Map<String, Object> claimMap = jwtClaimsSet.toJSONObject();
+        return new JSONObject(claimMap).toJSONString();
     }
 
     public String encode(byte[] stringToBeEncoded) throws JWTGeneratorException {
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(stringToBeEncoded);
+        if (jwtConfigurationDto.isEnableBase64Padding()) {
+            return java.util.Base64.getEncoder().encodeToString(stringToBeEncoded);
+        } else {
+            return java.util.Base64.getEncoder().withoutPadding().encodeToString(stringToBeEncoded);
+        }
     }
 
     public String getDialectURI() {
         return dialectURI;
     }
 
+    public String getSignatureAlgorithm() {
+        return signatureAlgorithm;
+    }
+    
     public abstract Map<String, Object> populateStandardClaims(JWTInfoDto jwtInfoDto);
 
     public abstract Map<String, Object> populateCustomClaims(JWTInfoDto jwtInfoDto);

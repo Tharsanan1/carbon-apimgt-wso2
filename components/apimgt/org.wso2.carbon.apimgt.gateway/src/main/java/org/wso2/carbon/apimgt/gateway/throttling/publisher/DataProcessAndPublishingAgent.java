@@ -6,6 +6,7 @@ import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.transport.passthru.util.RelayUtils;
@@ -22,16 +23,14 @@ import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.databridge.agent.DataPublisher;
 
 import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import javax.xml.stream.XMLStreamException;
+
+import static org.wso2.carbon.apimgt.api.APIConstants.AIAPIConstants.*;
 
 /**
  * This class is responsible for executing data publishing logic. This class implements runnable interface and
@@ -41,12 +40,9 @@ import javax.xml.stream.XMLStreamException;
  */
 public class DataProcessAndPublishingAgent implements Runnable {
     private static final Log log = LogFactory.getLog(DataProcessAndPublishingAgent.class);
-
     private static String streamID = "org.wso2.throttle.request.stream:1.0.0";
     private MessageContext messageContext;
     private DataPublisher dataPublisher;
-
-
 
     String applicationLevelThrottleKey;
     String applicationLevelTier;
@@ -64,11 +60,14 @@ public class DataProcessAndPublishingAgent implements Runnable {
     String apiName;
     String appId;
     String ipAddress;
+    Long totalTokens = 0L;
+    Long promptTokens = 0L;
+    Long completionTokens = 0L;
     Map<String, String> headersMap;
     Map<String, Object> customPropertyMap;
     private AuthenticationContext authenticationContext;
 
-    private long messageSizeInBytes;
+    private long messageSizeInBytes = 0L;
 
     public DataProcessAndPublishingAgent() {
 
@@ -99,7 +98,10 @@ public class DataProcessAndPublishingAgent implements Runnable {
         this.apiName = null;
         this.ipAddress = null;
         this.headersMap = null;
-        this.messageSizeInBytes = 0;
+        this.totalTokens = 0L;
+        this.promptTokens = 0L;
+        this.completionTokens = 0L;
+        this.messageSizeInBytes = 0L;
         this.customPropertyMap = Collections.emptyMap();
     }
 
@@ -134,6 +136,9 @@ public class DataProcessAndPublishingAgent implements Runnable {
         this.appId = appId;
         this.apiName = GatewayUtils.getAPINameFromContextAndVersion(messageContext);
         this.messageSizeInBytes = 0;
+        this.totalTokens = 0L;
+        this.promptTokens = 0L;
+        this.completionTokens = 0L;
 
         ArrayList<VerbInfoDTO> list = (ArrayList<VerbInfoDTO>) messageContext.getProperty(APIConstants.VERB_INFO_DTO);
         boolean isVerbInfoContentAware = false;
@@ -148,7 +153,13 @@ public class DataProcessAndPublishingAgent implements Runnable {
         Map<String, String> transportHeaderMap = (Map<String, String>) axis2MessageContext
                 .getProperty(org.apache.axis2.context.MessageContext.TRANSPORT_HEADERS);
         if (transportHeaderMap != null) {
-            this.headersMap = new HashMap<>(transportHeaderMap);
+            // convert all transport headers to lower case in order to make the header condition based throttling
+            // case-insensitive
+            Map<String, String> lowerCaseTransportHeaderMap = new HashMap<>();
+            for (Map.Entry<String, String> entry : transportHeaderMap.entrySet()) {
+                lowerCaseTransportHeaderMap.put(entry.getKey().toLowerCase(), String.valueOf(entry.getValue()));
+            }
+            this.headersMap = new HashMap<>(lowerCaseTransportHeaderMap);
         }
 
         if (messageContext.getProperty(APIThrottleConstants.CUSTOM_PROPERTY) != null) {
@@ -191,6 +202,25 @@ public class DataProcessAndPublishingAgent implements Runnable {
                 } 
             }
         }
+
+        if (messageContext.getProperty(AI_API_RESPONSE_METADATA) != null) {
+            Map<String, String> responseMetadata = (Map<String, String>) messageContext
+                    .getProperty(AI_API_RESPONSE_METADATA);
+            if (responseMetadata != null) {
+                if (null != responseMetadata.get(LLM_PROVIDER_SERVICE_METADATA_TOTAL_TOKEN_COUNT)) {
+                    totalTokens =
+                            Long.parseLong(responseMetadata.get(LLM_PROVIDER_SERVICE_METADATA_TOTAL_TOKEN_COUNT));
+                }
+                if (null != responseMetadata.get(LLM_PROVIDER_SERVICE_METADATA_PROMPT_TOKEN_COUNT)) {
+                    promptTokens =
+                            Long.parseLong(responseMetadata.get(LLM_PROVIDER_SERVICE_METADATA_PROMPT_TOKEN_COUNT));
+                }
+                if (null != responseMetadata.get(LLM_PROVIDER_SERVICE_METADATA_COMPLETION_TOKEN_COUNT)) {
+                    completionTokens =
+                            Long.parseLong(responseMetadata.get(LLM_PROVIDER_SERVICE_METADATA_COMPLETION_TOKEN_COUNT));
+                }
+            }
+        }
     }
 
     public void run() {
@@ -203,18 +233,15 @@ public class DataProcessAndPublishingAgent implements Runnable {
                 log.warn("Client port will be ignored and only the IP address (IPV4) will concern from " + ipAddress);
                 ipAddress = ipAddress.split(":")[0];
             }
-            try {
-                InetAddress address = APIUtil.getAddress(ipAddress);
-                if (address instanceof Inet4Address) {
-                    jsonObMap.put(APIThrottleConstants.IP, APIUtil.ipToLong(ipAddress));
-                    jsonObMap.put(APIThrottleConstants.IPv6, 0);
-                } else if (address instanceof Inet6Address) {
-                    jsonObMap.put(APIThrottleConstants.IPv6, APIUtil.ipToBigInteger(ipAddress));
-                    jsonObMap.put(APIThrottleConstants.IP, 0);
-                }
-            } catch (UnknownHostException e) {
-                //send empty value as ip
-                log.error("Error while parsing host IP " + ipAddress, e);
+            InetAddressValidator validator = InetAddressValidator.getInstance();
+            if (validator.isValidInet4Address(ipAddress)) {
+                jsonObMap.put(APIThrottleConstants.IP, APIUtil.ipToLong(ipAddress));
+                jsonObMap.put(APIThrottleConstants.IPv6, 0);
+            } else if (validator.isValidInet6Address(ipAddress)) {
+                jsonObMap.put(APIThrottleConstants.IPv6, APIUtil.ipToBigInteger(ipAddress));
+                jsonObMap.put(APIThrottleConstants.IP, 0);
+            } else {
+                log.error("Error while parsing host IP " + ipAddress);
                 jsonObMap.put(APIThrottleConstants.IPv6, 0);
                 jsonObMap.put(APIThrottleConstants.IP, 0);
             }
@@ -274,6 +301,16 @@ public class DataProcessAndPublishingAgent implements Runnable {
                 jsonObMap.put(APIThrottleConstants.SUBSCRIPTION_TYPE, APIConstants.API_SUBSCRIPTION_TYPE);
             }
 
+        }
+
+        if (totalTokens != null) {
+            jsonObMap.put(APIThrottleConstants.TOTAL_TOKENS, totalTokens);
+        }
+        if (promptTokens != null) {
+            jsonObMap.put(APIThrottleConstants.PROMPT_TOKENS, promptTokens);
+        }
+        if (completionTokens != null) {
+            jsonObMap.put(APIThrottleConstants.COMPLETION_TOKENS, completionTokens);
         }
 
         Object[] objects = new Object[]{messageContext.getMessageID(),

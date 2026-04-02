@@ -20,6 +20,7 @@ public class PublisherSearchContent implements SearchContent {
     String id;
     String type = "API";
     String name;
+    String displayName;
     String transportType = "HTTP";
     String description;
     String context;
@@ -28,6 +29,14 @@ public class PublisherSearchContent implements SearchContent {
     String status;
     String thumbnailUri;
     Boolean advertiseOnly;
+    String businessOwner;
+    String businessOwnerEmail;
+    String technicalOwner;
+    String technicalOwnerEmail;
+    Boolean isMonetizationEnabled;
+    String createdTime;
+    String updatedTime;
+    String gatewayVendor;
 
     @Override
     public String getId() {
@@ -45,6 +54,38 @@ public class PublisherSearchContent implements SearchContent {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getUpdatedTime() {
+        return updatedTime;
+    }
+
+    public String getGatewayVendor() {
+        return gatewayVendor;
+    }
+
+    public void setGatewayVendor(String gatewayVendor) {
+        this.gatewayVendor = gatewayVendor;
+    }
+
+    public void setUpdatedTime(String updatedTime) {
+        this.updatedTime = updatedTime;
+    }
+
+    public String getCreatedTime() {
+        return createdTime;
+    }
+
+    public void setCreatedTime(String createdTime) {
+        this.createdTime = createdTime;
     }
 
     public String getTransportType() {
@@ -117,5 +158,45 @@ public class PublisherSearchContent implements SearchContent {
 
     public void setAdvertiseOnly(Boolean advertiseOnly) {
         this.advertiseOnly = advertiseOnly;
+    }
+
+    public String getBusinessOwner() {
+        return businessOwner;
+    }
+
+    public void setBusinessOwner(String businessOwner) {
+        this.businessOwner = businessOwner;
+    }
+
+    public String getBusinessOwnerEmail() {
+        return businessOwnerEmail;
+    }
+
+    public void setBusinessOwnerEmail(String businessOwnerEmail) {
+        this.businessOwnerEmail = businessOwnerEmail;
+    }
+
+    public String getTechnicalOwner() {
+        return technicalOwner;
+    }
+
+    public void setTechnicalOwner(String technicalOwner) {
+        this.technicalOwner = technicalOwner;
+    }
+
+    public String getTechnicalOwnerEmail() {
+        return technicalOwnerEmail;
+    }
+
+    public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+        this.technicalOwnerEmail = technicalOwnerEmail;
+    }
+
+    public Boolean getMonetizationStatus() {
+        return isMonetizationEnabled;
+    }
+
+    public void setMonetizationStatus(Boolean isMonetizationEnabled) {
+        this.isMonetizationEnabled = isMonetizationEnabled;
     }
 }

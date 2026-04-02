@@ -19,6 +19,8 @@ package org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.impl.APIConstants;
@@ -26,8 +28,8 @@ import org.wso2.carbon.apimgt.impl.dao.GatewayArtifactsMgtDAO;
 import org.wso2.carbon.apimgt.impl.dto.APIRuntimeArtifactDto;
 import org.wso2.carbon.apimgt.impl.dto.RuntimeArtifactDto;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.dto.ApiMetadataProjectDto;
-import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.dto.MetadataDescriptorDto;
 import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.dto.EnvironmentDto;
+import org.wso2.carbon.apimgt.impl.gatewayartifactsynchronizer.dto.MetadataDescriptorDto;
 import org.wso2.carbon.apimgt.impl.importexport.APIImportExportException;
 import org.wso2.carbon.apimgt.impl.importexport.ExportFormat;
 import org.wso2.carbon.apimgt.impl.importexport.utils.CommonUtil;
@@ -46,7 +48,9 @@ public class RuntimeArtifactGeneratorUtil {
 
     private static final GatewayArtifactsMgtDAO gatewayArtifactsMgtDAO = GatewayArtifactsMgtDAO.getInstance();
 
-    public static RuntimeArtifactDto generateRuntimeArtifact(String apiId, String name, String version,
+    private static final Log log = LogFactory.getLog(RuntimeArtifactGeneratorUtil.class);
+
+    public static RuntimeArtifactDto generateRuntimeArtifact(String apiId,
                                                              String gatewayLabel, String type, String tenantDomain)
             throws APIManagementException {
 
@@ -64,7 +68,7 @@ public class RuntimeArtifactGeneratorUtil {
         }
     }
 
-    public static RuntimeArtifactDto generateAllRuntimeArtifact(String apiId, String name, String version,
+    public static RuntimeArtifactDto generateAllRuntimeArtifact(String apiId,
                                                                 String gatewayLabel, String type)
             throws APIManagementException {
 
@@ -190,6 +194,7 @@ public class RuntimeArtifactGeneratorUtil {
 
     private static List<APIRuntimeArtifactDto> getRuntimeArtifacts(String apiId, String gatewayLabel,
                                                                    String tenantDomain) throws APIManagementException {
+
         List<APIRuntimeArtifactDto> gatewayArtifacts;
         if (StringUtils.isNotEmpty(gatewayLabel)) {
             byte[] decodedValue = Base64.decodeBase64(gatewayLabel.getBytes());
@@ -206,20 +211,18 @@ public class RuntimeArtifactGeneratorUtil {
         }
         if (gatewayArtifacts != null) {
             if (gatewayArtifacts.isEmpty()) {
-                throw new APIManagementException("No API Artifacts", ExceptionCodes.NO_API_ARTIFACT_FOUND);
+                log.info("No API Artifacts");
             }
-            for (APIRuntimeArtifactDto apiRuntimeArtifactDto: gatewayArtifacts) {
+            for (APIRuntimeArtifactDto apiRuntimeArtifactDto : gatewayArtifacts) {
                 ArtifactSynchronizerUtil.setArtifactProperties(apiRuntimeArtifactDto);
             }
-        }
-        if (gatewayArtifacts == null || gatewayArtifacts.isEmpty()) {
-            return null;
         }
         return gatewayArtifacts;
     }
 
     private static List<APIRuntimeArtifactDto> getAllRuntimeArtifacts(String apiId, String gatewayLabel)
             throws APIManagementException {
+
         List<APIRuntimeArtifactDto> gatewayArtifacts;
         if (StringUtils.isNotEmpty(gatewayLabel)) {
             byte[] decodedValue = Base64.decodeBase64(gatewayLabel.getBytes());
@@ -236,14 +239,11 @@ public class RuntimeArtifactGeneratorUtil {
         }
         if (gatewayArtifacts != null) {
             if (gatewayArtifacts.isEmpty()) {
-                throw new APIManagementException("No API Artifacts", ExceptionCodes.NO_API_ARTIFACT_FOUND);
+                log.info("No API Artifacts");
             }
-            for (APIRuntimeArtifactDto apiRuntimeArtifactDto: gatewayArtifacts) {
+            for (APIRuntimeArtifactDto apiRuntimeArtifactDto : gatewayArtifacts) {
                 ArtifactSynchronizerUtil.setArtifactProperties(apiRuntimeArtifactDto);
             }
-        }
-        if (gatewayArtifacts == null || gatewayArtifacts.isEmpty()) {
-            return null;
         }
         return gatewayArtifacts;
     }

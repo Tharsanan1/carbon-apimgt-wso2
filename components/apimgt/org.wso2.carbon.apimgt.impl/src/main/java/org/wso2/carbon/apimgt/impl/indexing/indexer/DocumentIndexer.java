@@ -23,22 +23,22 @@ import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.pdfbox.io.RandomAccessBufferedFileInputStream;
+import org.apache.pdfbox.cos.COSDocument;
+import org.apache.pdfbox.io.RandomAccessReadBuffer;
+import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.pdfbox.cos.COSDocument;
-import org.apache.poi.hslf.extractor.PowerPointExtractor;
+import org.apache.poi.hslf.usermodel.HSLFSlideShow;
 import org.apache.poi.hssf.extractor.ExcelExtractor;
 import org.apache.poi.hwpf.extractor.WordExtractor;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
-import org.apache.poi.xslf.extractor.XSLFPowerPointExtractor;
+import org.apache.poi.sl.extractor.SlideShowExtractor;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xssf.extractor.XSSFExcelExtractor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.solr.common.SolrException;
-import org.apache.pdfbox.pdfparser.PDFParser;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.model.Documentation;
 import org.wso2.carbon.apimgt.impl.APIConstants;
@@ -47,23 +47,30 @@ import org.wso2.carbon.governance.api.generic.GenericArtifactManager;
 import org.wso2.carbon.governance.api.generic.dataobjects.GenericArtifact;
 import org.wso2.carbon.governance.api.util.GovernanceUtils;
 import org.wso2.carbon.governance.registry.extensions.indexers.RXTIndexer;
-
 import org.wso2.carbon.registry.core.Registry;
 import org.wso2.carbon.registry.core.RegistryConstants;
 import org.wso2.carbon.registry.core.Resource;
 import org.wso2.carbon.registry.core.ResourceImpl;
 import org.wso2.carbon.registry.core.exceptions.RegistryException;
 import org.wso2.carbon.registry.indexing.AsyncIndexer;
+import org.wso2.carbon.registry.indexing.IndexingConstants;
 import org.wso2.carbon.registry.indexing.IndexingManager;
 import org.wso2.carbon.registry.indexing.solr.IndexDocument;
+import org.wso2.carbon.utils.multitenancy.MultitenantUtils;
+
+import static org.wso2.carbon.apimgt.impl.APIConstants.OVERVIEW_PREFIX;
+import static org.wso2.carbon.apimgt.impl.APIConstants.VISIBLE_ORGANIZATION_PROPERTY;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 /**
  * This is the document indexer introduced to index document artifacts for unified content search.
@@ -86,7 +93,6 @@ public class DocumentIndexer extends RXTIndexer {
         if (log.isDebugEnabled()) {
             log.debug("Executing document indexer for resource at " + documentResourcePath);
         }
-
         Resource documentResource = null;
         Map<String, List<String>> fields = indexDocument.getFields();
 
@@ -110,6 +116,25 @@ public class DocumentIndexer extends RXTIndexer {
                 newIndexDocument =
                         new IndexDocument(fileData.path, "", stringBuilder.toString(), indexDocument.getTenantId());
                 fields.put(APIConstants.DOCUMENT_INDEXER_INDICATOR, Arrays.asList("true"));
+                
+                Properties properties = documentResource.getProperties();
+                Enumeration propertyNames = properties.propertyNames();
+                boolean hasOrganizationProperty = false;
+                while (propertyNames.hasMoreElements()) {
+                    String property = (String) propertyNames.nextElement();
+                    if (log.isDebugEnabled()) {
+                        log.debug("Document at " + documentResourcePath + " has " + property + " property");
+                    }
+                    if (VISIBLE_ORGANIZATION_PROPERTY.equals(property)) {
+                        hasOrganizationProperty = true;
+                    }
+                }
+                if (!hasOrganizationProperty) {
+                    log.debug("Organization visibilty property missing. adding " + fileData.tenantDomain);
+                    List<String> orgProperties = new ArrayList<>();
+                    orgProperties.add(VISIBLE_ORGANIZATION_PROPERTY + "," + fileData.tenantDomain );
+                    fields.put(IndexingConstants.FIELD_PROPERTY_VALUES, orgProperties);
+                }
                 newIndexDocument.setFields(fields);
             } catch (APIManagementException e) {
                 //error occured while fetching details from API, but continuing document indexing
@@ -182,9 +207,9 @@ public class DocumentIndexer extends RXTIndexer {
                 inputStream = contentResource.getContentStream();
                 switch (extension) {
                 case APIConstants.PDF_EXTENSION:
-                    PDFParser pdfParser = new PDFParser(new RandomAccessBufferedFileInputStream(inputStream));
+                    PDFParser pdfParser = new PDFParser(new RandomAccessReadBuffer(inputStream));
                     pdfParser.parse();
-                    COSDocument cosDocument = pdfParser.getDocument();
+                    COSDocument cosDocument = pdfParser.parse().getDocument();
                     PDFTextStripper stripper = new PDFTextStripper();
                     contentString = stripper.getText(new PDDocument(cosDocument));
                     break;
@@ -211,26 +236,28 @@ public class DocumentIndexer extends RXTIndexer {
                     contentString = xssfExcelExtractor.getText();
                     break;
                 case APIConstants.PPT_EXTENSION: {
-                    POIFSFileSystem fs = new POIFSFileSystem(inputStream);
-                    PowerPointExtractor extractor = new PowerPointExtractor(fs);
+                    HSLFSlideShow slideShow = new HSLFSlideShow(inputStream);
+                    SlideShowExtractor extractor = new SlideShowExtractor(slideShow);
                     contentString = extractor.getText();
                     break;
                 }
                 case APIConstants.PPTX_EXTENSION:
-                    XMLSlideShow xmlSlideShow = new XMLSlideShow(inputStream);
-                    XSLFPowerPointExtractor xslfPowerPointExtractor = new XSLFPowerPointExtractor(xmlSlideShow);
-                    contentString = xslfPowerPointExtractor.getText();
+                    XMLSlideShow slideShow = new XMLSlideShow(inputStream);
+                    SlideShowExtractor extractor = new SlideShowExtractor(slideShow);
+                    contentString = extractor.getText();
                     break;
                 case APIConstants.TXT_EXTENSION:
                 case APIConstants.WSDL_EXTENSION:
                 case APIConstants.XML_DOC_EXTENSION:
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-                    String line;
+
                     StringBuilder contentBuilder = new StringBuilder();
-                    while ((line = reader.readLine()) != null) {
-                        contentBuilder.append(line);
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            contentBuilder.append(line);
+                        }
+                        contentString = contentBuilder.toString();
                     }
-                    contentString = contentBuilder.toString();
                     break;
                 }
             } finally {

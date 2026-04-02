@@ -71,7 +71,7 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
         this.analyticsCustomDataProvider = analyticsCustomDataProvider;
     }
 
-    private AuthenticationContext getAuthenticationContext()  {
+    private AuthenticationContext getAuthenticationContext() {
         Object authContext = WebSocketUtils.getPropertyFromChannel(APISecurityUtils.API_AUTH_CONTEXT, ctx);
         if (authContext != null) {
             return (AuthenticationContext) authContext;
@@ -150,7 +150,9 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
     }
 
     private boolean isTargetFaultRequest() {
-        return false;
+        int errorCode = getErrorCode();
+        return (errorCode >= Constants.ERROR_CODE_RANGES.WS_TARGET_FAILURE_START
+                && errorCode <= Constants.ERROR_CODE_RANGES.WS_TARGET_FAILURE__END);
     }
 
     @Override
@@ -224,7 +226,13 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
     @Override
     public Latencies getLatencies() {
         // Not applicable
-        return new Latencies();
+        long requestMediationLatency = getRequestMediationLatency();
+        long responseMediationLatency = getResponseMediationLatency();
+
+        Latencies latencies = new Latencies();
+        latencies.setRequestMediationLatency(requestMediationLatency);
+        latencies.setResponseMediationLatency(responseMediationLatency);
+        return latencies;
     }
 
     @Override
@@ -244,6 +252,13 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
         }
         metaInfo.setRegionId(region);
         return metaInfo;
+    }
+
+    @Override
+    public Map<String, String> getMaskProperties() {
+        Map<String, String> maskProperties = ServiceReferenceHolder.getInstance().getApiManagerConfigurationService()
+                .getAPIAnalyticsConfiguration().getMaskDataProperties();
+        return maskProperties;
     }
 
     @Override
@@ -307,14 +322,16 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
         }
         customProperties.put(Constants.API_USER_NAME_KEY, getUserName());
         customProperties.put(Constants.API_CONTEXT_KEY, getApiContext());
+        customProperties.put(Constants.RESPONSE_SIZE, getResponseSize());
         return customProperties;
     }
-
-    private String getUserName() {
+    
+    @Override
+    public String getUserName() {
 
         Object authContext = WebSocketUtils.getPropertyFromChannel(APISecurityUtils.API_AUTH_CONTEXT, ctx);
         if (authContext != null && authContext instanceof AuthenticationContext) {
-            return ((AuthenticationContext)authContext).getUsername();
+            return ((AuthenticationContext) authContext).getUsername();
         }
         return null;
     }
@@ -328,4 +345,37 @@ public class WebSocketAnalyticsDataProvider implements AnalyticsDataProvider {
         return null;
     }
 
+    private long getRequestMediationLatency() {
+        if (isFrameFromInboundHandler()) {
+            return (long) WebSocketUtils.getPropertyFromChannel(Constants.REQUEST_END_TIME_PROPERTY, ctx) -
+                    (long) WebSocketUtils.getPropertyFromChannel(Constants.REQUEST_START_TIME_PROPERTY, ctx);
+        }
+        return 0L;
+    }
+
+    private long getResponseMediationLatency() {
+        if (isFrameFromBackend()) {
+            return (long) WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_END_TIME_PROPERTY, ctx) -
+                    (long) WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_START_TIME_PROPERTY, ctx);
+        }
+        return 0L;
+    }
+
+    private boolean isFrameFromBackend() {
+        return (WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_START_TIME_PROPERTY, ctx) != null &&
+                (long) WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_START_TIME_PROPERTY, ctx) != 0 &&
+                WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_END_TIME_PROPERTY, ctx) != null);
+    }
+
+    private boolean isFrameFromInboundHandler() {
+        return (WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_START_TIME_PROPERTY, ctx) == null ||
+                (long) WebSocketUtils.getPropertyFromChannel(Constants.BACKEND_START_TIME_PROPERTY, ctx) == 0 &&
+                        WebSocketUtils.getPropertyFromChannel(Constants.REQUEST_START_TIME_PROPERTY, ctx) != null &&
+                        WebSocketUtils.getPropertyFromChannel(Constants.REQUEST_END_TIME_PROPERTY, ctx) != null);
+    }
+
+    private long getResponseSize() {
+        Object responseSize = WebSocketUtils.getPropertyFromChannel(Constants.RESPONSE_SIZE, ctx);
+        return responseSize == null ? 0L : ((Number) responseSize).longValue();
+    }
 }

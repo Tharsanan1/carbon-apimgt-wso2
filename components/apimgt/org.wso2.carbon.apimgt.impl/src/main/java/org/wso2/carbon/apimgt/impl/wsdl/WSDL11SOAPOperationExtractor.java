@@ -163,7 +163,7 @@ public class WSDL11SOAPOperationExtractor extends WSDL11ProcessorImpl {
     @Override
     public void loadXSDs(APIMWSDLReader wsdlReader, String url) throws APIManagementException {
         Collection<File> foundXSDFiles = new java.util.LinkedList<>();
-        if (url != null && url.endsWith(File.pathSeparator + "extracted")) {
+        if (url != null && url.endsWith(File.separator + "extracted")) {
             File folderToImport = new File(url);
             foundXSDFiles = APIFileUtil.searchFilesWithMatchingExtension(folderToImport, "xsd",
                     false);
@@ -892,6 +892,7 @@ public class WSDL11SOAPOperationExtractor extends WSDL11ProcessorImpl {
 
         switch (dataType) {
         case "string":
+        case "time":
             return new StringProperty();
         case "boolean":
             return new BooleanProperty();
@@ -917,6 +918,8 @@ public class WSDL11SOAPOperationExtractor extends WSDL11ProcessorImpl {
             return new DecimalProperty();
         case "anyType":
             return new ObjectProperty();
+        case "base64Binary":
+            return new StringProperty("byte");
         default:
             return new RefProperty();
         }

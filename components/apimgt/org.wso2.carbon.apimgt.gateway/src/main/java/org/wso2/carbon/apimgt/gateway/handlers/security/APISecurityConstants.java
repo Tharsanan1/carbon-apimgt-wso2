@@ -24,6 +24,10 @@ public class APISecurityConstants {
     public static final String API_AUTH_GENERAL_ERROR_MESSAGE = "Unclassified Authentication Failure";
 
     public static final int API_AUTH_INVALID_CREDENTIALS = 900901;
+
+    public static final String SIGNATURE_VERIFICATION_FAILURE_MESSAGE =
+            "Invalid JWT token. Signature verification failed.";
+
     public static final String API_AUTH_INVALID_CREDENTIALS_MESSAGE = "Invalid Credentials";
     public static final String API_AUTH_INVALID_CREDENTIALS_DESCRIPTION =
             "Make sure you have provided the correct security credentials";
@@ -66,6 +70,20 @@ public class APISecurityConstants {
     public static final int API_AUTH_MISSING_OPEN_API_DEF = 900911;
     public static final String API_AUTH_MISSING_OPEN_API_DEF_ERROR_MESSAGE = "Internal Server Error";
 
+    public static final int API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH = 900912;
+    public static final String API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH_MESSAGE = "Claim Mismatch";
+    public static final String API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH_DESCRIPTION =
+            "The claim configured in the system and the claim provided in the token do not align. Please ensure the claims match.";
+
+    public static final int API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID = 900913;
+    public static final String API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID_MESSAGE = "Claim Invalid";
+    public static final String API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID_DESCRIPTION =
+            "The configured resource access validation claim is not present in the token.";
+
+    public static final int API_OAUTH_INVALID_AUDIENCES = 900914;
+    public static final String API_OAUTH_INVALID_AUDIENCES_MESSAGE = "Access Denied";
+    public static final String API_OAUTH_INVALID_AUDIENCES_DESCRIPTION = "The access token does not allow you to access the requested resource";
+
     public static final int OAUTH_TEMPORARY_SERVER_ERROR = 900424;
     public static final String OAUTH_TEMPORARY_SERVER_ERROR_MESSAGE = "Temporary Server Error";
 
@@ -78,6 +96,7 @@ public class APISecurityConstants {
 
     /**
      * returns an String that corresponds to errorCode passed in
+     *
      * @param errorCode
      * @return String
      */
@@ -108,6 +127,9 @@ public class APISecurityConstants {
             case API_AUTH_INCORRECT_ACCESS_TOKEN_TYPE:
                 errorMessage = API_AUTH_INCORRECT_ACCESS_TOKEN_TYPE_MESSAGE;
                 break;
+            case API_OAUTH_INVALID_AUDIENCES:
+                errorMessage = API_OAUTH_INVALID_AUDIENCES_MESSAGE;
+                break;
             case API_BLOCKED:
                 errorMessage = API_BLOCKED_MESSAGE;
                 break;
@@ -119,6 +141,12 @@ public class APISecurityConstants {
                 break;
             case INVALID_SCOPE:
                 errorMessage = INVALID_SCOPE_MESSAGE;
+                break;
+            case API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH:
+                errorMessage = API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH_MESSAGE;
+                break;
+            case API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID:
+                errorMessage = API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID_MESSAGE;
                 break;
             default:
                 errorMessage = API_AUTH_GENERAL_ERROR_MESSAGE;
@@ -152,6 +180,15 @@ public class APISecurityConstants {
             case API_AUTH_INVALID_CREDENTIALS:
                 errorDescription += DESCRIPTION_SEPARATOR + API_AUTH_INVALID_CREDENTIALS_DESCRIPTION;
                 break;
+            case API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH:
+                errorDescription += DESCRIPTION_SEPARATOR + API_AUTH_ACCESS_TOKEN_CLAIMS_MISMATCH_DESCRIPTION;
+                break;
+            case API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID:
+                errorDescription += DESCRIPTION_SEPARATOR + API_AUTH_ACCESS_TOKEN_CLAIMS_INVALID_DESCRIPTION;
+                break;
+            case API_OAUTH_INVALID_AUDIENCES:
+                errorDescription += DESCRIPTION_SEPARATOR + API_OAUTH_INVALID_AUDIENCES_DESCRIPTION;
+                break;
             default:
                 // Do nothing since we are anyhow returning the original error description.
         }
@@ -164,4 +201,9 @@ public class APISecurityConstants {
     public static final int DEFAULT_MAX_VALID_KEYS = 250;
     public static final int DEFAULT_MAX_INVALID_KEYS = 100;
     public static final String API_BLOCKED_SEQUENCE = "_api_blocked_sequence_";
+
+    /* This constant is to handle CNF claim validation
+     * Property value should be set to 'true' in Axis2MessageContext to skip the validation
+     */
+    public static final String DISABLE_CNF_VALIDATION = "disable_cnf_validation";
 }

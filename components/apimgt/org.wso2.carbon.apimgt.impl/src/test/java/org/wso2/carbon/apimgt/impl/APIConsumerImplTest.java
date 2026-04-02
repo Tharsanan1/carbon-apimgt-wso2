@@ -374,6 +374,7 @@ public class APIConsumerImplTest {
         PowerMockito.when(APIUtil.getTiers(APIConstants.TIER_APPLICATION_TYPE, "testorg")).thenReturn(tierMap);
         PowerMockito.when(APIUtil.findTier(tierMap.values(), "tier1")).thenReturn(new Tier("tier1"));
         Mockito.when(apiMgtDAO.addApplication(application, "userID", "testorg")).thenReturn(1);
+        Mockito.when(apiMgtDAO.getApplicationById(Mockito.anyInt())).thenReturn(application);
         assertEquals(1, apiConsumer.addApplication(application, "userID", "testorg"));
     }
     @Test
@@ -414,6 +415,7 @@ public class APIConsumerImplTest {
         PowerMockito.when(MultitenantUtils.getTenantDomain("userID")).thenReturn("carbon.super");
         PowerMockito.when(APIUtil.isApplicationExist("userID", "app", "1", "testorg")).thenReturn(false);
         Mockito.when(apiMgtDAO.addApplication(application, "userID", "testorg")).thenReturn(1);
+        Mockito.when(apiMgtDAO.getApplicationById(Mockito.anyInt())).thenReturn(application);
         assertEquals(1, apiConsumer.addApplication(application, "userID", "testorg"));
     }
 
@@ -528,13 +530,14 @@ public class APIConsumerImplTest {
     public void testGetApplicationsWithPagination() throws APIManagementException {
         Application[] applications = new Application[] { new Application(1), new Application(2) };
         Mockito.when(apiMgtDAO
-                .getApplicationsWithPagination((Subscriber) Mockito.any(), Mockito.anyString(), Mockito.anyInt(),
+                .getApplicationsWithPagination(Mockito.any(), Mockito.anyString(), Mockito.anyInt(),
                         Mockito.anyInt(), Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),
-                        Mockito.anyString())).thenReturn(applications);
+                        Mockito.anyString(), Mockito.anyString())).thenReturn(applications);
         APIConsumerImpl apiConsumer = new APIConsumerImplWrapper(apiMgtDAO);
         Assert.assertEquals(
                 apiConsumer.getApplicationsWithPagination(new Subscriber("sub1"), "1", 0, 5,
-                        "", "", "ASC", "testorg").length, 2);
+                        "", "", "ASC", "testorg",
+                        "sharedOrg").length, 2);
     }
 
     @Test
@@ -634,7 +637,24 @@ public class APIConsumerImplTest {
             apiConsumer.updateApplication(newApplication);
             Assert.fail("API management exception not thrown for error scenario");
         } catch (APIManagementException e) {
-            Assert.assertTrue(e.getMessage().contains("Cannot update the application while it is INACTIVE"));
+            Assert.assertTrue(e.getMessage().contains("Applications that are not yet approved cannot be updated."));
+        }
+    }
+
+    @Test
+    public void testResetApplicationThrottlePolicy() throws APIManagementException {
+        Application application = new Application("app", new Subscriber("sub1"));
+        application.setGroupId("testGroupId");
+        application.setId(5);
+        application.setTier("testTier");
+
+        Mockito.when(apiMgtDAO.getApplicationByUUID(Mockito.anyString())).thenReturn(application);
+        APIConsumerImpl apiConsumer = new APIConsumerImplWrapper(apiMgtDAO);
+        try {
+            apiConsumer.resetApplicationThrottlePolicy("1", "testUser", "testOrg");
+            Assert.fail("API management exception not thrown for error scenario");
+        } catch (APIManagementException e) {
+            Assert.assertTrue(e.getMessage().contains("Application is not accessible to user"));
         }
     }
 
@@ -911,15 +931,17 @@ public class APIConsumerImplTest {
         BDDMockito.when(ApplicationUtils.createAccessTokenRequest(keyManager,oAuthApplicationInfo, null)).thenReturn
                 (accessTokenRequest);
         Mockito.when(keyManager.getNewApplicationAccessToken(accessTokenRequest)).thenReturn(accessTokenInfo);
+        Application application = new Application(1);
+        application.setName("app1");
         try {
-            apiConsumer.mapExistingOAuthClient("", "admin", "1", "app1",
+            apiConsumer.mapExistingOAuthClient("", "admin", "1", application,
                     "refresh", "DEFAULT", "Resident Key Manager", "carbon.super");
             Assert.fail("Exception is not thrown when client id is already mapped to an application");
         } catch (APIManagementException e) {
             Assert.assertTrue(e.getMessage().contains("Key Mappings already exists for application"));
         }
         Assert.assertEquals(8, apiConsumer.mapExistingOAuthClient("", "admin", "1",
-                "app1", "PRODUCTION", "DEFAULT", "Resident Key Manager",
+                application, "PRODUCTION", "DEFAULT", "Resident Key Manager",
                 "carbon.super").size());
     }
 

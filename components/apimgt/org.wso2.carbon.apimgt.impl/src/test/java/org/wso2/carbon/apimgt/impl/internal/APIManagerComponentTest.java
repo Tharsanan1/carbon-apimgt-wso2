@@ -27,8 +27,10 @@ import org.osgi.service.component.ComponentContext;
 import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.wso2.carbon.apimgt.impl.APIConstants;
 import org.wso2.carbon.apimgt.impl.APIManagerConfiguration;
 import org.wso2.carbon.apimgt.impl.APIManagerConfigurationService;
+import org.wso2.carbon.apimgt.impl.dto.ai.MarketplaceAssistantConfigurationDTO;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.dto.EventHubConfigurationDto;
 import org.wso2.carbon.apimgt.impl.dto.GatewayArtifactSynchronizerProperties;
@@ -78,6 +80,8 @@ public class APIManagerComponentTest {
         UserRealm userRealm = Mockito.mock(UserRealm.class);
         OutputEventAdapterService adapterService = Mockito.mock(OutputEventAdapterService.class);
         ThrottleProperties throttleProperties = new ThrottleProperties();
+        MarketplaceAssistantConfigurationDTO marketplaceAssistantConfigurationDto = Mockito.mock(
+                MarketplaceAssistantConfigurationDTO.class);
 
         Mockito.doNothing().when(configuration).load(Mockito.anyString());
         Mockito.doNothing().when(authManager)
@@ -96,6 +100,8 @@ public class APIManagerComponentTest {
         Mockito.when(realmService.getTenantUserRealm(Mockito.anyInt())).thenReturn(userRealm);
         Mockito.when(userRealm.getAuthorizationManager()).thenReturn(authManager);
         Mockito.when(configuration.getThrottleProperties()).thenReturn(throttleProperties);
+        Mockito.when(configuration.getMarketplaceAssistantConfigurationDto())
+                .thenReturn(marketplaceAssistantConfigurationDto);
         PowerMockito.doNothing().when(APIMgtDBUtil.class, "initialize");
         PowerMockito.doNothing().when(APIUtil.class, "loadTenantExternalStoreConfig", Mockito.anyString());
         PowerMockito.doNothing().when(AuthorizationUtils.class ,"addAuthorizeRoleListener",
@@ -134,6 +140,22 @@ public class APIManagerComponentTest {
     }
 
     @Test
+    public void testShouldReturnNotNullValueForNotNullNonProxyHostsString() {
+
+        APIManagerConfiguration configuration = Mockito.mock(APIManagerConfiguration.class);
+        Registry registry = Mockito.mock(Registry.class);
+        APIManagerComponent apiManagerComponent = new APIManagerComponentWrapper(registry);
+        Mockito.when(configuration.getFirstProperty(APIConstants.NON_PROXY_HOSTS)).thenReturn("localhost");
+
+        try {
+            Assert.assertNotNull(
+                    apiManagerComponent.getNonProxyHostsListByNonProxyHostsStringConfiguration(configuration));
+        } catch (Exception ex) {
+            Assert.fail("Unexpected exception was thrown");
+        }
+    }
+
+    @Test
     public void testShouldNotContinueWhenConfigurationUnAvailable() throws Exception {
         PowerMockito.mockStatic(APIUtil.class);
         ComponentContext componentContext = Mockito.mock(ComponentContext.class);
@@ -153,8 +175,6 @@ public class APIManagerComponentTest {
             Assert.fail("Should not throw an exception");
         }
     }
-
-
 
     @AfterClass
     public static void destroy() {

@@ -42,6 +42,7 @@ public class AuthenticationContext {
     private String subscriber;
     private List<String> throttlingDataList;
     private int spikeArrestLimit;
+    private int applicationSpikesArrestLimit;
     private String subscriberTenantDomain;
     private String spikeArrestUnit;
     private boolean stopOnQuotaReach;
@@ -56,6 +57,7 @@ public class AuthenticationContext {
     private int graphQLMaxComplexity;
     private String accessToken;
     private Set<String> applicationGroupIds;
+    private String mcpUpstreamToken;
 
     public List<String> getRequestTokenScopes() {
         return requestTokenScopes;
@@ -180,6 +182,23 @@ public class AuthenticationContext {
         this.consumerKey = consumerKey;
     }
 
+    public String getApplicationSpikesArrestUnit() {
+        return applicationSpikesArrestUnit;
+    }
+
+    public void setApplicationSpikesArrestUnit(String applicationSpikesArrestUnit) {
+        this.applicationSpikesArrestUnit = applicationSpikesArrestUnit;
+    }
+
+    private String applicationSpikesArrestUnit;
+
+    public int getApplicationSpikesArrestLimit(){
+        return applicationSpikesArrestLimit;
+    }
+    public void setApplicationSpikesArrestLimit(int applicationSpikesArrestLimit) {
+        this.applicationSpikesArrestLimit = applicationSpikesArrestLimit;
+    }
+
     public int getSpikeArrestLimit() {
         return spikeArrestLimit;
     }
@@ -300,5 +319,13 @@ public class AuthenticationContext {
 
     public void setApplicationGroupIds(Set<String> applicationGroupIds) {
         this.applicationGroupIds = applicationGroupIds;
+    }
+
+    public String getMcpUpstreamToken() {
+        return mcpUpstreamToken;
+    }
+
+    public void setMcpUpstreamToken(String mcpUpstreamToken) {
+        this.mcpUpstreamToken = mcpUpstreamToken;
     }
 }

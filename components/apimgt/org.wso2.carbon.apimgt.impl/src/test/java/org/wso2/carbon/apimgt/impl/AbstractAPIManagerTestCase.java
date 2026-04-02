@@ -36,8 +36,6 @@ import org.wso2.carbon.apimgt.api.model.*;
 import org.wso2.carbon.apimgt.api.model.policy.*;
 import org.wso2.carbon.apimgt.impl.dao.ApiMgtDAO;
 import org.wso2.carbon.apimgt.impl.dao.ScopesDAO;
-import org.wso2.carbon.apimgt.impl.definitions.GraphQLSchemaDefinition;
-import org.wso2.carbon.apimgt.impl.definitions.OASParserUtil;
 import org.wso2.carbon.apimgt.impl.dto.KeyManagerDto;
 import org.wso2.carbon.apimgt.impl.dto.ThrottleProperties;
 import org.wso2.carbon.apimgt.impl.factory.KeyManagerHolder;
@@ -46,6 +44,8 @@ import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.persistence.APIPersistence;
 import org.wso2.carbon.apimgt.persistence.dto.*;
 import org.wso2.carbon.apimgt.persistence.exceptions.APIPersistenceException;
+import org.wso2.carbon.apimgt.spec.parser.definitions.GraphQLSchemaDefinition;
+import org.wso2.carbon.apimgt.spec.parser.definitions.OASParserUtil;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.governance.api.exception.GovernanceException;
 import org.wso2.carbon.governance.api.generic.GenericArtifactManager;
@@ -148,7 +148,7 @@ public class AbstractAPIManagerTestCase {
         value.setPublisherAPIInfoList(publisherAPIInfoList);
         
         Mockito.when(apiPersistenceInstance.searchAPIsForPublisher(any(Organization.class), anyString(),
-                anyInt(), anyInt(), any(UserContext.class), isNull(), isNull())).thenReturn(value);
+                anyInt(), anyInt(), any(UserContext.class))).thenReturn(value);
         List<API> apis = abstractAPIManager.getAllAPIs();
         Assert.assertNotNull(apis);
         Assert.assertEquals(apis.size(), 1);
@@ -229,7 +229,16 @@ public class AbstractAPIManagerTestCase {
 
         String  docName = "TestDoc";
         AbstractAPIManager abstractAPIManager = new AbstractAPIManagerWrapper(apiPersistenceInstance);
+        PowerMockito.mockStatic(ServiceReferenceHolder.class);
+        ServiceReferenceHolder sh = Mockito.mock(ServiceReferenceHolder.class);
+        APIManagerConfigurationService amConfigService = Mockito.mock(APIManagerConfigurationService.class);
+        APIManagerConfiguration amConfig = Mockito.mock(APIManagerConfiguration.class);
 
+        PowerMockito.when(ServiceReferenceHolder.getInstance()).thenReturn(sh);
+        PowerMockito.when(sh.getAPIManagerConfigurationService()).thenReturn(amConfigService);
+        PowerMockito.when(amConfigService.getAPIManagerConfiguration()).thenReturn(amConfig);
+        PowerMockito.when(amConfig.getFirstProperty(APIConstants.API_PUBLISHER_ENABLE_API_DOC_VISIBILITY_LEVELS))
+                .thenReturn("false");
         org.wso2.carbon.apimgt.persistence.dto.Documentation document = Mockito
                 .mock(org.wso2.carbon.apimgt.persistence.dto.Documentation.class);
         Mockito.when(document.getName()).thenReturn(docName);

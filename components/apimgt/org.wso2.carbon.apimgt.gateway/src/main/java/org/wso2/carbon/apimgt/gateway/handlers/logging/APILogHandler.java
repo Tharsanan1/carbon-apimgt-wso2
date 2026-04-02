@@ -81,7 +81,8 @@ public class APILogHandler {
 
         // Get API details and set custom properties to ThreadContext
         String path = ApiUtils.getFullRequestPath(messageContext);
-        TreeMap<String, API> selectedApis = Utils.getSelectedAPIList(path, GatewayUtils.getTenantDomain());
+        TreeMap<String, API> selectedApis = Utils.getSelectedAPIList(path,
+                (String) messageContext.getProperty(APIConstants.TENANT_DOMAIN_INFO_PROPERTY));
         if (selectedApis.size() > 0) {
             String selectedPath = selectedApis.firstKey();
             API selectedApi = selectedApis.get(selectedPath);
@@ -90,8 +91,12 @@ public class APILogHandler {
             ThreadContext.put("apiContext", selectedApi.getContext());
             ThreadContext.put("apiVersion", selectedApi.getApiVersion());
             if (messageContext.getProperty(API_TO) != null) {
-                String apiTo = "/" + messageContext.getProperty(API_TO);
-                ThreadContext.put("resourceName", apiTo.replaceFirst(selectedApi.getContext(), ""));
+                String apiTo = (String) messageContext.getProperty(API_TO);
+                String resourceName = apiTo.replaceFirst(selectedApi.getContext(), "");
+                if(resourceName.isEmpty()){
+                    resourceName = "/";
+                }
+                ThreadContext.put("resourceName", resourceName);
             }
         }
         ThreadContext.put("tenantDomain", (String) messageContext
@@ -109,7 +114,7 @@ public class APILogHandler {
 
     private static void addBasicProperties(JSONObject logMessage, MessageContext messageContext, String flow) {
         logMessage.put("apiTo", messageContext.getProperty(API_TO));
-        logMessage.put("correlationId", messageContext.getProperty(APIConstants.CORRELATION_ID));
+        logMessage.put("correlationId", messageContext.getProperty("correlation_id"));
         logMessage.put("flow", flow);
         String verb = (String) ((Axis2MessageContext) messageContext).getAxis2MessageContext()
                 .getProperty(APIConstants.DigestAuthConstants.HTTP_METHOD);

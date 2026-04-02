@@ -25,17 +25,26 @@ import org.apache.cxf.jaxrs.ext.MessageContext;
 import org.apache.cxf.phase.PhaseInterceptorChain;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import org.wso2.carbon.apimgt.api.APIConstants.UnifiedSearchConstants;
 import org.wso2.carbon.apimgt.api.APIConsumer;
 import org.wso2.carbon.apimgt.api.APIManagementException;
 import org.wso2.carbon.apimgt.api.ExceptionCodes;
 import org.wso2.carbon.apimgt.api.model.API;
+import org.wso2.carbon.apimgt.api.model.APIChatAPISpec;
+import org.wso2.carbon.apimgt.api.model.APIChatExecutionResponse;
+import org.wso2.carbon.apimgt.api.model.APIChatTestExecutionInfo;
+import org.wso2.carbon.apimgt.api.model.APIChatTestInitializerInfo;
 import org.wso2.carbon.apimgt.api.model.APIIdentifier;
+import org.wso2.carbon.apimgt.api.model.APIKeyInfo;
 import org.wso2.carbon.apimgt.api.model.APIRating;
 import org.wso2.carbon.apimgt.api.model.ApiTypeWrapper;
+import org.wso2.carbon.apimgt.api.model.Application;
 import org.wso2.carbon.apimgt.api.model.Comment;
 import org.wso2.carbon.apimgt.api.model.CommentList;
 import org.wso2.carbon.apimgt.api.model.Documentation;
 import org.wso2.carbon.apimgt.api.model.DocumentationContent;
+import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.api.model.OrganizationInfo;
 import org.wso2.carbon.apimgt.api.model.ResourceFile;
 import org.wso2.carbon.apimgt.api.model.Tier;
 import org.wso2.carbon.apimgt.api.model.graphql.queryanalysis.GraphqlComplexityInfo;
@@ -44,14 +53,20 @@ import org.wso2.carbon.apimgt.api.model.webhooks.Topic;
 import org.wso2.carbon.apimgt.impl.APIClientGenerationException;
 import org.wso2.carbon.apimgt.impl.APIClientGenerationManager;
 import org.wso2.carbon.apimgt.impl.APIConstants;
-import org.wso2.carbon.apimgt.impl.definitions.GraphQLSchemaDefinition;
-import org.wso2.carbon.apimgt.api.model.Environment;
+import org.wso2.carbon.apimgt.impl.APIManagerFactory;
+import org.wso2.carbon.apimgt.impl.dto.ai.ApiChatConfigurationDTO;
+import org.wso2.carbon.apimgt.impl.internal.ServiceReferenceHolder;
 import org.wso2.carbon.apimgt.impl.utils.APIUtil;
 import org.wso2.carbon.apimgt.rest.api.common.RestApiCommonUtil;
 import org.wso2.carbon.apimgt.rest.api.store.v1.ApisApiService;
+import org.wso2.carbon.apimgt.rest.api.store.v1.models.AllowedResourceType;
+import org.wso2.carbon.apimgt.rest.api.store.v1.mappings.ApplicationKeyMappingUtil;
+import org.wso2.carbon.apimgt.spec.parser.definitions.GraphQLSchemaDefinition;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -83,10 +98,17 @@ public class ApisApiServiceImpl implements ApisApiService {
             MessageContext messageContext) {
         limit = limit != null ? limit : RestApiConstants.PAGINATION_LIMIT_DEFAULT;
         offset = offset != null ? offset : RestApiConstants.PAGINATION_OFFSET_DEFAULT;
-        query = query == null ? "" : query;
+        if (query == null || query.isEmpty()) {
+            query = UnifiedSearchConstants.QUERY_API_TYPE_APIS_DEVPORTAL;
+        } else if (!query.contains(APIConstants.TYPE)) {
+            query = query + " " + UnifiedSearchConstants.QUERY_API_TYPE_APIS_DEVPORTAL;
+        }
         APIListDTO apiListDTO = new APIListDTO();
         try {
-            String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            String superOrganization = RestApiUtil.getValidatedOrganization(messageContext);
+            OrganizationInfo orgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+            orgInfo.setSuperOrganization(superOrganization);
+            
             String username = RestApiCommonUtil.getLoggedInUsername();
             APIConsumer apiConsumer = RestApiCommonUtil.getConsumer(username);
 
@@ -96,14 +118,19 @@ public class ApisApiServiceImpl implements ApisApiService {
                         .replace(APIConstants.CONTENT_SEARCH_TYPE_PREFIX + ":", APIConstants.NAME_TYPE_PREFIX + ":");
             }
 
-            Map allMatchedApisMap = apiConsumer.searchPaginatedAPIs(query, organization, offset,
-                    limit, null, null);
-            
+            Map allMatchedApisMap;
+            if (APIUtil.isOrganizationAccessControlEnabled()) {
+                allMatchedApisMap = apiConsumer.searchPaginatedAPIs(query, orgInfo, offset,
+                        limit, null, null);
+            } else {
+                allMatchedApisMap = apiConsumer.searchPaginatedAPIs(query, superOrganization, offset,
+                        limit);
+            }
 
             Set<Object> sortedSet = (Set<Object>) allMatchedApisMap.get("apis"); // This is a SortedSet
             ArrayList<Object> allMatchedApis = new ArrayList<>(sortedSet);
 
-            apiListDTO = APIMappingUtil.fromAPIListToDTO(allMatchedApis, organization);
+            apiListDTO = APIMappingUtil.fromAPIListToDTO(allMatchedApis, superOrganization);
             //Add pagination section in the response
             Object totalLength = allMatchedApisMap.get("length");
             Integer totalAvailableAPis = 0;
@@ -133,8 +160,10 @@ public class ApisApiServiceImpl implements ApisApiService {
     @Override
     public Response apisApiIdGet(String apiId, String xWSO2Tenant, String ifNoneMatch, MessageContext messageContext)
             throws APIManagementException {
-        String organization = RestApiUtil.getValidatedOrganization(messageContext);
-        return Response.ok().entity(getAPIByAPIId(apiId, organization)).build();
+        String superOrganization = RestApiUtil.getValidatedOrganization(messageContext);
+        OrganizationInfo userOrgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+        userOrgInfo.setSuperOrganization(superOrganization);
+        return Response.ok().entity(getAPIByAPIId(apiId, superOrganization, userOrgInfo)).build();
     }
 
 
@@ -237,7 +266,8 @@ public class ApisApiServiceImpl implements ApisApiService {
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             Comment comment = new Comment();
             comment.setText(postRequestBodyDTO.getContent());
             comment.setCategory(postRequestBodyDTO.getCategory());
@@ -265,18 +295,395 @@ public class ApisApiServiceImpl implements ApisApiService {
         return null;
     }
 
+    @Override
+    public Response apiChatPost(String apiId, String apiChatAction, ApiChatRequestDTO apiChatRequestDTO,
+            MessageContext messageContext) throws APIManagementException {
+        ApiChatConfigurationDTO configDto = ServiceReferenceHolder.getInstance().
+                getAPIManagerConfigurationService().getAPIManagerConfiguration().getApiChatConfigurationDto();
+        if (configDto.isAuthTokenProvided() || configDto.isKeyProvided()) {
+            // Check the action
+            if (apiChatAction.equals(APIConstants.AI.API_CHAT_ACTION_PREPARE)) {
+                // Determine whether the request body is valid. Request body should have a request UUID.
+                if (StringUtils.isEmpty(apiId) || StringUtils.isEmpty(apiChatRequestDTO.getApiChatRequestId())) {
+                    String errorMessage = "Error while executing the prepare statement as request is badly formatted";
+                    RestApiUtil.handleBadRequest(errorMessage, log);
+                    return null;
+                }
+
+                try {
+                    String organization = RestApiUtil.getValidatedOrganization(messageContext);
+                    APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+                    String prepareResponse = apiConsumer.invokeApiChatPrepare(apiId,
+                            apiChatRequestDTO.getApiChatRequestId(), organization);
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    ApiChatResponseDTO preparationResponseDTO = objectMapper.readValue(prepareResponse,
+                            ApiChatResponseDTO.class);
+                    return Response.status(Response.Status.CREATED).entity(preparationResponseDTO).build();
+                } catch (APIManagementException e) {
+                    if (RestApiUtil.isDueToAIServiceNotAccessible(e)) {
+                        return Response.status(Response.Status.UNAUTHORIZED).entity(e.getMessage()).build();
+                    } else if (RestApiUtil.isDueToAIServiceThrottled(e)) {
+                        return Response.status(Response.Status.TOO_MANY_REQUESTS).entity(e.getMessage()).build();
+                    } else {
+                        String errorMessage = "Error encountered while executing the prepare statement of API Chat.";
+                        RestApiUtil.handleInternalServerError(errorMessage, e, log);
+                    }
+                } catch (IOException e) {
+                    String errorMessage = "Error encountered while executing the prepare statement of API Chat.";
+                    RestApiUtil.handleInternalServerError(errorMessage, e, log);
+                }
+
+            } else if (apiChatAction.equals(APIConstants.AI.API_CHAT_ACTION_EXECUTE)) {
+                // Determine whether the request body is valid.
+
+                // Request body should have a request UUID
+                if (StringUtils.isEmpty(apiChatRequestDTO.getApiChatRequestId())) {
+                    String errorMessage = "Error executing the API Chat service. Payload is missing apiChatRequestId " +
+                            "value";
+                    RestApiUtil.handleBadRequest(errorMessage, log);
+                    return null;
+                }
+
+                try {
+                    APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+                    String apiChatRequestId = apiChatRequestDTO.getApiChatRequestId();
+                    boolean isTestInitializationRequest = !StringUtils.isEmpty(
+                            apiChatRequestDTO.getCommand()) && apiChatRequestDTO.getApiSpec() != null;
+                    boolean isTestExecutionRequest = apiChatRequestDTO.getResponse() != null;
+                    String requestPayload; // Request payload for Choreo deployed API Chat Agent
+
+                    if (isTestInitializationRequest) {
+                        ApiChatRequestApiSpecDTO specDTO = apiChatRequestDTO.getApiSpec();
+                        APIChatAPISpec apiSpec = new APIChatAPISpec();
+                        apiSpec.setServiceUrl(specDTO.getServiceUrl());
+                        apiSpec.setTools(specDTO.getTools());
+
+                        APIChatTestInitializerInfo initializerInfo = new APIChatTestInitializerInfo();
+                        initializerInfo.setCommand(apiChatRequestDTO.getCommand());
+                        initializerInfo.setApiSpec(apiSpec);
+
+                        // Generate the payload for Choreo deployed API Chat Agent
+                        ObjectMapper payloadMapper = new ObjectMapper();
+                        requestPayload = payloadMapper.writeValueAsString(initializerInfo);
+                    } else if (isTestExecutionRequest) {
+                        ApiChatRequestResponseDTO responseDTO = apiChatRequestDTO.getResponse();
+                        APIChatExecutionResponse responseInfo = new APIChatExecutionResponse();
+                        APIChatTestExecutionInfo executionInfo = new APIChatTestExecutionInfo();
+
+                        responseInfo.setCode(responseDTO.getCode());
+                        responseInfo.setPath(responseDTO.getPath());
+                        responseInfo.setHeaders(responseDTO.getHeaders());
+                        responseInfo.setBody(responseDTO.getBody());
+                        executionInfo.setResponse(responseInfo);
+
+                        // Generate the payload for Choreo deployed API Chat Agent
+                        ObjectMapper payloadMapper = new ObjectMapper();
+                        requestPayload = payloadMapper.writeValueAsString(executionInfo);
+                    } else {
+                        // Request should either initialize test or provide test execution progress
+                        String errorMessage = "Payload is badly formatted. Expected to have either 'command' and " +
+                                "'apiSpec' or 'response'";
+                        RestApiUtil.handleBadRequest(errorMessage, log);
+                        return null;
+                    }
+
+                    String executionResponse = apiConsumer.invokeApiChatExecute(apiChatRequestId, requestPayload);
+                    ObjectMapper responseMapper = new ObjectMapper();
+                    ApiChatResponseDTO responseDTO = responseMapper.readValue(executionResponse,
+                            ApiChatResponseDTO.class);
+                    return Response.status(Response.Status.CREATED).entity(responseDTO).build();
+                } catch (APIManagementException e) {
+                    if (RestApiUtil.isDueToAIServiceNotAccessible(e)) {
+                        return Response.status(Response.Status.UNAUTHORIZED).entity(e.getMessage()).build();
+                    } else if (RestApiUtil.isDueToAIServiceThrottled(e)) {
+                        return Response.status(Response.Status.TOO_MANY_REQUESTS).entity(e.getMessage()).build();
+                    } else {
+                        String errorMessage = "Error encountered while executing the API Chat service to " +
+                                "accommodate the specified testing requirement.";
+                        RestApiUtil.handleInternalServerError(errorMessage, e, log);
+                    }
+                } catch (IOException e) {
+                    String errorMessage = "Error encountered while executing the API Chat service to accommodate the " +
+                            "specified testing requirement.";
+                    RestApiUtil.handleInternalServerError(errorMessage, e, log);
+                }
+            } else {
+                String errorMessage = "Invalid action detected. Action is expected to be either 'PREPARE' or 'EXECUTE'";
+                RestApiUtil.handleBadRequest(errorMessage, log);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Response generateApiBoundApiKey(String apiId, APIAPIKeyGenerateRequestDTO body,
+                                                 String ifMatch, MessageContext messageContext) throws APIManagementException {
+        String userName = RestApiCommonUtil.getLoggedInUsername();
+        API api;
+        long validityPeriod;
+        String keyName = null;
+        try {
+            // Determine whether the request body is valid. Request body should have a request UUID.
+            if (StringUtils.isEmpty(apiId) || body == null || StringUtils.isEmpty(body.getKeyName())) {
+                String errorMessage = "Error while executing the prepare statement as request is badly formatted";
+                RestApiUtil.handleBadRequest(errorMessage, log);
+                return null;
+            }
+            APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+            String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            if ((api = apiConsumer.getLightweightAPIByUUID(apiId, organization)) == null) {
+                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiId, log);
+            } else {
+                if (!RestAPIStoreUtils.isUserAccessAllowedForAPIByUUID(apiId, organization)) {
+                    RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiId, log);
+                } else {
+                    boolean isValidKeyType = APIConstants.API_KEY_TYPE_PRODUCTION.equalsIgnoreCase(String.valueOf(body.getKeyType()))
+                            || APIConstants.API_KEY_TYPE_SANDBOX.equalsIgnoreCase(String.valueOf(body.getKeyType()));
+                    if (!isValidKeyType) {
+                        RestApiUtil.handleBadRequest("Invalid keyType. KeyType should be either PRODUCTION or SANDBOX", log);
+                    }
+                    if (body.getValidityPeriod() != null && body.getValidityPeriod() > 0) {
+                        validityPeriod = body.getValidityPeriod();
+                    } else {
+                        validityPeriod = -1;
+                    }
+                    keyName = body.getKeyName();
+                    String restrictedIP = null;
+                    String restrictedReferer = null;
+
+                    if (body.getAdditionalProperties() != null) {
+                        Map additionalProperties = (HashMap) body.getAdditionalProperties();
+                        if (additionalProperties.get(APIConstants.JwtTokenConstants.PERMITTED_IP) != null) {
+                            restrictedIP = (String) additionalProperties.get(APIConstants.JwtTokenConstants.PERMITTED_IP);
+                        }
+                        if (additionalProperties.get(APIConstants.JwtTokenConstants.PERMITTED_REFERER) != null) {
+                            restrictedReferer = (String) additionalProperties.get(APIConstants.JwtTokenConstants.PERMITTED_REFERER);
+                        }
+                    }
+                    String apiKey = apiConsumer.generateApiApiKey(api, userName, validityPeriod,
+                            restrictedIP, restrictedReferer, keyName, String.valueOf(body.getKeyType()));
+                    APIKeyDTO apiKeyDto = ApplicationKeyMappingUtil.formApiKeyToDTO(apiKey, validityPeriod, keyName);
+                    return Response.ok().entity(apiKeyDto).build();
+                }
+            }
+        } catch (APIManagementException e) {
+            RestApiUtil.handleInternalServerError("Error while generating API Keys for API " + apiId, e, log);
+        }
+        return null;
+    }
+
+    @Override
+    public Response getAPIBoundAPIKeys(String apiId, String ifNoneMatch, MessageContext messageContext)
+            throws APIManagementException {
+        APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+        try {
+            String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            if (apiConsumer.getLightweightAPIByUUID(apiId, organization) == null) {
+                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiId, log);
+            } else {
+                if (!RestAPIStoreUtils.isUserAccessAllowedForAPIByUUID(apiId, organization)) {
+                    RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiId, log);
+                } else {
+                    List<APIKeyInfo> apiKeyList = apiConsumer.getApiApiKeys(apiId, RestApiCommonUtil.getLoggedInUsername());
+                    List<APIAPIKeyInfoDTO> apiKeyInfoDTOList = ApplicationKeyMappingUtil.formApiApiKeyListToDTOList(apiKeyList);
+                    return Response.ok().entity(apiKeyInfoDTOList).build();
+                }
+            }
+        } catch (APIManagementException e) {
+            RestApiUtil.handleInternalServerError("Error while retrieving API Keys for API " + apiId, e, log);
+        }
+        return null;
+    }
+
+    @Override
+    public Response associateAPIKey(String apiUUId, APIAPIKeyAssociateRequestDTO body,
+                                                                String ifMatch, MessageContext messageContext)
+            throws APIManagementException {
+        String username = RestApiCommonUtil.getLoggedInUsername();
+        if (body == null || StringUtils.isEmpty(body.getKeyUUID())|| StringUtils.isEmpty(body.getApplicationUUID())) {
+            String errorMessage =
+                    " Error while associating API Key to the application. Required properties are missing in the " +
+                            "request body.";
+            RestApiUtil.handleBadRequest(errorMessage, log);
+            return null;
+        }
+        String keyUUID = body.getKeyUUID();
+        if (!StringUtils.isEmpty(keyUUID) && StringUtils.isNotEmpty(body.getApplicationUUID())) {
+            try {
+                APIConsumer apiConsumer = APIManagerFactory.getInstance().getAPIConsumer(username);
+                String organization = RestApiUtil.getValidatedOrganization(messageContext);
+                API api = apiConsumer.getLightweightAPIByUUID(apiUUId, organization);
+                if (api == null) {
+                    RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiUUId, log);
+                    return null;
+                }
+                if (!RestAPIStoreUtils.isUserAccessAllowedForAPIByUUID(apiUUId, organization)) {
+                    RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiUUId, log);
+                    return null;
+                }
+                Application application =
+                        apiConsumer.getLightweightApplicationByUUID(body.getApplicationUUID());
+                if (application == null) {
+                    RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_APPLICATION,
+                            body.getApplicationUUID(), log);
+                    return null;
+                }
+                if (!RestAPIStoreUtils.isUserAccessAllowedForApplication(application)) {
+                    RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_APPLICATION,
+                            body.getApplicationUUID(), log);
+                    return null;
+                }
+                APIKeyInfo apiKeyInfo = apiConsumer.createAssociationToApp(api, keyUUID,
+                        application, RestApiCommonUtil.getLoggedInUserTenantDomain(), username);
+                APIKeyAssociationDTO apiKeyAssociationDTO =
+                        ApplicationKeyMappingUtil.formApiAssociationToDTO(api.getDisplayName(),
+                                apiKeyInfo.getApplicationName(), apiKeyInfo.getKeyName());
+                return Response.ok().entity(apiKeyAssociationDTO).build();
+
+            } catch (APIManagementException e) {
+                String msg = "Error while creating an association to the API Key " + keyUUID;
+                if(log.isDebugEnabled()) {
+                    log.debug("Error while creating an association to the API " + apiUUId + " and API key " + keyUUID);
+                }
+                RestApiUtil.handleInternalServerError(msg, e, log);
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Provided API Key UUID " + keyUUID + " is not valid");
+            }
+            RestApiUtil.handleBadRequest("Application name, and key name are required", log);
+        }
+        return null;
+    }
+
+    @Override
+    public Response revokeAPIBoundAPIKey(String apiId, APIAPIKeyRevokeRequestDTO body, String ifMatch,
+                                               MessageContext messageContext) throws APIManagementException {
+        APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+        String keyUUID = body.getKeyUUID();
+        if (!StringUtils.isEmpty(keyUUID)) {
+            try {
+                String organization = RestApiUtil.getValidatedOrganization(messageContext);
+                if (apiConsumer.getLightweightAPIByUUID(apiId, organization) == null) {
+                    RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiId, log);
+                } else {
+                    if (!RestAPIStoreUtils.isUserAccessAllowedForAPIByUUID(apiId, organization)) {
+                        RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiId, log);
+                    } else {
+                        String tenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
+                        apiConsumer.revokeApiKey(keyUUID, tenantDomain, RestApiCommonUtil.getLoggedInUsername());
+                        return Response.ok().build();
+                    }
+                }
+            } catch (APIManagementException e) {
+                String msg = "Error while revoking API Key of API " + apiId;
+                if(log.isDebugEnabled()) {
+                    log.debug("Error while revoking API Key of API " + apiId + " and api key UUID " + keyUUID);
+                }
+                RestApiUtil.handleInternalServerError(msg, e, log);
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Provided API Key UUID " + keyUUID + " is not valid");
+            }
+            RestApiUtil.handleBadRequest("Provided API Key isn't valid ", log);
+        }
+        return null;
+    }
+
+    @Override
+    public Response dissociateAPIKey(String apiUUId, APIKeyDissociateRequestDTO body, String ifMatch,
+                                                            MessageContext messageContext) throws APIManagementException {
+        APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+        String keyUUID = body.getKeyUUID();
+        if (!StringUtils.isEmpty(keyUUID)) {
+            try {
+                String organization = RestApiUtil.getValidatedOrganization(messageContext);
+                if (apiConsumer.getLightweightAPIByUUID(apiUUId, organization) == null) {
+                    RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiUUId, log);
+                } else {
+                    if (!RestAPIStoreUtils.isUserAccessAllowedForAPIByUUID(apiUUId, organization)) {
+                        RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiUUId, log);
+                    } else {
+                        apiConsumer.removeApiKeyAssociation(apiUUId, keyUUID, RestApiCommonUtil.getLoggedInUserTenantDomain(),
+                                RestApiCommonUtil.getLoggedInUsername());
+                        return Response.ok().build();
+                    }
+                }
+            } catch (APIManagementException e) {
+                String msg = "Error while removing API Key association of API " + apiUUId;
+                if(log.isDebugEnabled()) {
+                    log.debug("Error while removing association of API " + apiUUId + " and api key " + keyUUID);
+                }
+                RestApiUtil.handleInternalServerError(msg, e, log);
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Provided API Key name " + keyUUID + " is not valid");
+            }
+            RestApiUtil.handleBadRequest("Provided API Key isn't valid ", log);
+        }
+        return null;
+    }
+
+    @Override
+    public Response regenerateAPIBoundAPIKey(String apiId, APIKeyRenewRequestDTO body, String ifMatch,
+                                             MessageContext messageContext) throws APIManagementException {
+        String username = RestApiCommonUtil.getLoggedInUsername();
+        String keyUUID = body.getKeyUUID();
+        if (!StringUtils.isEmpty(keyUUID)) {
+            try {
+                APIConsumer apiConsumer = APIManagerFactory.getInstance().getAPIConsumer(username);
+                String organization = RestApiUtil.getValidatedOrganization(messageContext);
+                API api = apiConsumer.getLightweightAPIByUUID(apiId, organization);
+                if (api != null) {
+                    if (!RestAPIStoreUtils.isUserAccessAllowedForAPIByUUID(apiId, organization)) {
+                        RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiId, log);
+                        return null;
+                    }
+                    String tenantDomain = RestApiCommonUtil.getLoggedInUserTenantDomain();
+                    APIKeyInfo apiKeyInfo = apiConsumer.regenerateApiApiKey(api, keyUUID, tenantDomain,
+                            organization, username);
+                    APIKeyDTO apiKeyDto = ApplicationKeyMappingUtil.formApiKeyToDTO(apiKeyInfo.getApiKey(),
+                            apiKeyInfo.getValidityPeriod(), apiKeyInfo.getKeyName());
+                    return Response.ok().entity(apiKeyDto).build();
+
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug("API with given id " + apiId + " doesn't exist ");
+                    }
+                    RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiId, log);
+                }
+            } catch (APIManagementException e) {
+                String msg = "Error while regenerating API Key of API " + apiId;
+                if (log.isDebugEnabled()) {
+                    log.debug("Error while regenerating API Key of API " + apiId + " and API Key " + keyUUID);
+                }
+                RestApiUtil.handleInternalServerError(msg, e, log);
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Provided API Key name " + keyUUID + " is not valid");
+            }
+            RestApiUtil.handleBadRequest("Provided API Key isn't valid ", log);
+        }
+        return null;
+    }
+
     /**
      * Retrieves the async api specification document of an API
      *
-     * @param apiId API identifier
-     * @param environmentName name of the gateway environment
-     * @param ifNoneMatch If-None-Match header value
-     * @param xWSO2Tenant requested tenant domain for cross tenant invocations
-     * @param messageContext CXF message context
-     * @return Async API Specification document of the API for the given cluster or gateway environment
+     * @param apiId           API identifier
+     * @param environmentName Name of the gateway environment
+     * @param ifNoneMatch     If-None-Match header value
+     * @param xWSO2Tenant     Requested tenant domain for cross tenant invocations
+     * @param messageContext  CXF message context
+     * @return                Async API Specification document of the API for the given cluster or gateway environment
      */
     @Override
-    public Response apisApiIdAsyncApiSpecificationGet(String apiId, String environmentName, String ifNoneMatch, String xWSO2Tenant, MessageContext messageContext) throws APIManagementException {
+    public Response apisApiIdAsyncApiSpecificationGet(String apiId, String environmentName, String ifNoneMatch,
+                                                      String xWSO2Tenant, MessageContext messageContext)
+            throws APIManagementException {
             try {
                 String organization = RestApiUtil.getValidatedOrganization(messageContext);
                 APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
@@ -305,7 +712,8 @@ public class ApisApiServiceImpl implements ApisApiService {
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             String parentCommentID = null;
             CommentList comments = apiConsumer.getComments(apiTypeWrapper, parentCommentID, limit, offset);
             CommentListDTO commentDTO = CommentMappingUtil.fromCommentListToDTO(comments, includeCommenterInfo);
@@ -335,7 +743,8 @@ public class ApisApiServiceImpl implements ApisApiService {
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             Comment comment = apiConsumer.getComment(apiTypeWrapper, commentId, replyLimit, replyOffset);
 
             if (comment != null) {
@@ -378,7 +787,8 @@ public class ApisApiServiceImpl implements ApisApiService {
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             CommentList comments = apiConsumer.getComments(apiTypeWrapper, commentId, limit, offset);
             CommentListDTO commentDTO = CommentMappingUtil.fromCommentListToDTO(comments, includeCommenterInfo);
 
@@ -407,7 +817,8 @@ public class ApisApiServiceImpl implements ApisApiService {
         String organization = RestApiUtil.getValidatedOrganization(messageContext);
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             Comment comment = apiConsumer.getComment(apiTypeWrapper, commentId, 0, 0);
             if (comment != null) {
                 if (comment.getUser().equals(username)) {
@@ -458,7 +869,8 @@ public class ApisApiServiceImpl implements ApisApiService {
         String username = RestApiCommonUtil.getLoggedInUsername();
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             Comment comment = apiConsumer.getComment(apiTypeWrapper, commentId, 0, 0);
             if (comment != null) {
                 String[] tokenScopes = (String[]) PhaseInterceptorChain.getCurrentMessage().getExchange()
@@ -502,7 +914,7 @@ public class ApisApiServiceImpl implements ApisApiService {
 
             DocumentationContent docContent = apiConsumer.getDocumentationContent(apiId, documentId, organization);
             if (docContent == null) {
-                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_DOCUMENTATION, documentId, log);
+                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_DOCUMENTATION, documentId);
                 return null;
             }
 
@@ -665,8 +1077,10 @@ public class ApisApiServiceImpl implements ApisApiService {
             String message = "Error generating the SDK. API id or language should not be empty";
             RestApiUtil.handleBadRequest(message, log);
         }
-        String organization = RestApiUtil.getValidatedOrganization(messageContext);
-        APIDTO api = getAPIByAPIId(apiId, organization);
+        String superOrganization = RestApiUtil.getValidatedOrganization(messageContext);
+        OrganizationInfo userOrgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+        userOrgInfo.setSuperOrganization(superOrganization);
+        APIDTO api = getAPIByAPIId(apiId, superOrganization, userOrgInfo);
         APIClientGenerationManager apiClientGenerationManager = new APIClientGenerationManager();
         Map<String, String> sdkArtifacts;
         String swaggerDefinition = api.getApiDefinition();
@@ -700,9 +1114,14 @@ public class ApisApiServiceImpl implements ApisApiService {
      */
     @Override
     public Response apisApiIdSwaggerGet(String apiId, String environmentName,
-            String ifNoneMatch, String xWSO2Tenant, MessageContext messageContext) {
+            String ifNoneMatch, String xWSO2Tenant, String xWSO2TenantQ, String query, MessageContext messageContext) {
         try {
-            String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            String organization;
+            if (StringUtils.isNotEmpty(xWSO2TenantQ) && StringUtils.isEmpty(xWSO2Tenant)) {
+                organization = RestApiUtil.getRequestedTenantDomain(xWSO2TenantQ);
+            } else {
+                organization = RestApiUtil.getValidatedOrganization(messageContext);
+            }
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
 
             API api = apiConsumer.getLightweightAPIByUUID(apiId, organization);
@@ -745,7 +1164,14 @@ public class ApisApiServiceImpl implements ApisApiService {
             String apiSwagger = null;
             if (StringUtils.isNotEmpty(environmentName)) {
                 try {
-                    apiSwagger = apiConsumer.getOpenAPIDefinitionForEnvironment(api, environmentName);
+                    if (StringUtils.isNotEmpty(query)){
+                        String kmId = APIMappingUtil.getKmIdValue(query);
+                        if (StringUtils.isNotBlank(kmId)) {
+                            apiSwagger = apiConsumer.getOpenAPIDefinitionForEnvironmentByKm(api, environmentName, kmId);
+                        }
+                    } else {
+                        apiSwagger = apiConsumer.getOpenAPIDefinitionForEnvironment(api, environmentName);
+                    }
                 } catch (APIManagementException e) {
                     // handle gateway not found exception otherwise pass it
                     if (RestApiUtil.isDueToResourceNotFound(e)) {
@@ -812,7 +1238,8 @@ public class ApisApiServiceImpl implements ApisApiService {
             Set<Topic> topics;
             try {
                 APIConsumer apiConsumer = RestApiCommonUtil.getConsumer(username);
-                ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+                ApiTypeWrapper apiTypeWrapper = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                        APIConstants.API_IDENTIFIER_TYPE);
                 TopicListDTO topicListDTO;
                 if (apiTypeWrapper.isAPIProduct()) {
                     topics = apiConsumer.getTopics(apiTypeWrapper.getApiProduct().getUuid());
@@ -956,21 +1383,35 @@ public class ApisApiServiceImpl implements ApisApiService {
     }
 
     @Override
-    public Response getWSDLOfAPI(String apiId, String environmentName, String ifNoneMatch,
-                                 String xWSO2Tenant, MessageContext messageContext) throws APIManagementException {
-        String organization = RestApiUtil.getValidatedOrganization(messageContext);
+    public Response getWSDLOfAPI(String apiId, String fileFormat, String environmentName,
+                                 String ifNoneMatch, String xWSO2Tenant, Long exp, String sig, String xWSO2TenantQ,
+                                 MessageContext messageContext) throws APIManagementException {
+        String organization;
+        if (StringUtils.isNotEmpty(xWSO2TenantQ) && StringUtils.isEmpty(xWSO2Tenant)) {
+            organization = RestApiUtil.getRequestedTenantDomain(xWSO2TenantQ);
+        } else {
+            organization = RestApiUtil.getValidatedOrganization(messageContext);
+        }
         APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-        API api = apiConsumer.getLightweightAPIByUUID(apiId, organization);
+        API api;
+        if (exp != null && exp != 0L && StringUtils.isNotEmpty(sig)) {
+            // private API path: validate signature and get the API bypassing normal visibility checks
+            RestApiCommonUtil.validateSignedUrl(exp, sig, apiId);
+            api = apiConsumer.getAPIWithoutPermissionCheck(apiId, organization);
+        } else {
+            // Public API path: visibility checks applied inside getLightweightAPIByUUID
+            api = apiConsumer.getLightweightAPIByUUID(apiId, organization);
+        }
         APIIdentifier apiIdentifier = api.getId();
 
-        List<Environment> environments = APIUtil.getEnvironmentsOfAPI(api);
+        Map<String, Environment> environments = APIUtil.getEnvironments(organization);
         if (environments != null && environments.size() > 0) {
             if (StringUtils.isEmpty(environmentName)) {
                 environmentName = api.getEnvironments().iterator().next();
             }
 
             Environment selectedEnvironment = null;
-            for (Environment environment: environments) {
+            for (Environment environment: environments.values()) {
                if (environment.getName().equals(environmentName)) {
                    selectedEnvironment = environment;
                    break;
@@ -981,10 +1422,10 @@ public class ApisApiServiceImpl implements ApisApiService {
                 throw new APIManagementException(ExceptionCodes.from(ExceptionCodes.INVALID_GATEWAY_ENVIRONMENT,
                         environmentName));
             }
-            ResourceFile wsdl = apiConsumer.getWSDL(api, selectedEnvironment.getName(), selectedEnvironment.getType(),
+            ResourceFile wsdl = apiConsumer.getWSDL(api, fileFormat, selectedEnvironment.getName(), selectedEnvironment.getType(),
                     organization);
 
-            return RestApiUtil.getResponseFromResourceFile(apiIdentifier.toString(), wsdl);
+            return RestApiUtil.getResponseFromResourceFileForDevportal(apiIdentifier.toString(), wsdl);
         } else {
             throw new APIManagementException(ExceptionCodes.from(ExceptionCodes.NO_GATEWAY_ENVIRONMENTS_ADDED,
                     apiIdentifier.toString()));
@@ -994,10 +1435,12 @@ public class ApisApiServiceImpl implements ApisApiService {
     @Override
     public Response apisApiIdSubscriptionPoliciesGet(String apiId, String xWSO2Tenant, String ifNoneMatch,
                                                      MessageContext messageContext) throws APIManagementException {
-        String organization = RestApiUtil.getValidatedOrganization(messageContext);
-        APIDTO apiInfo = getAPIByAPIId(apiId, organization);
+        String superOrganization = RestApiUtil.getValidatedOrganization(messageContext);
+        OrganizationInfo userOrgInfo = RestApiUtil.getOrganizationInfo(messageContext);
+        userOrgInfo.setSuperOrganization(superOrganization);
+        APIDTO apiInfo = getAPIByAPIId(apiId, superOrganization, userOrgInfo);
         List<Tier> availableThrottlingPolicyList = new ThrottlingPoliciesApiServiceImpl()
-                .getThrottlingPolicyList(ThrottlingPolicyDTO.PolicyLevelEnum.SUBSCRIPTION.toString(), organization);
+                .getThrottlingPolicyList(ThrottlingPolicyDTO.PolicyLevelEnum.SUBSCRIPTION.toString(), superOrganization);
 
         if (apiInfo != null ) {
             List<APITiersDTO> apiTiers = apiInfo.getTiers();
@@ -1016,20 +1459,36 @@ public class ApisApiServiceImpl implements ApisApiService {
         return null;
     }
 
-    private APIDTO getAPIByAPIId(String apiId, String organization) {
+    private APIDTO getAPIByAPIId(String apiId, String organization, OrganizationInfo userOrgInfo) {
         try {
             APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
-            ApiTypeWrapper api = apiConsumer.getAPIorAPIProductByUUID(apiId, organization);
+            ApiTypeWrapper api = apiConsumer.getAPIorAPIProductByUUID(apiId, organization,
+                    APIConstants.API_IDENTIFIER_TYPE);
             String status = api.getStatus();
+            String userOrg = userOrgInfo.getOrganizationId();
+
+            String userName = RestApiCommonUtil.getLoggedInUsername();
+
+            if (!api.isAPIProduct() && !RestApiUtil.isOrganizationVisibilityAllowed(userName,
+                    api.getApi().getVisibleOrganizations(), userOrg)) {
+                RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiId, log);
+            }
+
+            if (!api.isAPIProduct() && !StringUtils.isEmpty(userOrgInfo.getOrganizationId())) {
+                org.wso2.carbon.apimgt.rest.api.store.v1.utils.APIUtils.updateAvailableTiersByOrganization(
+                        api.getApi(), userOrgInfo.getOrganizationId());
+            }
 
             // Extracting clicked API name by the user, for the recommendation system
-            String userName = RestApiCommonUtil.getLoggedInUsername();
             apiConsumer.publishClickedAPI(api, userName, organization);
 
             if (APIConstants.PUBLISHED.equals(status) || APIConstants.PROTOTYPED.equals(status)
                             || APIConstants.DEPRECATED.equals(status)) {
 
-                return APIMappingUtil.fromAPItoDTO(api, organization);
+                APIDTO apidto = APIMappingUtil.fromAPItoDTO(api, organization);
+                long subscriptionCountOfAPI = apiConsumer.getSubscriptionCountOfAPI(apiId, organization);
+                apidto.setSubscriptions(subscriptionCountOfAPI);
+                return apidto;
             } else {
                 RestApiUtil.handleAuthorizationFailure(RestApiConstants.RESOURCE_API, apiId, log);
             }
@@ -1056,4 +1515,87 @@ public class ApisApiServiceImpl implements ApisApiService {
         String errorMessage = e.getMessage();
         return errorMessage != null && errorMessage.contains(APIConstants.UN_AUTHORIZED_ERROR_MESSAGE);
     }
+
+    /**
+     * Generates a URL to download API definition documents (WSDL, Swagger, OpenAPI) of an API for a given gateway
+     * environment.
+     *
+     * @param resourceType    Type of the API definition document (wsdl, swagger, openapi)
+     * @param apiId           API identifier
+     * @param environmentName name of the gateway environment
+     * @param xWSO2Tenant     requested tenant domain for cross tenant invocations
+     * @param messageContext  CXF message context
+     * @return URL to download the API definition document for the given gateway environment
+     */
+    @Override
+    public Response generateDefinitionURL(String resourceType, String apiId, String environmentName,
+            String xWSO2Tenant, MessageContext messageContext) throws APIManagementException {
+        String generatedUrl = null;
+
+        try {
+            String organization = RestApiUtil.getValidatedOrganization(messageContext);
+            if (StringUtils.isBlank(resourceType) ||
+                    !AllowedResourceType.contains(resourceType.toLowerCase())) {
+                throw new APIManagementException(
+                        ExceptionCodes.from(ExceptionCodes.UNSUPPORTED_RESOURCE_TYPE, resourceType));
+            }
+            APIConsumer apiConsumer = RestApiCommonUtil.getLoggedInUserConsumer();
+            API api = apiConsumer.getLightweightAPIByUUID(apiId, organization);
+            APIIdentifier apiIdentifier = api.getId();
+            // Validate resource type and API type compatibility
+            if (APIConstants.WSDL_RESOURCE_TYPE.equalsIgnoreCase(resourceType)) {
+                if (!APIConstants.API_TYPE_SOAP.equalsIgnoreCase(api.getType())) {
+                    throw new APIManagementException(
+                            ExceptionCodes.from(ExceptionCodes.API_TYPE_INCOMPATIBLE_WITH_RESOURCE, resourceType,
+                                    api.getType()));
+                }
+            }
+            Map<String, Environment> environments = APIUtil.getEnvironments(organization);
+            if (environments != null && environments.size() > 0) {
+                if (StringUtils.isEmpty(environmentName)) {
+                    environmentName = api.getEnvironments().iterator().next();
+                }
+                Environment selectedEnvironment = environments.get(environmentName);
+                if (selectedEnvironment == null) {
+                    throw new APIManagementException(
+                            ExceptionCodes.from(ExceptionCodes.INVALID_GATEWAY_ENVIRONMENT, environmentName));
+                }
+
+                if (APIConstants.WSDL_RESOURCE_TYPE.equalsIgnoreCase(resourceType)) {
+                    URI baseUrl;
+                    if (!APIConstants.SUPER_TENANT_DOMAIN.equalsIgnoreCase(organization)) {
+                        baseUrl = messageContext.getUriInfo().getBaseUriBuilder().path(RestApiConstants.RESOURCE_PATH_APIS)
+                                .path(apiId).path(resourceType.toLowerCase())
+                                .queryParam(APIConstants.RestApiConstants.ENVIRONMENT_NAME,
+                                        selectedEnvironment.getName())
+                                .queryParam(RestApiConstants.QUERY_PARAM_X_WSO2_TENANT, organization).build();
+                    } else {
+                        baseUrl = messageContext.getUriInfo().getBaseUriBuilder().path(RestApiConstants.RESOURCE_PATH_APIS)
+                                .path(apiId).path(resourceType.toLowerCase())
+                                .queryParam(APIConstants.RestApiConstants.ENVIRONMENT_NAME,
+                                        selectedEnvironment.getName()).build();
+                    }
+                    if (APIConstants.PERMISSION_NOT_RESTRICTED.equalsIgnoreCase(api.getVisibility())) {
+                        generatedUrl = String.valueOf(baseUrl);
+                    } else {
+                        String separator = baseUrl.getQuery() == null ? "?" : "&";
+                        generatedUrl = RestApiCommonUtil.generateSignedUrl(String.valueOf(baseUrl), separator, apiId);
+                    }
+                }
+                return Response.ok(generatedUrl).build();
+            } else {
+                throw new APIManagementException(
+                        ExceptionCodes.from(ExceptionCodes.NO_GATEWAY_ENVIRONMENTS_ADDED, apiIdentifier.toString()));
+            }
+        } catch (APIManagementException e) {
+            if (RestApiUtil.isDueToResourceNotFound(e)) {
+                RestApiUtil.handleResourceNotFoundError(RestApiConstants.RESOURCE_API, apiId, e, log);
+            } else {
+                String errorMessage = "Error while generating definition URL for API : " + apiId;
+                RestApiUtil.handleInternalServerError(errorMessage, e, log);
+            }
+        }
+        return null;
+    }
+
 }

@@ -1,13 +1,28 @@
 package org.wso2.carbon.apimgt.internal.service.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
 import java.util.ArrayList;
 import java.util.List;
+import org.wso2.carbon.apimgt.internal.service.dto.OperationPolicyDTO;
+import org.wso2.carbon.apimgt.internal.service.dto.URLMappingDTO;
+import javax.validation.constraints.*;
+
 
 import io.swagger.annotations.*;
 import java.util.Objects;
 
+import javax.xml.bind.annotation.*;
 import org.wso2.carbon.apimgt.rest.api.common.annotations.Scope;
+import com.fasterxml.jackson.annotation.JsonCreator;
+
+import javax.validation.Valid;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 
 public class APIDTO   {
   
@@ -17,11 +32,18 @@ public class APIDTO   {
     private String name = null;
     private String version = null;
     private String context = null;
+    private String contextTemplate = null;
     private String policy = null;
     private String apiType = null;
     private String status = null;
+    private String organization = null;
     private Boolean isDefaultVersion = null;
+    private List<OperationPolicyDTO> apiPolicies = new ArrayList<>();
     private List<URLMappingDTO> urlMappings = new ArrayList<>();
+    private String securityScheme = null;
+    private Boolean isSubscriptionValidationDisabled = false;
+    private Boolean isEgress = null;
+    private String subtype = null;
 
   /**
    * UUID of API
@@ -131,6 +153,24 @@ public class APIDTO   {
   }
 
   /**
+   * Context template of the API.
+   **/
+  public APIDTO contextTemplate(String contextTemplate) {
+    this.contextTemplate = contextTemplate;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "Context template of the API.")
+  @JsonProperty("contextTemplate")
+  public String getContextTemplate() {
+    return contextTemplate;
+  }
+  public void setContextTemplate(String contextTemplate) {
+    this.contextTemplate = contextTemplate;
+  }
+
+  /**
    * API level throttling policy.
    **/
   public APIDTO policy(String policy) {
@@ -185,6 +225,24 @@ public class APIDTO   {
   }
 
   /**
+   * Organization of the API.
+   **/
+  public APIDTO organization(String organization) {
+    this.organization = organization;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "wso2.com", value = "Organization of the API.")
+  @JsonProperty("organization")
+  public String getOrganization() {
+    return organization;
+  }
+  public void setOrganization(String organization) {
+    this.organization = organization;
+  }
+
+  /**
    * Whether this is the default version of the API.
    **/
   public APIDTO isDefaultVersion(Boolean isDefaultVersion) {
@@ -204,6 +262,24 @@ public class APIDTO   {
 
   /**
    **/
+  public APIDTO apiPolicies(List<OperationPolicyDTO> apiPolicies) {
+    this.apiPolicies = apiPolicies;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "")
+      @Valid
+  @JsonProperty("apiPolicies")
+  public List<OperationPolicyDTO> getApiPolicies() {
+    return apiPolicies;
+  }
+  public void setApiPolicies(List<OperationPolicyDTO> apiPolicies) {
+    this.apiPolicies = apiPolicies;
+  }
+
+  /**
+   **/
   public APIDTO urlMappings(List<URLMappingDTO> urlMappings) {
     this.urlMappings = urlMappings;
     return this;
@@ -211,12 +287,85 @@ public class APIDTO   {
 
   
   @ApiModelProperty(value = "")
+      @Valid
   @JsonProperty("urlMappings")
   public List<URLMappingDTO> getUrlMappings() {
     return urlMappings;
   }
   public void setUrlMappings(List<URLMappingDTO> urlMappings) {
     this.urlMappings = urlMappings;
+  }
+
+  /**
+   * Available authentication methods of the API.
+   **/
+  public APIDTO securityScheme(String securityScheme) {
+    this.securityScheme = securityScheme;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Oauth2,api_key", value = "Available authentication methods of the API.")
+  @JsonProperty("securityScheme")
+  public String getSecurityScheme() {
+    return securityScheme;
+  }
+  public void setSecurityScheme(String securityScheme) {
+    this.securityScheme = securityScheme;
+  }
+
+  /**
+   * Whether subscription validation is disabled.
+   **/
+  public APIDTO isSubscriptionValidationDisabled(Boolean isSubscriptionValidationDisabled) {
+    this.isSubscriptionValidationDisabled = isSubscriptionValidationDisabled;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "Whether subscription validation is disabled.")
+  @JsonProperty("isSubscriptionValidationDisabled")
+  public Boolean isIsSubscriptionValidationDisabled() {
+    return isSubscriptionValidationDisabled;
+  }
+  public void setIsSubscriptionValidationDisabled(Boolean isSubscriptionValidationDisabled) {
+    this.isSubscriptionValidationDisabled = isSubscriptionValidationDisabled;
+  }
+
+  /**
+   * Indicates if the API is an egress API.
+   **/
+  public APIDTO isEgress(Boolean isEgress) {
+    this.isEgress = isEgress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "false", value = "Indicates if the API is an egress API.")
+  @JsonProperty("isEgress")
+  public Boolean isIsEgress() {
+    return isEgress;
+  }
+  public void setIsEgress(Boolean isEgress) {
+    this.isEgress = isEgress;
+  }
+
+  /**
+   * The subtype of the API.
+   **/
+  public APIDTO subtype(String subtype) {
+    this.subtype = subtype;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Default", value = "The subtype of the API.")
+  @JsonProperty("subtype")
+  public String getSubtype() {
+    return subtype;
+  }
+  public void setSubtype(String subtype) {
+    this.subtype = subtype;
   }
 
 
@@ -235,16 +384,23 @@ public class APIDTO   {
         Objects.equals(name, API.name) &&
         Objects.equals(version, API.version) &&
         Objects.equals(context, API.context) &&
+        Objects.equals(contextTemplate, API.contextTemplate) &&
         Objects.equals(policy, API.policy) &&
         Objects.equals(apiType, API.apiType) &&
         Objects.equals(status, API.status) &&
+        Objects.equals(organization, API.organization) &&
         Objects.equals(isDefaultVersion, API.isDefaultVersion) &&
-        Objects.equals(urlMappings, API.urlMappings);
+        Objects.equals(apiPolicies, API.apiPolicies) &&
+        Objects.equals(urlMappings, API.urlMappings) &&
+        Objects.equals(securityScheme, API.securityScheme) &&
+        Objects.equals(isSubscriptionValidationDisabled, API.isSubscriptionValidationDisabled) &&
+        Objects.equals(isEgress, API.isEgress) &&
+        Objects.equals(subtype, API.subtype);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(uuid, apiId, provider, name, version, context, policy, apiType, status, isDefaultVersion, urlMappings);
+    return Objects.hash(uuid, apiId, provider, name, version, context, contextTemplate, policy, apiType, status, organization, isDefaultVersion, apiPolicies, urlMappings, securityScheme, isSubscriptionValidationDisabled, isEgress, subtype);
   }
 
   @Override
@@ -258,11 +414,18 @@ public class APIDTO   {
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
     sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
+    sb.append("    contextTemplate: ").append(toIndentedString(contextTemplate)).append("\n");
     sb.append("    policy: ").append(toIndentedString(policy)).append("\n");
     sb.append("    apiType: ").append(toIndentedString(apiType)).append("\n");
     sb.append("    status: ").append(toIndentedString(status)).append("\n");
+    sb.append("    organization: ").append(toIndentedString(organization)).append("\n");
     sb.append("    isDefaultVersion: ").append(toIndentedString(isDefaultVersion)).append("\n");
+    sb.append("    apiPolicies: ").append(toIndentedString(apiPolicies)).append("\n");
     sb.append("    urlMappings: ").append(toIndentedString(urlMappings)).append("\n");
+    sb.append("    securityScheme: ").append(toIndentedString(securityScheme)).append("\n");
+    sb.append("    isSubscriptionValidationDisabled: ").append(toIndentedString(isSubscriptionValidationDisabled)).append("\n");
+    sb.append("    isEgress: ").append(toIndentedString(isEgress)).append("\n");
+    sb.append("    subtype: ").append(toIndentedString(subtype)).append("\n");
     sb.append("}");
     return sb.toString();
   }

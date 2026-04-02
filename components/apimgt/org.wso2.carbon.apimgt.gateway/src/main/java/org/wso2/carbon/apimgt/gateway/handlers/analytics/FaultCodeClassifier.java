@@ -17,6 +17,7 @@
 
 package org.wso2.carbon.apimgt.gateway.handlers.analytics;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.synapse.MessageContext;
@@ -26,6 +27,7 @@ import org.wso2.carbon.apimgt.common.analytics.publishers.dto.enums.FaultCategor
 import org.wso2.carbon.apimgt.common.analytics.publishers.dto.enums.FaultSubCategories;
 import org.wso2.carbon.apimgt.common.analytics.publishers.dto.enums.FaultSubCategory;
 import org.wso2.carbon.apimgt.gateway.handlers.security.APISecurityConstants;
+import org.wso2.carbon.apimgt.gateway.handlers.streaming.websocket.WebSocketApiConstants;
 import org.wso2.carbon.apimgt.gateway.handlers.throttling.APIThrottleConstants;
 
 /**
@@ -47,6 +49,8 @@ public class FaultCodeClassifier {
             return getTargetFaultSubCategory(errorCode);
         case THROTTLED:
             return getThrottledFaultSubCategory(errorCode);
+        case GUARDRAIL_FAULT:
+            return getGuardrailViolationFaultSubCategory(errorCode);
         case OTHER:
             return getOtherFaultSubCategory(errorCode);
         }
@@ -60,16 +64,20 @@ public class FaultCodeClassifier {
         case APISecurityConstants.API_AUTH_MISSING_CREDENTIALS:
         case APISecurityConstants.API_AUTH_ACCESS_TOKEN_EXPIRED:
         case APISecurityConstants.API_AUTH_ACCESS_TOKEN_INACTIVE:
+        case WebSocketApiConstants.HandshakeErrorConstants.API_AUTH_ERROR:
+        case WebSocketApiConstants.FrameErrorConstants.API_AUTH_GENERAL_ERROR:
+        case WebSocketApiConstants.FrameErrorConstants.API_AUTH_INVALID_CREDENTIALS:
             return FaultSubCategories.Authentication.AUTHENTICATION_FAILURE;
         case APISecurityConstants.API_AUTH_INCORRECT_ACCESS_TOKEN_TYPE:
         case APISecurityConstants.INVALID_SCOPE:
+        case WebSocketApiConstants.FrameErrorConstants.RESOURCE_FORBIDDEN_ERROR:
             return FaultSubCategories.Authentication.AUTHORIZATION_FAILURE;
         case APISecurityConstants.API_BLOCKED:
         case APISecurityConstants.API_AUTH_FORBIDDEN:
         case APISecurityConstants.SUBSCRIPTION_INACTIVE:
             return FaultSubCategories.Authentication.SUBSCRIPTION_VALIDATION_FAILURE;
         default:
-            return FaultSubCategories.TargetConnectivity.OTHER;
+            return FaultSubCategories.Authentication.OTHER;
         }
     }
 
@@ -88,6 +96,7 @@ public class FaultCodeClassifier {
     protected FaultSubCategory getThrottledFaultSubCategory(int errorCode) {
         switch (errorCode) {
         case APIThrottleConstants.API_THROTTLE_OUT_ERROR_CODE:
+        case WebSocketApiConstants.FrameErrorConstants.THROTTLED_OUT_ERROR:
             return FaultSubCategories.Throttling.API_LEVEL_LIMIT_EXCEEDED;
         case APIThrottleConstants.HARD_LIMIT_EXCEEDED_ERROR_CODE:
             return FaultSubCategories.Throttling.HARD_LIMIT_EXCEEDED;
@@ -103,12 +112,33 @@ public class FaultCodeClassifier {
             return FaultSubCategories.Throttling.CUSTOM_POLICY_LIMIT_EXCEEDED;
         case APIThrottleConstants.SUBSCRIPTION_BURST_THROTTLE_OUT_ERROR_CODE:
             return FaultSubCategories.Throttling.BURST_CONTROL_LIMIT_EXCEEDED;
+        case APIThrottleConstants.APPLICATION_BURST_THROTTLE_OUT_ERROR_CODE:
+            return FaultSubCategories.Throttling.APPLICATION_BURST_CONTROL_LIMIT_EXCEEDED;
         case APIThrottleConstants.GRAPHQL_QUERY_TOO_DEEP:
+        case WebSocketApiConstants.FrameErrorConstants.GRAPHQL_QUERY_TOO_DEEP:
             return FaultSubCategories.Throttling.QUERY_TOO_DEEP;
         case APIThrottleConstants.GRAPHQL_QUERY_TOO_COMPLEX:
+        case WebSocketApiConstants.FrameErrorConstants.GRAPHQL_QUERY_TOO_COMPLEX:
             return FaultSubCategories.Throttling.QUERY_TOO_COMPLEX;
         default:
             return FaultSubCategories.Throttling.OTHER;
+        }
+    }
+
+    protected FaultSubCategory getGuardrailViolationFaultSubCategory(int errorCode) {
+        switch (errorCode) {
+        case Constants.GUARDRAIL_ERROR_CODE:
+            if (messageContext.getProperty(SynapseConstants.ERROR_MESSAGE) != null) {
+                String errorMessage = (String) messageContext.getProperty(SynapseConstants.ERROR_MESSAGE);
+                if (errorMessage.contains("\"direction\":\"REQUEST\"")) {
+                    return FaultSubCategories.GuardrailViolation.REQUEST_GUARDRAIL_HIT;
+                } else if (errorMessage.contains("\"direction\":\"RESPONSE\"")) {
+                    return FaultSubCategories.GuardrailViolation.RESPONSE_GUARDRAIL_HIT;
+                }
+            }
+            return FaultSubCategories.GuardrailViolation.GUARDRAIL_HIT;
+        default:
+            return FaultSubCategories.GuardrailViolation.OTHER;
         }
     }
 
@@ -117,6 +147,10 @@ public class FaultCodeClassifier {
             return FaultSubCategories.Other.METHOD_NOT_ALLOWED;
         } else if (isResourceNotFound()) {
             return FaultSubCategories.Other.RESOURCE_NOT_FOUND;
+        } else if (isRequestSchemaInvalid()) {
+            return FaultSubCategories.Other.INVALID_REQUEST_SCHEMA;
+        } else if (isResponseSchemaInvalid()) {
+            return FaultSubCategories.Other.INVALID_RESPONSE_SCHEMA;
         } else {
             return FaultSubCategories.Other.UNCLASSIFIED;
         }
@@ -126,7 +160,8 @@ public class FaultCodeClassifier {
         if (messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_CODE)) {
             int errorCode = (int) messageContext.getProperty(SynapseConstants.ERROR_CODE);
             return messageContext.getPropertyKeySet().contains(RESTConstants.PROCESSED_API)
-                    && errorCode == Constants.RESOURCE_NOT_FOUND_ERROR_CODE;
+                    && (errorCode == Constants.RESOURCE_NOT_FOUND_ERROR_CODE
+                    || errorCode == Constants.RESOURCE_NOT_FOUND_APIM_ERROR_CODE);
         }
         return false;
     }
@@ -136,6 +171,26 @@ public class FaultCodeClassifier {
             int errorCode = (int) messageContext.getProperty(SynapseConstants.ERROR_CODE);
             return messageContext.getPropertyKeySet().contains(RESTConstants.PROCESSED_API)
                     && errorCode == Constants.METHOD_NOT_ALLOWED_ERROR_CODE;
+        }
+        return false;
+    }
+
+    private boolean isRequestSchemaInvalid() {
+        if (messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_DETAIL)) {
+            String errorDetail = (String) messageContext.getProperty(SynapseConstants.ERROR_DETAIL);
+            String errorMessage = "Schema validation failed in the Request: ";
+            return messageContext.getPropertyKeySet().contains(RESTConstants.PROCESSED_API)
+                    && StringUtils.isNotEmpty(errorDetail) && errorDetail.contains(errorMessage);
+        }
+        return false;
+    }
+
+    private boolean isResponseSchemaInvalid() {
+        if (messageContext.getPropertyKeySet().contains(SynapseConstants.ERROR_DETAIL)) {
+            String errorDetail = (String) messageContext.getProperty(SynapseConstants.ERROR_DETAIL);
+            String errorMessage = "Schema validation failed in the Response: ";
+            return messageContext.getPropertyKeySet().contains(RESTConstants.PROCESSED_API)
+                    && StringUtils.isNotEmpty(errorDetail) && errorDetail.contains(errorMessage);
         }
         return false;
     }

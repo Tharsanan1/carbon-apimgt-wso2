@@ -24,48 +24,24 @@ public class APIProductInfoDTO   {
   
     private String id = null;
     private String name = null;
+    private String displayName = null;
     private String context = null;
     private String description = null;
     private String provider = null;
+    private String version = null;
     private Boolean hasThumbnail = null;
-
-    @XmlType(name="StateEnum")
-    @XmlEnum(String.class)
-    public enum StateEnum {
-        CREATED("CREATED"),
-        PUBLISHED("PUBLISHED"),
-        DEPRECATED("DEPRECATED"),
-        RETIRED("RETIRED"),
-        BLOCKED("BLOCKED"),
-        PROTOTYPED("PROTOTYPED");
-        private String value;
-
-        StateEnum (String v) {
-            value = v;
-        }
-
-        public String value() {
-            return value;
-        }
-
-        @Override
-        public String toString() {
-            return String.valueOf(value);
-        }
-
-        @JsonCreator
-        public static StateEnum fromValue(String v) {
-            for (StateEnum b : StateEnum.values()) {
-                if (String.valueOf(b.value).equals(v)) {
-                    return b;
-                }
-            }
-return null;
-        }
-    }
-    private StateEnum state = null;
+    private String state = null;
     private List<String> securityScheme = new ArrayList<String>();
+    private String createdTime = null;
+    private String updatedTime = null;
     private String gatewayVendor = null;
+    private List<String> audiences = new ArrayList<String>();
+    private Boolean monetizedInfo = null;
+    private String businessOwner = null;
+    private String businessOwnerEmail = null;
+    private String technicalOwner = null;
+    private String technicalOwnerEmail = null;
+    private Boolean egress = false;
 
   /**
    * UUID of the api product 
@@ -101,6 +77,24 @@ return null;
   }
   public void setName(String name) {
     this.name = name;
+  }
+
+  /**
+   * Display name of the API Product. This is the name that will be displayed in the Publisher and DevPortal. If not provided, the name will be used as the display name. 
+   **/
+  public APIProductInfoDTO displayName(String displayName) {
+    this.displayName = displayName;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Calculator Product API", value = "Display name of the API Product. This is the name that will be displayed in the Publisher and DevPortal. If not provided, the name will be used as the display name. ")
+  @JsonProperty("displayName")
+  public String getDisplayName() {
+    return displayName;
+  }
+  public void setDisplayName(String displayName) {
+    this.displayName = displayName;
   }
 
   /**
@@ -158,6 +152,23 @@ return null;
 
   /**
    **/
+  public APIProductInfoDTO version(String version) {
+    this.version = version;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1.0.0", value = "")
+  @JsonProperty("version")
+  public String getVersion() {
+    return version;
+  }
+  public void setVersion(String version) {
+    this.version = version;
+  }
+
+  /**
+   **/
   public APIProductInfoDTO hasThumbnail(Boolean hasThumbnail) {
     this.hasThumbnail = hasThumbnail;
     return this;
@@ -174,20 +185,20 @@ return null;
   }
 
   /**
-   * State of the API product. Only published api products are visible on the Developer Portal 
+   * State of the API product. Only published API products are visible on the Developer Portal 
    **/
-  public APIProductInfoDTO state(StateEnum state) {
+  public APIProductInfoDTO state(String state) {
     this.state = state;
     return this;
   }
 
   
-  @ApiModelProperty(value = "State of the API product. Only published api products are visible on the Developer Portal ")
+  @ApiModelProperty(value = "State of the API product. Only published API products are visible on the Developer Portal ")
   @JsonProperty("state")
-  public StateEnum getState() {
+  public String getState() {
     return state;
   }
-  public void setState(StateEnum state) {
+  public void setState(String state) {
     this.state = state;
   }
 
@@ -210,6 +221,42 @@ return null;
   }
 
   /**
+   * Created time as unix timestamp in milliseconds.
+   **/
+  public APIProductInfoDTO createdTime(String createdTime) {
+    this.createdTime = createdTime;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1756199448644", value = "Created time as unix timestamp in milliseconds.")
+  @JsonProperty("createdTime")
+  public String getCreatedTime() {
+    return createdTime;
+  }
+  public void setCreatedTime(String createdTime) {
+    this.createdTime = createdTime;
+  }
+
+  /**
+   * Update time as unix timestamp in milliseconds.
+   **/
+  public APIProductInfoDTO updatedTime(String updatedTime) {
+    this.updatedTime = updatedTime;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "1756199448644", value = "Update time as unix timestamp in milliseconds.")
+  @JsonProperty("updatedTime")
+  public String getUpdatedTime() {
+    return updatedTime;
+  }
+  public void setUpdatedTime(String updatedTime) {
+    this.updatedTime = updatedTime;
+  }
+
+  /**
    **/
   public APIProductInfoDTO gatewayVendor(String gatewayVendor) {
     this.gatewayVendor = gatewayVendor;
@@ -226,6 +273,127 @@ return null;
     this.gatewayVendor = gatewayVendor;
   }
 
+  /**
+   * The audiences of the API product for jwt validation. Accepted values are any String values
+   **/
+  public APIProductInfoDTO audiences(List<String> audiences) {
+    this.audiences = audiences;
+    return this;
+  }
+
+  
+  @ApiModelProperty(value = "The audiences of the API product for jwt validation. Accepted values are any String values")
+  @JsonProperty("audiences")
+  public List<String> getAudiences() {
+    return audiences;
+  }
+  public void setAudiences(List<String> audiences) {
+    this.audiences = audiences;
+  }
+
+  /**
+   **/
+  public APIProductInfoDTO monetizedInfo(Boolean monetizedInfo) {
+    this.monetizedInfo = monetizedInfo;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "")
+  @JsonProperty("monetizedInfo")
+  public Boolean isMonetizedInfo() {
+    return monetizedInfo;
+  }
+  public void setMonetizedInfo(Boolean monetizedInfo) {
+    this.monetizedInfo = monetizedInfo;
+  }
+
+  /**
+   **/
+  public APIProductInfoDTO businessOwner(String businessOwner) {
+    this.businessOwner = businessOwner;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Business Owner", value = "")
+  @JsonProperty("businessOwner")
+  public String getBusinessOwner() {
+    return businessOwner;
+  }
+  public void setBusinessOwner(String businessOwner) {
+    this.businessOwner = businessOwner;
+  }
+
+  /**
+   **/
+  public APIProductInfoDTO businessOwnerEmail(String businessOwnerEmail) {
+    this.businessOwnerEmail = businessOwnerEmail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "businessowner@abc.com", value = "")
+  @JsonProperty("businessOwnerEmail")
+  public String getBusinessOwnerEmail() {
+    return businessOwnerEmail;
+  }
+  public void setBusinessOwnerEmail(String businessOwnerEmail) {
+    this.businessOwnerEmail = businessOwnerEmail;
+  }
+
+  /**
+   **/
+  public APIProductInfoDTO technicalOwner(String technicalOwner) {
+    this.technicalOwner = technicalOwner;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "Technical Owner", value = "")
+  @JsonProperty("TechnicalOwner")
+  public String getTechnicalOwner() {
+    return technicalOwner;
+  }
+  public void setTechnicalOwner(String technicalOwner) {
+    this.technicalOwner = technicalOwner;
+  }
+
+  /**
+   **/
+  public APIProductInfoDTO technicalOwnerEmail(String technicalOwnerEmail) {
+    this.technicalOwnerEmail = technicalOwnerEmail;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "technicalowner@abc.com", value = "")
+  @JsonProperty("TechnicalOwnerEmail")
+  public String getTechnicalOwnerEmail() {
+    return technicalOwnerEmail;
+  }
+  public void setTechnicalOwnerEmail(String technicalOwnerEmail) {
+    this.technicalOwnerEmail = technicalOwnerEmail;
+  }
+
+  /**
+   * Whether the APIProduct is EGRESS or not
+   **/
+  public APIProductInfoDTO egress(Boolean egress) {
+    this.egress = egress;
+    return this;
+  }
+
+  
+  @ApiModelProperty(example = "true", value = "Whether the APIProduct is EGRESS or not")
+  @JsonProperty("egress")
+  public Boolean isEgress() {
+    return egress;
+  }
+  public void setEgress(Boolean egress) {
+    this.egress = egress;
+  }
+
 
   @Override
   public boolean equals(java.lang.Object o) {
@@ -238,18 +406,29 @@ return null;
     APIProductInfoDTO apIProductInfo = (APIProductInfoDTO) o;
     return Objects.equals(id, apIProductInfo.id) &&
         Objects.equals(name, apIProductInfo.name) &&
+        Objects.equals(displayName, apIProductInfo.displayName) &&
         Objects.equals(context, apIProductInfo.context) &&
         Objects.equals(description, apIProductInfo.description) &&
         Objects.equals(provider, apIProductInfo.provider) &&
+        Objects.equals(version, apIProductInfo.version) &&
         Objects.equals(hasThumbnail, apIProductInfo.hasThumbnail) &&
         Objects.equals(state, apIProductInfo.state) &&
         Objects.equals(securityScheme, apIProductInfo.securityScheme) &&
-        Objects.equals(gatewayVendor, apIProductInfo.gatewayVendor);
+        Objects.equals(createdTime, apIProductInfo.createdTime) &&
+        Objects.equals(updatedTime, apIProductInfo.updatedTime) &&
+        Objects.equals(gatewayVendor, apIProductInfo.gatewayVendor) &&
+        Objects.equals(audiences, apIProductInfo.audiences) &&
+        Objects.equals(monetizedInfo, apIProductInfo.monetizedInfo) &&
+        Objects.equals(businessOwner, apIProductInfo.businessOwner) &&
+        Objects.equals(businessOwnerEmail, apIProductInfo.businessOwnerEmail) &&
+        Objects.equals(technicalOwner, apIProductInfo.technicalOwner) &&
+        Objects.equals(technicalOwnerEmail, apIProductInfo.technicalOwnerEmail) &&
+        Objects.equals(egress, apIProductInfo.egress);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, context, description, provider, hasThumbnail, state, securityScheme, gatewayVendor);
+    return Objects.hash(id, name, displayName, context, description, provider, version, hasThumbnail, state, securityScheme, createdTime, updatedTime, gatewayVendor, audiences, monetizedInfo, businessOwner, businessOwnerEmail, technicalOwner, technicalOwnerEmail, egress);
   }
 
   @Override
@@ -259,13 +438,24 @@ return null;
     
     sb.append("    id: ").append(toIndentedString(id)).append("\n");
     sb.append("    name: ").append(toIndentedString(name)).append("\n");
+    sb.append("    displayName: ").append(toIndentedString(displayName)).append("\n");
     sb.append("    context: ").append(toIndentedString(context)).append("\n");
     sb.append("    description: ").append(toIndentedString(description)).append("\n");
     sb.append("    provider: ").append(toIndentedString(provider)).append("\n");
+    sb.append("    version: ").append(toIndentedString(version)).append("\n");
     sb.append("    hasThumbnail: ").append(toIndentedString(hasThumbnail)).append("\n");
     sb.append("    state: ").append(toIndentedString(state)).append("\n");
     sb.append("    securityScheme: ").append(toIndentedString(securityScheme)).append("\n");
+    sb.append("    createdTime: ").append(toIndentedString(createdTime)).append("\n");
+    sb.append("    updatedTime: ").append(toIndentedString(updatedTime)).append("\n");
     sb.append("    gatewayVendor: ").append(toIndentedString(gatewayVendor)).append("\n");
+    sb.append("    audiences: ").append(toIndentedString(audiences)).append("\n");
+    sb.append("    monetizedInfo: ").append(toIndentedString(monetizedInfo)).append("\n");
+    sb.append("    businessOwner: ").append(toIndentedString(businessOwner)).append("\n");
+    sb.append("    businessOwnerEmail: ").append(toIndentedString(businessOwnerEmail)).append("\n");
+    sb.append("    technicalOwner: ").append(toIndentedString(technicalOwner)).append("\n");
+    sb.append("    technicalOwnerEmail: ").append(toIndentedString(technicalOwnerEmail)).append("\n");
+    sb.append("    egress: ").append(toIndentedString(egress)).append("\n");
     sb.append("}");
     return sb.toString();
   }

@@ -3,7 +3,7 @@
     <parent>
         <groupId>org.wso2.carbon.apimgt</groupId>
         <artifactId>apimgt</artifactId>
-        <version>9.26.65-SNAPSHOT</version>
+        <version>9.33.84</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -45,7 +45,7 @@
             <artifactId>org.wso2.am.analytics.publisher.client</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.commons</groupId>
+            <groupId>org.wso2.orbit.org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
         <dependency>
@@ -58,7 +58,7 @@
             <artifactId>graphQL</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.googlecode.json-simple.wso2</groupId>
+            <groupId>com.googlecode.json-simple</groupId>
             <artifactId>json-simple</artifactId>
         </dependency>
         <dependency>
@@ -70,6 +70,28 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpmime</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mock-server</groupId>
+            <artifactId>mockserver-netty</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.json.wso2</groupId>
+            <artifactId>json</artifactId>
         </dependency>
     </dependencies>
 
@@ -100,8 +122,10 @@
                             com.google.gson.annotations.*,
                             org.apache.commons.logging.*,
                             org.wso2.am.analytics.publisher.*;version="${analytics.event.publisher.client.version.range}",
-                            graphql.*; version="${graphql.java.version}",
+                            graphql.*; version="${graphql.java.version.range}",
                             org.json.simple.*,
+                            org.apache.commons.*,
+                            org.apache.http.*,
                             *;resolution:=optional
                         </Import-Package>
                     </instructions>

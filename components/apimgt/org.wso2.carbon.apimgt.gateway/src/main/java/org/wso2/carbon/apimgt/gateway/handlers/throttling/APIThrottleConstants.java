@@ -27,6 +27,7 @@ public class APIThrottleConstants {
     public static final int APPLICATION_THROTTLE_OUT_ERROR_CODE = 900803;
     public static final int SUBSCRIPTION_THROTTLE_OUT_ERROR_CODE = 900804;
     public static final int SUBSCRIPTION_BURST_THROTTLE_OUT_ERROR_CODE = 900807;
+    public static final int APPLICATION_BURST_THROTTLE_OUT_ERROR_CODE = 900809;
     public static final int BLOCKED_ERROR_CODE = 900805;
     public static final int CUSTOM_POLICY_THROTTLE_OUT_ERROR_CODE = 900806;
     public static final int CONNECTIONS_COUNT_THROTTLE_OUT_ERROR_CODE = 900808;
@@ -46,8 +47,19 @@ public class APIThrottleConstants {
     public static final String API_THROTTLE_OUT_HANDLER = "_throttle_out_handler_";
     public static final String HARD_THROTTLING_CONFIGURATION = "hard_throttling_limits";
     public static final String PRODUCTION_HARD_LIMIT = "PRODUCTION_HARD_LIMIT";
+    public static final String PRODUCTION_HARD_LIMIT_TOTAL_TOKEN = "PRODUCTION_HARD_LIMIT_TOTAL_TOKEN";
+    public static final String PRODUCTION_HARD_LIMIT_COMPLETION_TOKEN = "PRODUCTION_HARD_LIMIT_COMPLETION_TOKEN";
+    public static final String PRODUCTION_HARD_LIMIT_PROMPT_TOKEN = "PRODUCTION_HARD_LIMIT_PROMPT_TOKEN";
     public static final String SUBSCRIPTION_BURST_LIMIT = "SUBSCRIPTION_BURST_LIMIT";
+    public static final String APPLICATION_BURST_LIMIT = "APPLICATION_BURST_LIMIT";
+    public static final String APPLICATION_BURST_LIMIT_EXCEEDED = "APPLICATION_BURST_LIMIT_EXCEED";
     public static final String SANDBOX_HARD_LIMIT = "SANDBOX_HARD_LIMIT";
+    public static final String SANDBOX_HARD_LIMIT_TOTAL_TOKEN = "SANDBOX_HARD_LIMIT_TOTAL_TOKEN";
+    public static final String SANDBOX_HARD_LIMIT_PROMPT_TOKEN = "SANDBOX_HARD_LIMIT_PROMPT_TOKEN";
+    public static final String SANDBOX_HARD_LIMIT_COMPLETION_TOKEN = "SANDBOX_HARD_LIMIT_COMPLETION_TOKEN";
+    public static final String TOTAL_TOKENS = "TOTAL_TOKENS";
+    public static final String PROMPT_TOKENS = "PROMPT_TOKENS";
+    public static final String COMPLETION_TOKENS = "COMPLETION_TOKENS";
     public static final String THROTTLED_OUT_REASON = APIConstants.THROTTLE_OUT_REASON_KEY;
     public static final String THROTTLED_NEXT_ACCESS_TIMESTAMP = "NEXT_ACCESS_TIME";
     public static final String THROTTLED_NEXT_ACCESS_TIME = "NEXT_ACCESS_UTC_TIME";

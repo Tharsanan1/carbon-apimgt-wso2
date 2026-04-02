@@ -78,6 +78,7 @@ ScopesApiService delegate = new ScopesApiServiceImpl();
     @ApiOperation(value = "Get a Shared Scope by Scope Id", notes = "This operation can be used to retrieve details of a Shared Scope by a given scope Id. ", response = ScopeDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:api_view", description = "View API"),
+            @AuthorizationScope(scope = "apim:mcp_server_view", description = "View MCP Server"),
             @AuthorizationScope(scope = "apim:shared_scope_manage", description = "Manage shared scopes")
         })
     }, tags={ "Scopes",  })
@@ -113,6 +114,7 @@ ScopesApiService delegate = new ScopesApiServiceImpl();
     @ApiOperation(value = "Get All Available Shared Scopes", notes = "This operation can be used to get all the available Shared Scopes. ", response = ScopeListDTO.class, authorizations = {
         @Authorization(value = "OAuth2Security", scopes = {
             @AuthorizationScope(scope = "apim:api_view", description = "View API"),
+            @AuthorizationScope(scope = "apim:mcp_server_view", description = "View MCP Server"),
             @AuthorizationScope(scope = "apim:shared_scope_manage", description = "Manage shared scopes")
         })
     }, tags={ "Scopes",  })
@@ -149,13 +151,16 @@ ScopesApiService delegate = new ScopesApiServiceImpl();
             @AuthorizationScope(scope = "apim:api_create", description = "Create API"),
             @AuthorizationScope(scope = "apim:api_publish", description = "Publish API"),
             @AuthorizationScope(scope = "apim:api_manage", description = "Manage all API related operations"),
+            @AuthorizationScope(scope = "apim:mcp_server_create", description = "Create MCP Server"),
+            @AuthorizationScope(scope = "apim:mcp_server_publish", description = "Publish MCP Server"),
+            @AuthorizationScope(scope = "apim:mcp_server_manage", description = "Manage all MCP Server related operations"),
             @AuthorizationScope(scope = "apim:shared_scope_manage", description = "Manage shared scopes")
         })
     }, tags={ "Scopes" })
     @ApiResponses(value = { 
         @ApiResponse(code = 200, message = "OK. Requested scope name exists.", response = Void.class),
         @ApiResponse(code = 404, message = "Not Found. The specified resource does not exist.", response = ErrorDTO.class) })
-    public Response validateScope(@ApiParam(value = "Scope name ",required=true) @PathParam("scopeId") String scopeId) throws APIManagementException{
+    public Response validateScope(@ApiParam(value = "Base64 URL encoded value of the scope name ",required=true) @PathParam("scopeId") String scopeId) throws APIManagementException{
         return delegate.validateScope(scopeId, securityContext);
     }
 }
