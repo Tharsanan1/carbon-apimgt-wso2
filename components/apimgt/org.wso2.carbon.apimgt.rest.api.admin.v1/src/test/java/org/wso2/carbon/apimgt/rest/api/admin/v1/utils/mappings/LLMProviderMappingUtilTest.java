@@ -24,6 +24,8 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.wso2.carbon.apimgt.api.model.LLMProvider;
 
+import java.io.IOException;
+
 public class LLMProviderMappingUtilTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -89,7 +91,74 @@ public class LLMProviderMappingUtilTest {
         String resolvedConfigurations = LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider,
                 updatedConfigurations);
 
+        Assert.assertEquals(OBJECT_MAPPER.readTree(updatedConfigurations), OBJECT_MAPPER.readTree(resolvedConfigurations));
+    }
+
+    @Test
+    public void testResolveProviderConfigurationsBuiltInNullIncomingReturnsExistingConfig() throws Exception {
+
+        String existingConfigurations = "{\"connectorType\":\"awsBedrock\",\"authenticationConfiguration\":{\"type\":\"aws\"}}";
+        LLMProvider retrievedProvider = new LLMProvider();
+        retrievedProvider.setBuiltInSupport(true);
+        retrievedProvider.setConfigurations(existingConfigurations);
+
+        String resolvedConfigurations = LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider, null);
+
+        Assert.assertEquals(OBJECT_MAPPER.readTree(existingConfigurations),
+                OBJECT_MAPPER.readTree(resolvedConfigurations));
+    }
+
+    @Test(expected = IOException.class)
+    public void testResolveProviderConfigurationsBuiltInMalformedJsonThrowsIOException() throws Exception {
+
+        LLMProvider retrievedProvider = new LLMProvider();
+        retrievedProvider.setBuiltInSupport(true);
+        retrievedProvider.setConfigurations("{\"authenticationConfiguration\":{\"type\":\"aws\"}}");
+
+        LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider, "NOT_VALID_JSON{{");
+    }
+
+    @Test
+    public void testResolveProviderConfigurationsBuiltInNullExistingConfigFallsBackToIncoming() throws Exception {
+
+        String updatedConfigurations = "{\"authenticationConfiguration\":{\"type\":\"apikey\"}}";
+        LLMProvider retrievedProvider = new LLMProvider();
+        retrievedProvider.setBuiltInSupport(true);
+        retrievedProvider.setConfigurations(null);
+
+        String resolvedConfigurations = LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider,
+                updatedConfigurations);
+
         Assert.assertEquals(OBJECT_MAPPER.readTree(updatedConfigurations),
+                OBJECT_MAPPER.readTree(resolvedConfigurations));
+    }
+
+    @Test
+    public void testResolveProviderConfigurationsBuiltInNonObjectExistingConfigFallsBackToIncoming() throws Exception {
+
+        String updatedConfigurations = "{\"authenticationConfiguration\":{\"type\":\"apikey\"}}";
+        LLMProvider retrievedProvider = new LLMProvider();
+        retrievedProvider.setBuiltInSupport(true);
+        retrievedProvider.setConfigurations("[\"not\",\"an\",\"object\"]");
+
+        String resolvedConfigurations = LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider,
+                updatedConfigurations);
+
+        Assert.assertEquals(OBJECT_MAPPER.readTree(updatedConfigurations),
+                OBJECT_MAPPER.readTree(resolvedConfigurations));
+    }
+
+    @Test
+    public void testResolveProviderConfigurationsCustomProviderNullIncomingReturnsExistingConfig() throws Exception {
+
+        String existingConfigurations = "{\"connectorType\":\"custom\"}";
+        LLMProvider retrievedProvider = new LLMProvider();
+        retrievedProvider.setBuiltInSupport(false);
+        retrievedProvider.setConfigurations(existingConfigurations);
+
+        String resolvedConfigurations = LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider, null);
+
+        Assert.assertEquals(OBJECT_MAPPER.readTree(existingConfigurations),
                 OBJECT_MAPPER.readTree(resolvedConfigurations));
     }
 }

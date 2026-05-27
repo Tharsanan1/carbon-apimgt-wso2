@@ -303,16 +303,17 @@ public class LlmProvidersApiServiceImpl implements LlmProvidersApiService {
         String apiDefinition = getApiDefinitionFromStream(apiDefinitionInputStream);
         boolean isBuiltIn = retrievedProvider.isBuiltInSupport();
 
-        if (isBuiltIn && apiDefinition == null && configurations == null) {
+        if (isBuiltIn && configurations == null) {
             return null;
         }
 
-        provider.setApiDefinition(apiDefinition != null ? apiDefinition : retrievedProvider.getApiDefinition());
+        provider.setApiDefinition(isBuiltIn ? retrievedProvider.getApiDefinition()
+                : (apiDefinition != null ? apiDefinition : retrievedProvider.getApiDefinition()));
         provider.setDescription(isBuiltIn ? retrievedProvider.getDescription() :
                 (description != null ? description : retrievedProvider.getDescription()));
         provider.setConfigurations(LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider,
                 configurations));
-        provider.setModelList(modelList == null ? retrievedProvider.getModelList() :
+        provider.setModelList((isBuiltIn || modelList == null) ? retrievedProvider.getModelList() :
                 Collections.singletonList(new LLMModel(provider.getName(), modelList)));
 
         return provider;

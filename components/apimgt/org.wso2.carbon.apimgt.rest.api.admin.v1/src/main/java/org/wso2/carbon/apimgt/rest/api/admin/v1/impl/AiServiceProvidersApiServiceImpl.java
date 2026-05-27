@@ -320,16 +320,17 @@ public class AiServiceProvidersApiServiceImpl implements AiServiceProvidersApiSe
         String apiDefinition = getApiDefinitionFromStream(apiDefinitionInputStream);
         boolean isBuiltIn = retrievedProvider.isBuiltInSupport();
 
-        if (isBuiltIn && apiDefinition == null && configurations == null) {
+        if (isBuiltIn && configurations == null) {
             return null;
         }
 
-        provider.setApiDefinition(apiDefinition != null ? apiDefinition : retrievedProvider.getApiDefinition());
+        provider.setApiDefinition(isBuiltIn ? retrievedProvider.getApiDefinition()
+                : (apiDefinition != null ? apiDefinition : retrievedProvider.getApiDefinition()));
         provider.setDescription(isBuiltIn ? retrievedProvider.getDescription() :
                 (description != null ? description : retrievedProvider.getDescription()));
         provider.setConfigurations(LLMProviderMappingUtil.resolveProviderConfigurations(retrievedProvider,
                 configurations));
-        if (modelList == null) {
+        if (isBuiltIn || modelList == null) {
             provider.setModelList(retrievedProvider.getModelList());
         } else {
             List<LLMModel> llmModels = new ArrayList<>();
